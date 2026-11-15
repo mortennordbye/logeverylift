@@ -116,7 +116,7 @@ export async function saveEditedWorkout(data: unknown): Promise<ActionResult<Sav
         const [row] = await db
           .select({ touchedAt: plannedSessions.touchedAt, workoutId: plannedSessions.workoutId })
           .from(plannedSessions)
-          .where(and(eq(plannedSessions.id, d.sessionId), eq(plannedSessions.userId, userId)));
+          .where(and(eq(plannedSessions.id, d.sessionId), eq(plannedSessions.userId, userId), livePlannedSessions));
         // An untouched session followed the library in the update above.
         if (row && (row.touchedAt != null || row.workoutId !== d.workoutId)) {
           const s = await applySessionOp(ctx(), { op: "set_workout", id: d.sessionId, workoutId: d.workoutId }, limits);

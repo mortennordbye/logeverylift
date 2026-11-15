@@ -403,3 +403,45 @@ export function errorsOf(errors: { path: string; message: string }[], path: stri
 export function emptyWorkout(sport: WorkoutSport = "bike"): Workout {
   return { v: 1, sport, name: "", steps: [{ id: "e1", type: "work", end: { type: "time", seconds: 600 } }] };
 }
+
+// ── Step sheet fields ────────────────────────────────────────────────────────
+
+/** How a target is typed: watts, % FTP or a power zone; bpm or an HR zone. `keep` holds a form the sheet does not edit. */
+export type TargetUnit = "w" | "pct" | "pzone" | "bpm" | "hzone" | "keep";
+
+/** A target as the sheet holds it while the user types. Empty text is an open end. */
+export type TargetFields = { metric: "none" | "power" | "hr"; unit: TargetUnit; low: string; high: string; zone: number; kept?: WorkoutTarget };
+
+export const NO_TARGET: TargetFields = { metric: "none", unit: "w", low: "", high: "", zone: 2 };
+
+const str = (n: number | undefined) => (n === undefined ? "" : String(n));
+
+export function fieldsFromTarget(t: WorkoutTarget | undefined): TargetFields {
+  if (!t) return NO_TARGET;
+  const base = { low: str(t.low), high: str(t.high), zone: t.zone ?? 2 };
+  if (t.metric === "power" && t.anchor === "absolute" && t.zone === undefined) return { metric: "power", unit: "w", ...base };
+  if (t.metric === "power" && t.anchor === "ftp") return { metric: "power", unit: t.zone !== undefined ? "pzone" : "pct", ...base };
+  if (t.metric === "hr" && t.anchor === "absolute") return { metric: "hr", unit: "bpm", ...base };
+  if (t.metric === "hr" && t.anchor === "lthr" && t.zone !== undefined) return { metric: "hr", unit: "hzone", ...base };
+  return { metric: t.metric === "power" ? "power" : "hr", unit: "keep", ...base, kept: t };
+}
+
+/** A number typed with a dot or a comma; empty is undefined, and text that is no number stays NaN for parseWorkout to name. */
+export function typedNumber(s: string): number | undefined {
+  const t = s.trim().replace(",", ".");
+  return t === "" ? undefined : Number(t);
+}
+
+export function targetFromFields(f: TargetFields): WorkoutTarget | undefined {
+  if (f.metric === "none") return undefined;
+  if (f.unit === "keep") return f.kept;
+  if (f.unit === "pzone") return { metric: "power", anchor: "ftp", zone: f.zone };
+  if (f.unit === "hzone") return { metric: "hr", anchor: "lthr", zone: f.zone };
+  const anchor = f.unit === "pct" ? "ftp" : "absolute";
+  const t: WorkoutTarget = { metric: f.metric, anchor };
+  const low = typedNumber(f.low);
+  const high = typedNumber(f.high);
+  if (low !== undefined) t.low = low;
+  if (high !== undefined) t.high = high;
+  return t;
+}

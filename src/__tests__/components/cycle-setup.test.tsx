@@ -21,6 +21,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * it; the rotation and weekday builders save each change.
  */
 
+vi.mock("@/lib/actions/workout-editor", () => ({ addWorkoutSession: vi.fn(), libraryForPicker: vi.fn(), sessionMenuOp: vi.fn() }));
 vi.mock("@/lib/actions/training-cycles", () => ({
   createTrainingCycle: vi.fn(),
   deleteTrainingCycle: vi.fn(),

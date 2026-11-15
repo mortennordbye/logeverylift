@@ -7,7 +7,8 @@
  * J2_ProgramPicker, J4_WeekBuilder).
  * - Same days each week: one row a day, up to three sessions a day. Tap a
  *   session for its sheet (program, label and note, and with the endurance
- *   features on: key session, brick link, complete automatically).
+ *   features on: a library workout, key session, brick link, complete
+ *   automatically).
  * - Rotation: an ordered list. Drag to reorder (or Move up / Move down in a
  *   row's options), add a session or a rest day.
  */
@@ -16,6 +17,7 @@ import { PlanSheetPanel } from "@/components/features/PlanSheetPanel";
 import { ACCENT_TINT, ButtonReason, LABEL } from "@/components/features/season-ui";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { createProgram } from "@/lib/actions/programs";
+import { libraryForPicker } from "@/lib/actions/workout-editor";
 import {
   removeCycleSlot,
   reorderCycleSlots,
@@ -42,6 +44,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState, type ReactNode } from "react";
 
@@ -112,6 +115,7 @@ export function ProgramPickerSheet({
   selectedId,
   onPick,
   onRest,
+  onUseWorkout,
   onClose,
   saveError,
 }: {
@@ -124,6 +128,8 @@ export function ProgramPickerSheet({
   onPick: (program: { id: number; name: string }) => void;
   /** Offered on a rotation, where a position can be a rest day. */
   onRest?: () => void;
+  /** Offered with the endurance features on, on a weekday cycle: a library workout instead of a program. */
+  onUseWorkout?: () => void;
   onClose: () => void;
 }) {
   const [query, setQuery] = useState("");
@@ -182,6 +188,13 @@ export function ProgramPickerSheet({
           )}
         </label>
         <ul className="flex flex-col rounded-2xl bg-widget-2 overflow-hidden">
+          {onUseWorkout && !q && (
+            <li className="border-b border-hairline">
+              <button type="button" onClick={onUseWorkout} className={`${row} text-[15px] font-medium text-brand`}>
+                Use a workout
+              </button>
+            </li>
+          )}
           {onRest && !q && (
             <li className="border-b border-hairline">
               <button type="button" onClick={onRest} className={`${row} text-muted-foreground text-[15px]`}>
@@ -250,6 +263,52 @@ export function ProgramPickerSheet({
           </li>
         </ul>
         <ErrorLine error={error ?? saveError ?? null} />
+      </PlanSheetPanel>
+    </BottomSheet>
+  );
+}
+
+type LibraryWorkoutRow = { id: number; name: string; summary: string };
+
+/** "Use a workout" on a template day: the library, read when "Use a workout" is tapped. */
+function WorkoutPickerSheet({
+  open,
+  rows,
+  selectedId,
+  onPick,
+  onClose,
+  error,
+}: {
+  open: boolean;
+  rows: LibraryWorkoutRow[] | null;
+  selectedId: number | null;
+  onPick: (w: LibraryWorkoutRow) => void;
+  onClose: () => void;
+  error: string | null;
+}) {
+  const row = "w-full flex flex-col items-start gap-0.5 px-4 py-2.5 min-h-14 text-left active:opacity-70";
+  return (
+    <BottomSheet open={open} onClose={onClose}>
+      <PlanSheetPanel label="Use a workout" title="Use a workout">
+        {rows === null && !error && <p className="text-sm text-muted-foreground">Loading the workouts...</p>}
+        {rows && (
+          <ul className="flex flex-col rounded-2xl bg-widget-2 overflow-hidden">
+            {rows.map((w) => (
+              <li key={w.id} className="border-b border-hairline">
+                <button type="button" onClick={() => onPick(w)} aria-pressed={w.id === selectedId} className={`${row} ${w.id === selectedId ? ACCENT_TINT : ""}`}>
+                  <span className="text-[15px] font-medium">{w.name}</span>
+                  <span className="text-[13px] text-muted-foreground">{w.summary}</span>
+                </button>
+              </li>
+            ))}
+            <li>
+              <Link href="/more/workouts/new" className="w-full flex items-center px-4 min-h-[52px] text-[15px] font-medium text-brand active:opacity-70">
+                + New workout
+              </Link>
+            </li>
+          </ul>
+        )}
+        <ErrorLine error={error} />
       </PlanSheetPanel>
     </BottomSheet>
   );
@@ -324,7 +383,7 @@ function SlotSheet({
         ) : (
           <div className="flex items-center justify-between py-2 min-h-[52px] border-b border-hairline">
             <span className="flex flex-col gap-0.5 min-w-0">
-              <span className={LABEL}>Program</span>
+              <span className={LABEL}>{slot.workoutId != null ? "Workout" : "Program"}</span>
               <span className="text-base font-medium truncate">{slot.program?.name ?? (isRest(slot) ? "Rest" : slot.label ?? "Workout")}</span>
             </span>
             <button type="button" onClick={onChangeProgram} className="h-11 px-3 text-[15px] font-medium text-brand active:opacity-70">
@@ -413,6 +472,18 @@ function DayOfWeekBuilder({
   const [editing, setEditing] = useState<{ day: number; daySlot: number } | null>(null);
   // The picker: a new session on a day, or a new program for the session being edited.
   const [picking, setPicking] = useState<{ day: number; daySlot: number } | null>(null);
+  // The library picker, for the same day and session ("Use a workout").
+  const [pickingWorkout, setPickingWorkout] = useState<{ day: number; daySlot: number } | null>(null);
+  const [library, setLibrary] = useState<LibraryWorkoutRow[] | null>(null);
+
+  async function openWorkouts(at: { day: number; daySlot: number }) {
+    setError(null);
+    setPickingWorkout(at);
+    setPicking(null);
+    const r = await callAction(libraryForPicker());
+    if (r.success) setLibrary(r.data);
+    else setError(r.error);
+  }
 
   const slotsByDay = new Map<number, Slot[]>();
   for (const s of cycle.slots) {
@@ -432,6 +503,13 @@ function DayOfWeekBuilder({
       upsertCycleSlot({ trainingCycleId: cycle.id, dayOfWeek: at.day, daySlot: at.daySlot, programId: program.id, label: program.name }),
     );
     if (saved) setPicking(null);
+  }
+
+  async function pickWorkout(w: { id: number; name: string }) {
+    if (!pickingWorkout) return;
+    const at = pickingWorkout;
+    const saved = await save(() => upsertCycleSlot({ trainingCycleId: cycle.id, dayOfWeek: at.day, daySlot: at.daySlot, workoutId: w.id, label: w.name }));
+    if (saved) setPickingWorkout(null);
   }
 
   async function saveSheet(changes: SlotChanges) {
@@ -536,8 +614,17 @@ function DayOfWeekBuilder({
         programs={programs}
         selectedId={picking ? find(picking.day, picking.daySlot)?.programId : null}
         onPick={pick}
+        onUseWorkout={endurance && picking ? () => openWorkouts(picking) : undefined}
         onClose={() => setPicking(null)}
         saveError={error}
+      />
+      <WorkoutPickerSheet
+        open={pickingWorkout !== null}
+        rows={library}
+        selectedId={pickingWorkout ? (find(pickingWorkout.day, pickingWorkout.daySlot)?.workoutId ?? null) : null}
+        onPick={pickWorkout}
+        onClose={() => setPickingWorkout(null)}
+        error={error}
       />
     </>
   );

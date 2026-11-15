@@ -15,6 +15,9 @@ import {
   profileBlocks,
   scaleWorkout,
   setRepeatCount,
+  targetFromFields,
+  fieldsFromTarget,
+  typedNumber,
   ungroup,
   type EditNumbers,
 } from "@/lib/utils/workout-edit";
@@ -227,5 +230,27 @@ describe("templates", () => {
     expect(twenty).toMatchObject({ type: "steady", end: { type: "time", seconds: 1200 }, target: { metric: "power", anchor: "ftp", low: 95 } });
     expect(ftpTestHref()).toBe("/more/workouts/new?template=ftp-test");
     expect(ftpTestHref({ cycleId: 4, date: "2026-11-20" })).toBe("/more/workouts/new?template=ftp-test&cycle=4&date=2026-11-20");
+  });
+});
+
+describe("the step sheet's target fields", () => {
+  it("round-trip every form the sheet edits, and keep the others as they are", () => {
+    const forms = [
+      { metric: "power", anchor: "absolute", low: 135, high: 144 },
+      { metric: "power", anchor: "ftp", high: 60 },
+      { metric: "power", anchor: "ftp", zone: 3 },
+      { metric: "hr", anchor: "absolute", high: 140 },
+      { metric: "hr", anchor: "lthr", zone: 2 },
+      { metric: "hr", anchor: "max_hr", low: 70, high: 80 },
+    ] as const;
+    for (const t of forms) expect(targetFromFields(fieldsFromTarget({ ...t }))).toEqual(t);
+    expect(targetFromFields(fieldsFromTarget(undefined))).toBeUndefined();
+  });
+
+  it("reads a comma as a decimal point and leaves an empty side open", () => {
+    expect(typedNumber(" 2,5 ")).toBe(2.5);
+    expect(typedNumber("")).toBeUndefined();
+    expect(Number.isNaN(typedNumber("abc"))).toBe(true);
+    expect(targetFromFields({ metric: "hr", unit: "bpm", low: "", high: "140", zone: 2 })).toEqual({ metric: "hr", anchor: "absolute", high: 140 });
   });
 });

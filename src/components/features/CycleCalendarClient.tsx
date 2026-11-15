@@ -6,6 +6,8 @@ import { PlannedSessionActions } from "@/components/features/PlannedSessionActio
 import { AnswerButtons, AnswerSheets, BandLabel } from "@/components/features/SessionAnswers";
 import type { LibraryRow } from "@/components/features/WorkoutsLibraryClient";
 import { updatePlannedSession } from "@/lib/actions/planned-sessions";
+import { addWorkoutSession } from "@/lib/actions/workout-editor";
+import { addDaysStr } from "@/lib/utils/planned-sessions";
 import type { ComplianceBand, SessionState } from "@/lib/utils/session-compliance";
 import { callAction } from "@/lib/utils/stale-bundle";
 import type { PlannedView } from "@/lib/planned-sessions";
@@ -184,6 +186,16 @@ function getDayInfo(dateStr: string, cycles: TrainingCycleWithSlots[], plannedBy
   };
 }
 
+/** The weekday cycle with dates whose block holds this day: where "Add session" adds. */
+function addCycleFor(date: string, cycles: TrainingCycleWithSlots[]): number | null {
+  for (const c of cycles) {
+    if (c.scheduleType !== "day_of_week") continue;
+    const start = c.status === "active" ? c.startDate : c.status === "draft" ? c.scheduledStartDate : null;
+    if (start && date >= start && date < addDaysStr(start, cycleLengthDays(c))) return c.id;
+  }
+  return null;
+}
+
 function formatSheetDate(dateStr: string): string {
   const [y, m, d] = dateStr.split("-").map(Number);
   const date = new Date(y, m - 1, d);
@@ -196,6 +208,8 @@ export function CycleCalendarClient({ cycles, completedDates, programsMap, plann
   const [picking, setPicking] = useState<CalendarCompliance | null>(null);
   const [pickError, setPickError] = useState<string | null>(null);
   const [pickPending, setPickPending] = useState(false);
+  // "Add session" on a day: the cycle and the day a library workout is added to.
+  const [adding, setAdding] = useState<{ cycleId: number; date: string } | null>(null);
   const plannedByDate = new Map<string, PlannedView[]>();
   for (const p of planned) plannedByDate.set(p.date, [...(plannedByDate.get(p.date) ?? []), p]);
   // Today in the user's zone, the same day the server's cycle views use.
@@ -232,6 +246,22 @@ export function CycleCalendarClient({ cycles, completedDates, programsMap, plann
   const sheetCompleted = selectedDate ? completedSet.has(selectedDate) : false;
   const sheetProgram = sheetInfo?.programId ? programsMap[sheetInfo.programId] : null;
   const sheetColors = sheetInfo?.cycleIndex != null ? colorMap.get(sheetInfo.cycleIndex) : null;
+
+  const addCycle = selectedDate && library && selectedDate >= todayStr ? addCycleFor(selectedDate, cycles) : null;
+
+  async function addWorkout(workoutId: number) {
+    if (pickPending || !adding) return;
+    setPickPending(true);
+    setPickError(null);
+    const r = await callAction(addWorkoutSession({ cycleId: adding.cycleId, date: adding.date, workoutId }));
+    setPickPending(false);
+    if (!r.success) {
+      setPickError(r.error);
+      return;
+    }
+    setAdding(null);
+    router.refresh();
+  }
 
   async function pickWorkout(sessionId: number, workoutId: number) {
     if (pickPending) return;
@@ -525,6 +555,19 @@ export function CycleCalendarClient({ cycles, completedDates, programsMap, plann
               )}
             </div>
 
+            {addCycle != null && (
+              <button
+                type="button"
+                onClick={() => {
+                  setPickError(null);
+                  setAdding({ cycleId: addCycle, date: selectedDate });
+                  setSelectedDate(null);
+                }}
+                className="w-full min-h-[52px] bg-card rounded-2xl text-base font-semibold active:bg-muted/50 transition-colors"
+              >
+                Add session
+              </button>
+            )}
             <button
               onClick={() => setSelectedDate(null)}
               className="w-full bg-card rounded-2xl py-4 text-base font-semibold text-primary active:bg-muted/50 transition-colors"
@@ -543,13 +586,47 @@ export function CycleCalendarClient({ cycles, completedDates, programsMap, plann
           <div className="bg-background rounded-t-2xl px-4 pt-5 pb-8 space-y-2 max-h-[85dvh] overflow-y-auto" data-testid="workout-picker">
             <h2 className="text-lg font-semibold">Use a workout</h2>
             <p className="text-sm text-muted-foreground">For {picking.name} on {formatSheetDate(picking.date)}</p>
-            {library.length === 0 && <p className="text-sm text-muted-foreground">No workouts yet. Ask your assistant to create workouts.</p>}
+            {library.length === 0 && <p className="text-sm text-muted-foreground">No workouts yet. Make one under More, Workouts.</p>}
             {library.map((w) => (
               <button
                 key={w.id}
                 type="button"
                 disabled={pickPending}
                 onClick={() => pickWorkout(picking.id, w.id)}
+                className="w-full rounded-xl bg-card px-4 py-3 min-h-[44px] text-left active:opacity-60 disabled:opacity-50"
+              >
+                <span className="block text-sm font-medium">{w.name}</span>
+                <span className="block text-xs text-muted-foreground">{w.summary}</span>
+              </button>
+            ))}
+            {pickError && (
+              <p role="alert" className="text-sm text-destructive">
+                {pickError}
+              </p>
+            )}
+          </div>
+        )}
+      </BottomSheet>
+
+      {/* "Add session": a library workout, or a new one, on this day */}
+      <BottomSheet open={adding !== null} onClose={() => setAdding(null)} blur>
+        {adding && library && (
+          <div className="bg-background rounded-t-2xl px-4 pt-5 pb-8 space-y-2 max-h-[85dvh] overflow-y-auto" data-testid="add-session">
+            <h2 className="text-lg font-semibold">Add session</h2>
+            <p className="text-sm text-muted-foreground">On {formatSheetDate(adding.date)}</p>
+            <Link
+              href={`/more/workouts/new?cycle=${adding.cycleId}&date=${adding.date}`}
+              className="flex min-h-[44px] items-center justify-center rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground active:opacity-80"
+            >
+              New workout
+            </Link>
+            {library.length === 0 && <p className="text-sm text-muted-foreground">No library workouts yet.</p>}
+            {library.map((w) => (
+              <button
+                key={w.id}
+                type="button"
+                disabled={pickPending}
+                onClick={() => addWorkout(w.id)}
                 className="w-full rounded-xl bg-card px-4 py-3 min-h-[44px] text-left active:opacity-60 disabled:opacity-50"
               >
                 <span className="block text-sm font-medium">{w.name}</span>

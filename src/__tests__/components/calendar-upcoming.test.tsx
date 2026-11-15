@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  */
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }));
+vi.mock("@/lib/actions/workout-editor", () => ({ addWorkoutSession: vi.fn(), libraryForPicker: vi.fn(), sessionMenuOp: vi.fn() }));
 vi.mock("@/lib/actions/planned-sessions", () => ({ updatePlannedSession: vi.fn() }));
 vi.mock("@/components/features/PlannedSessionActions", () => ({ PlannedSessionActions: () => null }));
 vi.mock("@/components/features/SessionAnswers", () => ({ AnswerButtons: () => null, AnswerSheets: () => null, BandLabel: () => null }));

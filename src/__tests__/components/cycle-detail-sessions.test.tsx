@@ -15,6 +15,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const updatePlannedSession = vi.fn();
 const updateRotationSession = vi.fn();
+vi.mock("@/lib/actions/workout-editor", () => ({ addWorkoutSession: vi.fn(), libraryForPicker: vi.fn(), sessionMenuOp: vi.fn() }));
 vi.mock("@/lib/actions/planned-sessions", () => ({
   updatePlannedSession: (...a: unknown[]) => updatePlannedSession(...a),
   updateRotationSession: (...a: unknown[]) => updateRotationSession(...a),
