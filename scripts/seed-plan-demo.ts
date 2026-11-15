@@ -61,7 +61,7 @@ async function main() {
   const { writeLoggedSession } = await import("../src/lib/logged-sessions");
   const { sessionCompliance } = await import("../src/lib/session-compliance");
   const { confirmDone, moveSuggestion } = await import("../src/lib/session-answers");
-  const { mondayOf } = await import("../src/lib/utils/session-compliance");
+  const { PROMPT_DAYS, mondayOf } = await import("../src/lib/utils/session-compliance");
   const { userToday } = await import("../src/lib/user-settings");
   const { instantInZone } = await import("../src/lib/utils/user-date");
   const { toDateStr } = await import("../src/lib/utils/cycle-position");
@@ -574,17 +574,29 @@ async function main() {
     });
     await seasonsLib.deleteSeason(ctx, oldSeason.id);
 
-    // Last week: all done but Saturday's ride (unconfirmed). This week: strength
+    // Last week: all done but one ride (unconfirmed). This week: strength
     // done, key sessions missed, the swim unconfirmed, the rest done. Next week:
     // the bike skipped, the swim moved to Friday, the tempo run changed.
+    //
+    // "Did you do it?" asks only for the last PROMPT_DAYS days. On a Sunday,
+    // last Saturday is 8 days back and shows Missed, so the ride left to answer
+    // is one added on last Sunday, the rest day. The app adds no session to a
+    // past day, so the seed writes that row itself.
+    let unconfirmedRide = addDaysStr(blockStart, 5);
+    if (unconfirmedRide < addDaysStr(today, -PROMPT_DAYS)) {
+      unconfirmedRide = addDaysStr(blockStart, 6);
+      await rev.planWrite(ctx, async (w) => {
+        await w.touch({ type: "cycle", id: running });
+        await w.tx.insert(s.plannedSessions).values({ userId, cycleId: running, date: unconfirmedRide, programId: ride, priority: "support" });
+      });
+    }
     const rows = await sessionsLib.listPlanned(userId, blockStart, addDaysStr(nextMonday, 6), running);
-    const lastSaturday = addDaysStr(blockStart, 5);
     for (const r of rows.filter((x) => x.id != null && x.programId != null && x.date < today)) {
       const id = r.id!;
       const lifts = liftsOf.get(r.programId!);
       if (lifts) await logWorkout(userId, r.programId!, lifts, r.date, id);
       else if (r.date < monday) {
-        if (r.date !== lastSaturday) await confirmDone(ctx, id, { durationSeconds: 45 * 60, rpe: 5 }, "app");
+        if (r.date !== unconfirmedRide) await confirmDone(ctx, id, { durationSeconds: 45 * 60, rpe: 5 }, "app");
       } else if (keyIds.has(r.programId!)) await sessionsLib.applySessionOp(ctx, { op: "miss", id, reason: "Long day at work" });
       else if (r.programId !== swim) await confirmDone(ctx, id, { durationSeconds: 40 * 60, rpe: 4 }, "app");
     }
