@@ -433,7 +433,7 @@ export function SeasonDetailClient(p: Props) {
                 type="button"
                 disabled={busy}
                 onClick={() => (resumeLines.length > 0 ? toResume(true) : resume())}
-                className="min-h-11 shrink-0 text-sm font-medium text-primary active:opacity-70"
+                className="min-h-11 min-w-11 shrink-0 px-2 text-sm font-medium text-primary active:opacity-70"
               >
                 {paused ? "Resume" : "Start"}
               </button>
