@@ -135,9 +135,9 @@ describe("resolveWorkout", () => {
     const rep = steps[1];
     if (!("count" in rep)) throw new Error();
     expect(rep.steps[0].resolved?.text).toBe("220-233 W");
-    expect(rep.steps[1].resolved?.text).toBe("up to 135 W"); // Z1 is under 55% FTP
+    expect(rep.steps[1].resolved?.text).toBe("under 135 W"); // Z1 is under 55% FTP
     const cooldown = steps[2] as WorkoutStep & { resolved: { text: string } };
-    expect(cooldown.resolved.text).toBe("up to 128 bpm"); // bike Z1 is under 81% LTHR
+    expect(cooldown.resolved.text).toBe("under 128 bpm"); // bike Z1 is under 81% LTHR
   });
 
   it("resolves CSS offsets to swim pace, fastest first", () => {
@@ -173,7 +173,7 @@ describe("resolveWorkout", () => {
 
 describe("estimateWorkout", () => {
   it("adds time steps and marks a lap step as partial", () => {
-    expect(estimateWorkout(byName("3 × 10 min sweet spot"))).toEqual({ durationSeconds: 3600, distanceMeters: 0, durationComplete: false, distanceComplete: false, hardSeconds: expect.any(Number) });
+    expect(estimateWorkout(byName("3 × 10 min sweet spot"))).toEqual({ durationSeconds: 3600, distanceMeters: 0, durationComplete: false, distanceComplete: false, hardSeconds: 1800 });
   });
 
   it("uses send-offs for time and counts every length", () => {

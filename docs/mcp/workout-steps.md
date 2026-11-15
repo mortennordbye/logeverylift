@@ -1,6 +1,6 @@
 # Workout step syntax
 
-Version: 2026-11-13
+Version: 2026-11-15
 
 This document is served to connected AI assistants as an MCP resource
 (`logeverylift://docs/workout-steps`). It describes the JSON shape of a structured endurance
@@ -32,10 +32,12 @@ A **step**:
 
 | Key | Required | Meaning |
 |---|---|---|
-| `type` | yes | `warmup`, `work`, `recovery`, `cooldown` or `rest` |
+| `type` | yes | `warmup`, `work`, `recovery`, `steady`, `cooldown` or `rest`. `steady` is long even work below threshold, such as the body of a long ride |
 | `end` | yes | `{ "type": "time", "seconds": 5-43200 }`, `{ "type": "distance", "meters": 10-300000 }` or `{ "type": "lap" }` (the athlete presses lap) |
 | `target` | no | See Targets |
+| `secondary` | no | A second target on another metric, in the same shape as `target`: for example HR under 140 on a power step. Needs a `target`. Not cadence: use `cadence` |
 | `cadence` | no | Bike and run: `{ "low": rpm, "high": rpm }`, 20-200 |
+| `gradePercent` | no | Bike only: the gradient in percent, -20 to 20, for a sim trainer or an outdoor climb |
 | `sendOffSeconds` | no | Swim only: leave every N seconds (20-600). Only on a `work` step inside a repeat with no `rest` step, because the send-off includes the rest |
 | `stroke` | no | Swim only: `free`, `back`, `breast`, `fly`, `im`, `choice`, `kick`, `pull`, `drill` |
 | `equipment` | no | Swim only, a list: `pull_buoy`, `paddles`, `fins`, `kickboard`, `snorkel` |
@@ -65,11 +67,24 @@ can: a new threshold then updates every future workout.
 | `pace` | `absolute` | all | speed in m/s, 0.3-12 |
 | `cadence` | `absolute` | bike, run | rpm, 20-200 |
 
-`low` is at most `high`. All values are metric. Pace is speed: never send minutes per km.
+`low` is at most `high`. One side alone is allowed, except for pace: `{ "high": 140 }` is "under
+140", `{ "low": 110 }` is "110 or more". All values are metric. Pace is speed: never send minutes
+per km.
 
 Zones, from the research reference: Coggan power Z1 under 55% FTP, Z2 55-74, Z3 75-89, Z4 90-104,
 Z5 105-120. Friel run heart rate Z1 under 85% LTHR, Z2 85-89, Z3 90-94, Z4 95-99, Z5 100 and
 up; bike Z1 under 81, Z2 81-89, Z3 90-93, Z4 94-99, Z5 100 and up.
+
+How a bike heart rate zone resolves: a `hr` target with anchor `lthr` and a `zone` uses the
+athlete's own bike zones in bpm when they exist. The order is custom zones the athlete set, then
+the Garmin CYCLING zones of the last sync, then the Friel table above with the bike LTHR. The
+resolved step says which one it used (`hrZoneSource`: `custom`, `garmin` or `estimate`). So
+`"zone": 2` follows the watch: with Garmin Z2 at 121-140 bpm, the step is 121-140 bpm. Run heart
+rate zones always use the Friel table.
+
+Each resolved target also has every other form of the number (`forms`): watts and % FTP (also for
+an absolute watt target when FTP is set), the Coggan power zone of the range middle, bpm, and the
+heart rate zone with its source. A form that does not apply is null.
 
 ## Swims
 
@@ -99,6 +114,47 @@ A bike interval session. With FTP 250 W, the work steps are 220-233 W.
       "target": { "metric": "hr", "anchor": "lthr", "zone": 1 } }
   ]
 }
+```
+
+A tempo ride with a heart rate cap on every step. With FTP 180 W and Garmin Z3 at 141-160 bpm,
+the work steps are 135-144 W and 141-160 bpm, and the easy steps stay under 140 bpm.
+
+```json
+{
+  "v": 1,
+  "sport": "bike",
+  "name": "Tempo 2 x 15 min",
+  "steps": [
+    { "type": "warmup", "end": { "type": "time", "seconds": 900 },
+      "target": { "metric": "power", "anchor": "ftp", "low": 60, "high": 72 },
+      "secondary": { "metric": "hr", "anchor": "absolute", "high": 140 } },
+    { "type": "work", "end": { "type": "time", "seconds": 900 },
+      "target": { "metric": "power", "anchor": "ftp", "low": 75, "high": 80 },
+      "secondary": { "metric": "hr", "anchor": "lthr", "zone": 3 },
+      "cadence": { "low": 85, "high": 95 }, "note": "Talk in short sentences" },
+    { "type": "recovery", "end": { "type": "time", "seconds": 300 },
+      "target": { "metric": "power", "anchor": "ftp", "low": 50, "high": 60 },
+      "secondary": { "metric": "hr", "anchor": "absolute", "high": 140 } },
+    { "type": "work", "end": { "type": "time", "seconds": 900 },
+      "target": { "metric": "power", "anchor": "ftp", "low": 75, "high": 80 },
+      "secondary": { "metric": "hr", "anchor": "lthr", "zone": 3 },
+      "cadence": { "low": 85, "high": 95 } },
+    { "type": "cooldown", "end": { "type": "time", "seconds": 900 },
+      "target": { "metric": "power", "anchor": "ftp", "low": 60, "high": 72 },
+      "secondary": { "metric": "hr", "anchor": "absolute", "high": 140 } }
+  ]
+}
+```
+
+A steady climb on a sim trainer: the gradient is set, power has a ceiling only.
+
+```json
+{ "v": 1, "sport": "bike", "name": "Steady climb",
+  "steps": [
+    { "type": "steady", "end": { "type": "time", "seconds": 1800 }, "gradePercent": 4,
+      "target": { "metric": "power", "anchor": "ftp", "high": 75 },
+      "secondary": { "metric": "hr", "anchor": "lthr", "zone": 2 } }
+  ] }
 ```
 
 A swim set with send-offs in a 25 m pool. With CSS 1:45 per 100 m, the main set is 1:47-1:50 per
@@ -193,4 +249,16 @@ A distance that is not a whole number of lengths, and a send-off next to a rest 
   "steps": [ { "type": "repeat", "count": 4, "steps": [
     { "type": "work", "end": { "type": "distance", "meters": 110 }, "sendOffSeconds": 120 },
     { "type": "rest", "end": { "type": "time", "seconds": 20 } } ] } ] }
+```
+
+A second target on the same metric as the main target, and one-sided pace. Put heart rate in
+`secondary` when the main target is power, and give pace both ends.
+
+```json wrong
+{ "v": 1, "sport": "bike", "name": "Two power targets",
+  "steps": [ { "type": "work", "end": { "type": "time", "seconds": 600 },
+    "target": { "metric": "power", "anchor": "ftp", "low": 75, "high": 80 },
+    "secondary": { "metric": "power", "anchor": "absolute", "high": 150 } },
+  { "type": "work", "end": { "type": "time", "seconds": 600 },
+    "target": { "metric": "pace", "anchor": "absolute", "low": 8 } } ] }
 ```
