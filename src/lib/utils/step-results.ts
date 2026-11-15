@@ -5,6 +5,7 @@
  */
 
 import { complianceBand, complianceRatio, type ComplianceBand } from "@/lib/utils/session-compliance";
+import type { MatchStep, StepMatch } from "@/lib/utils/step-match";
 import { flattenWorkout, type PlayStep, type PlayerState } from "@/lib/utils/workout-player";
 import { plannedLoad, type LoadAnchors, type PlannedStep } from "@/lib/utils/training-load";
 import { DEFAULT_UNITS, type Units } from "@/lib/utils/units";
@@ -16,6 +17,7 @@ import {
   type ThresholdValues,
   type Workout,
   type WorkoutStep,
+  type ZoneSet,
 } from "@/lib/utils/workout-steps";
 import { z } from "zod";
 
@@ -33,6 +35,12 @@ export const stepResultSchema = z.strictObject({
   value: z.number().min(0).max(5000).optional(),
   rpe: z.number().int().min(1).max(10).optional(),
   notes: z.string().trim().min(1).max(STEP_NOTE_MAX).optional(),
+  // Measured on a Garmin activity (src/lib/utils/step-match.ts); `value` holds the average power.
+  normalizedPower: z.number().min(0).max(5000).optional(),
+  avgHeartRate: z.number().min(0).max(260).optional(),
+  maxHeartRate: z.number().min(0).max(260).optional(),
+  avgCadence: z.number().min(0).max(300).optional(),
+  hrZoneSeconds: z.number().int().min(0).max(12 * 3600).optional(),
 });
 export type StepResult = z.infer<typeof stepResultSchema>;
 
@@ -68,10 +76,11 @@ export type PlannedRow = {
   plannedSeconds: number | null;
   plannedMeters: number | null;
   target: ResolvedTarget | null;
+  secondary: ResolvedTarget | null;
 };
 
 /** The planned side of each play step, with targets resolved from the stored anchors. */
-export function plannedRows(workout: Workout, anchors: ThresholdValues, units: Units = DEFAULT_UNITS): PlannedRow[] {
+export function plannedRows(workout: Workout, anchors: ThresholdValues, units: Units = DEFAULT_UNITS, zones: ZoneSet | null = null): PlannedRow[] {
   return flattenWorkout(workout).map((p) => {
     const step = p.step as WorkoutStep;
     const one: Workout = { ...workout, steps: [step] };
@@ -83,7 +92,8 @@ export function plannedRows(workout: Workout, anchors: ThresholdValues, units: U
       text: describeWorkout(one, units),
       plannedSeconds: est.durationComplete && est.durationSeconds > 0 ? est.durationSeconds : null,
       plannedMeters: step.end.type === "distance" ? step.end.meters : est.distanceComplete && est.distanceMeters > 0 ? est.distanceMeters : null,
-      target: step.target ? resolveTarget(step.target, workout.sport, anchors, units) : null,
+      target: step.target ? resolveTarget(step.target, workout.sport, anchors, units, zones) : null,
+      secondary: step.secondary ? resolveTarget(step.secondary, workout.sport, anchors, units, zones) : null,
     };
   });
 }
@@ -150,4 +160,25 @@ export function resultTotals(rows: PlannedRow[], results: StepResult[]): { activ
     }
   }
   return { activeSeconds: active, movingSeconds: moving, distanceMeters: anyDistance ? distance : null };
+}
+
+/** The matcher's view of each planned row: power in W and HR in bpm, from the main or the second target. */
+export function matchStepsOf(rows: PlannedRow[]): MatchStep[] {
+  const of = (r: PlannedRow, unit: "W" | "bpm") => {
+    const t = [r.target, r.secondary].find((x) => x?.unit === unit && (x.low !== null || x.high !== null));
+    return t ? { low: t.low, high: t.high } : null;
+  };
+  return rows.map((r) => ({ key: r.key, type: r.type, plannedSeconds: r.plannedSeconds, power: of(r, "W"), hr: of(r, "bpm") }));
+}
+
+/** Step results from a matched Garmin activity: one per step, measured values rounded. */
+export function resultsFromMatch(match: StepMatch): StepResult[] {
+  const r = (v: number | null) => (v == null ? undefined : Math.round(v));
+  return match.steps.map((m) => {
+    const out: StepResult = { key: m.key, status: m.seconds > 0 ? "done" : "not_done" };
+    if (m.seconds > 0) out.activeSeconds = Math.round(m.seconds);
+    const fields = { value: r(m.avgPower), normalizedPower: r(m.normalizedPower), avgHeartRate: r(m.avgHeartRate), maxHeartRate: r(m.maxHeartRate), avgCadence: r(m.avgCadence), hrZoneSeconds: r(m.hrZoneSeconds) };
+    for (const [k, v] of Object.entries(fields)) if (v !== undefined) (out as Record<string, unknown>)[k] = v;
+    return out;
+  });
 }

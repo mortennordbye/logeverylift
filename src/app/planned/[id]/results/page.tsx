@@ -14,6 +14,8 @@ export default async function ResultsPage({ params, searchParams }: { params: Pr
   if (!Number.isInteger(id) || id <= 0) notFound();
   const v = await plannedSessionView(user.id, id);
   if (!v) notFound();
+  // A ride paired with a Garmin activity has its results from the watch, on the session page.
+  if (v.session.matchedBy === "garmin" || v.session.matchedBy === "pick") redirect(`/planned/${id}`);
   const { from } = await searchParams;
   const existing = v.results
     ? { steps: v.results.rows.flatMap((r) => (r.result ? [r.result] : [])), sessionRpe: v.results.sessionRpe, distanceMeters: v.results.distanceMeters }

@@ -14,7 +14,8 @@
  */
 
 import { db } from "@/db";
-import { plannedSessions, workoutSessions, workoutSets, workoutStepResults } from "@/db/schema";
+import { garminActivities, plannedSessions, workoutSessions, workoutSets, workoutStepResults } from "@/db/schema";
+import type { STEP_RESULT_SOURCES } from "@/db/schema/step-results";
 import { DuplicateSession, writeLoggedSession } from "@/lib/logged-sessions";
 import { PlanStateError } from "@/lib/plan-revisions";
 import { sportExerciseId } from "@/lib/session-answers";
@@ -114,17 +115,24 @@ export async function saveStepResults(userId: string, input: SaveStepResultsInpu
   };
 
   const [linked] = await db
-    .select({ id: workoutSessions.id })
+    .select({ id: workoutSessions.id, source: workoutSessions.source })
     .from(workoutSessions)
     .where(
       and(
         eq(workoutSessions.userId, userId),
         eq(workoutSessions.plannedSessionId, planned.id),
         eq(workoutSessions.isCompleted, true),
-        inArray(workoutSessions.source, ["app", "assistant"]),
+        inArray(workoutSessions.source, ["app", "assistant", "garmin"]),
       ),
     )
     .limit(1);
+  // A Garmin pair keeps the results measured on the activity; only the RPE is taken.
+  if (linked?.source === "garmin") {
+    if (input.sessionRpe !== undefined) await db.update(workoutSessions).set({ rpe: input.sessionRpe }).where(eq(workoutSessions.id, linked.id));
+    const [r] = await db.select({ id: workoutStepResults.id }).from(workoutStepResults).where(eq(workoutStepResults.workoutSessionId, linked.id));
+    const resultId = r?.id ?? (await db.insert(workoutStepResults).values({ ...values, workoutSessionId: linked.id }).returning({ id: workoutStepResults.id }))[0].id;
+    return { workoutSessionId: linked.id, resultId, created: "attached" };
+  }
   if (linked) {
     const resultId = await db.transaction(async (tx) => {
       const [existing] = await tx.select().from(workoutStepResults).where(eq(workoutStepResults.workoutSessionId, linked.id)).for("update");
@@ -219,7 +227,7 @@ export type StepResultsView = {
   workoutSessionId: number;
   plannedSessionId: number | null;
   date: string;
-  source: "player" | "manual" | "assistant";
+  source: (typeof STEP_RESULT_SOURCES)[number];
   workout: Workout;
   anchors: ThresholdValues;
   rows: (PlannedRow & { result: StepResult | null; compare: StepCompare })[];
@@ -234,7 +242,7 @@ export type StepResultsView = {
 export async function getStepResults(userId: string, by: { plannedSessionId?: number; workoutSessionId?: number }): Promise<StepResultsView | null> {
   const where = by.workoutSessionId != null ? eq(workoutStepResults.workoutSessionId, by.workoutSessionId) : eq(workoutStepResults.plannedSessionId, by.plannedSessionId ?? -1);
   const [row] = await db
-    .select({ r: workoutStepResults, date: workoutSessions.date })
+    .select({ r: workoutStepResults, date: workoutSessions.date, ws: { source: workoutSessions.source, rpe: workoutSessions.rpe, start: workoutSessions.startTime, end: workoutSessions.endTime, garminActivityId: workoutSessions.garminActivityId } })
     .from(workoutStepResults)
     .innerJoin(workoutSessions, eq(workoutSessions.id, workoutStepResults.workoutSessionId))
     .where(and(eq(workoutStepResults.userId, userId), where))
@@ -249,12 +257,24 @@ export async function getStepResults(userId: string, by: { plannedSessionId?: nu
     const result = results.get(p.key) ?? null;
     return { ...p, result, compare: compareStep(p, result ?? undefined) };
   });
-  const [set] = await db
-    .select({ rpe: workoutSets.rpe, durationSeconds: workoutSets.durationSeconds, distanceMeters: workoutSets.distanceMeters })
-    .from(workoutSets)
-    .where(eq(workoutSets.sessionId, row.r.workoutSessionId))
-    .limit(1);
-  const loads = (await appSessionLoads(userId, row.date, row.date)).filter((l) => l.id === row.r.workoutSessionId && l.sport === workout.sport);
+  let set: { rpe: number | null; durationSeconds: number | null; distanceMeters: number | null } | undefined;
+  if (row.ws.source === "garmin") {
+    // A Garmin pair has no sets: time from the row, distance from the activity, load from the Garmin metrics.
+    const [act] = row.ws.garminActivityId != null ? await db.select({ data: garminActivities.data }).from(garminActivities).where(eq(garminActivities.id, row.ws.garminActivityId)) : [];
+    const distance = (act?.data as { distance?: unknown } | undefined)?.distance;
+    set = {
+      rpe: row.ws.rpe,
+      durationSeconds: row.ws.end ? Math.round((row.ws.end.getTime() - row.ws.start.getTime()) / 1000) : null,
+      distanceMeters: typeof distance === "number" ? Math.round(distance) : null,
+    };
+  } else {
+    [set] = await db
+      .select({ rpe: workoutSets.rpe, durationSeconds: workoutSets.durationSeconds, distanceMeters: workoutSets.distanceMeters })
+      .from(workoutSets)
+      .where(eq(workoutSets.sessionId, row.r.workoutSessionId))
+      .limit(1);
+  }
+  const loads = row.ws.source === "garmin" ? [] : (await appSessionLoads(userId, row.date, row.date)).filter((l) => l.id === row.r.workoutSessionId && l.sport === workout.sport);
   return {
     workoutSessionId: row.r.workoutSessionId,
     plannedSessionId: row.r.plannedSessionId,

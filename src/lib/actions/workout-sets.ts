@@ -743,6 +743,7 @@ export async function updateWorkoutSession(data: unknown): Promise<ActionResult<
         .where(eq(workoutSessions.id, sessionId))
         .for("no key update");
       if (existing.source === "auto") return "Sessions the app logged for you can't be edited";
+      if (existing.source === "garmin") return "A Garmin ride follows the activity. Change the pair on the session page";
       if (!existing.isCompleted) return "Finish the workout before editing it from history";
 
       // The date is the lifter's local day, which the server doesn't know. No
@@ -856,10 +857,12 @@ export async function deleteWorkoutSession(
 
   try {
     const [existing] = await db
-      .select({ userId: workoutSessions.userId, startTime: workoutSessions.startTime })
+      .select({ userId: workoutSessions.userId, startTime: workoutSessions.startTime, source: workoutSessions.source })
       .from(workoutSessions)
       .where(eq(workoutSessions.id, sessionId));
     assertOwner(existing, auth.user.id);
+    // The worker writes a deleted pair again: "Not this activity" on the session page is the way to drop it.
+    if (existing.source === "garmin") return { success: false, error: "Use Not this activity on the session page to remove a Garmin ride." };
 
     await db.transaction(async (tx) => {
       const exercisesNow = () =>
@@ -986,6 +989,8 @@ export async function getCompletedSessions(
         intendedDate: workoutSessions.intendedDate,
         plannedSessionId: workoutSessions.plannedSessionId,
         source: workoutSessions.source,
+        garminActivityId: workoutSessions.garminActivityId,
+        rpe: workoutSessions.rpe,
         programName: programs.name,
         setCount: sql<number>`COUNT(${workoutSets.id})`,
         exerciseCount: sql<number>`COUNT(DISTINCT ${workoutSets.exerciseId})`,
@@ -1018,6 +1023,8 @@ export async function getCompletedSessions(
         workoutSessions.intendedDate,
         workoutSessions.plannedSessionId,
         workoutSessions.source,
+        workoutSessions.garminActivityId,
+        workoutSessions.rpe,
         programs.name,
       )
       .orderBy(desc(workoutSessions.startTime));
@@ -1073,6 +1080,8 @@ export async function getSessionDetail(
           intendedDate: workoutSessions.intendedDate,
           plannedSessionId: workoutSessions.plannedSessionId,
           source: workoutSessions.source,
+          garminActivityId: workoutSessions.garminActivityId,
+          rpe: workoutSessions.rpe,
           programName: programs.name,
         })
         .from(workoutSessions)
@@ -1670,7 +1679,7 @@ export async function getWorkoutInsight(
           sql`${workoutSets.rpe} >= 9`,
           sql`${workoutSessions.id} = (
             SELECT id FROM workout_sessions
-            WHERE user_id = ${userId} AND program_id = ${programId} AND is_completed = true
+            WHERE user_id = ${userId} AND program_id = ${programId} AND is_completed = true AND source <> 'garmin'
             ORDER BY start_time DESC LIMIT 1
           )`,
         ),

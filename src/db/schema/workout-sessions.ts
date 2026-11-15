@@ -34,6 +34,7 @@ import {
     uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
+import { garminActivities } from "./garmin";
 import { programs } from "./programs";
 import { plannedSessions } from "./planned-sessions";
 import { users } from "./users";
@@ -68,11 +69,18 @@ export const workoutSessions = pgTable("workout_sessions", {
   // outside the app). Such a session has no sets and zero duration.
   // "assistant" = logged by the user's connected AI assistant (MCP log_session);
   // otherwise it reads like an "app" session.
-  source: text("source", { enum: ["app", "auto", "assistant"] }).default("app").notNull(),
+  // "garmin" = a Garmin activity the worker or the user paired with a planned
+  // session (src/lib/garmin/pairing.ts). It has no sets; its load comes from
+  // the activity, so load readers must leave it out.
+  source: text("source", { enum: ["app", "auto", "assistant", "garmin"] }).default("app").notNull(),
   // The planned session this workout was started for (docs/plans/sessions.md,
   // 3.3). Null for a workout started any other way; the matcher still links it
   // by date and program on read.
   plannedSessionId: integer("planned_session_id").references(() => plannedSessions.id, { onDelete: "set null" }),
+  // The paired activity of a "garmin" row; null on every other source.
+  garminActivityId: integer("garmin_activity_id").references(() => garminActivities.id, { onDelete: "cascade" }),
+  // Session RPE 1-10 the user tapped on a "garmin" row (it has no sets to hold it).
+  rpe: integer("rpe"),
 }, (t) => [
   index("idx_ws_user_completed_start").on(t.userId, t.isCompleted, t.startTime),
   index("idx_ws_planned").on(t.plannedSessionId),
@@ -82,6 +90,13 @@ export const workoutSessions = pgTable("workout_sessions", {
   uniqueIndex("uniq_ws_auto_planned")
     .on(t.userId, t.plannedSessionId)
     .where(sql`${t.source} = 'auto' AND ${t.plannedSessionId} IS NOT NULL`),
+  // One stored pair per planned session and per activity: the worker reruns every tick.
+  uniqueIndex("uniq_ws_garmin_planned")
+    .on(t.userId, t.plannedSessionId)
+    .where(sql`${t.source} = 'garmin' AND ${t.plannedSessionId} IS NOT NULL`),
+  uniqueIndex("uniq_ws_garmin_activity")
+    .on(t.garminActivityId)
+    .where(sql`${t.source} = 'garmin'`),
   uniqueIndex("uniq_ws_auto_day")
     .on(t.userId, t.programId, t.date)
     .where(sql`${t.source} = 'auto' AND ${t.plannedSessionId} IS NULL`),

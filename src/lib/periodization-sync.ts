@@ -190,9 +190,9 @@ async function cycleAdaptationSignals(
         gte(workoutSessions.date, sinceStr),
         // A session with no sets is a workout screen opened and left, closed
         // by the stale sweep; it was not done. A day the cycle completed
-        // itself (source 'auto') has no sets by design and counts.
+        // itself (source 'auto') or a paired Garmin activity has no sets by design and counts.
         or(
-          eq(workoutSessions.source, "auto"),
+          inArray(workoutSessions.source, ["auto", "garmin"]),
           sql`EXISTS (SELECT 1 FROM ${workoutSets} WHERE ${workoutSets.sessionId} = ${workoutSessions.id})`,
         ),
       ),

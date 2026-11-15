@@ -41,10 +41,11 @@ export default function PrivacyPage() {
           <strong>Structured workouts and planned versus done, if endurance features are on:</strong> your library of
           swim, bike and run workouts (steps, repeats and targets), and for each dated session the workout it runs, its
           priority, whether it is part of a brick, whether you did it or missed it, an optional reason for a miss in
-          your own words, and the Garmin activity you or your assistant picked for it. From this the app works out how
+          your own words, and the Garmin activity paired with it, by the app or picked by you or your assistant. From this the app works out how
           much of each session you did and how many weeks you followed your plan. Each change is kept as a version you
           can restore. After a session, the result of each step (time, distance, an average you type in, effort and a
-          note), from the guided player or typed in by you or your assistant. From your logged sessions and thresholds
+          note), from the guided player or typed in by you or your assistant; for a paired Garmin activity, the power,
+          heart rate and cadence of each step from the watch file, and the effort you tap. From your logged sessions and thresholds
           the app also works out a training load and your fitness, fatigue and form; these are calculated when shown,
           not stored.
         </li>
