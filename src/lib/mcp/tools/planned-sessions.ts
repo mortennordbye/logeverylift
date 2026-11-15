@@ -125,12 +125,13 @@ export function registerPlannedSessionTools(server: McpServer, userId: string, c
         `Every operation requires reason; all but add, and the first change to a rotation position, require expectedVersion (the session's version). ${REVISION_RULES}`,
         `On move, change, add, unskip and reset: ${LIMITS_TEXT} Hard sessions are counted in each Monday-to-Sunday week the change touches.`,
         "With endurance features on (docs: logeverylift://docs/workout-steps): 'set_workout' (workout JSON, or workoutId to copy a library workout: the session gets its own copy and runs it instead of a program), 'clear_workout' (programId to run instead), 'update_from_library' (copy the library workout again), 'set_priority' (priority key, support, optional, or null for derived), 'link_brick' (brickParentId: the ride before this run, same day, earlier position), 'unlink_brick'. 'add' also takes workout or workoutId instead of programId, priority and brickParentId. Moving the first session of a brick moves the brick; its later session cannot move alone. set_workout and add run the limits too. A workout that breaks the schema check is refused with every problem and its path, and that check cannot be overridden.",
+        "operation='unpick' (id, expectedVersion, admins with Garmin): the session was not done by any Garmin activity. It drops the paired or picked activity, and the app stops pairing one by itself. Pair another with confirm_planned_session outcome='done' and garminActivityId.",
         "operation='apply_readiness_swap' (id, expectedVersion, endurance features on): make today's hard session the easy one that readinessSwap in list_planned_sessions shows. The app reads the suggestion again and refuses when it no longer holds. The revision keeps the session as it was, so it can be restored.",
       ].join(" "),
       annotations: { destructiveHint: true, openWorldHint: false },
       inputSchema: {
         ...overrideArgs,
-        operation: z.enum(["move", "skip", "unskip", "change", "reset", "remove", "add", "set_workout", "clear_workout", "update_from_library", "set_priority", "link_brick", "unlink_brick", "apply_readiness_swap"]),
+        operation: z.enum(["move", "skip", "unskip", "change", "reset", "remove", "add", "set_workout", "clear_workout", "update_from_library", "set_priority", "link_brick", "unlink_brick", "unpick", "apply_readiness_swap"]),
         workout: z.unknown().optional(),
         workoutId: z.number().int().positive().optional(),
         priority: z.enum(["key", "support", "optional"]).nullable().optional(),
@@ -205,7 +206,9 @@ export function registerPlannedSessionTools(server: McpServer, userId: string, c
                     ? { op: "link_brick", id: args.id!, brickParentId: args.brickParentId!, expectedVersion: args.expectedVersion }
                     : args.operation === "unlink_brick"
                       ? { op: "unlink_brick", id: args.id!, expectedVersion: args.expectedVersion }
-                      : null;
+                      : args.operation === "unpick"
+                        ? { op: "unpick", id: args.id!, expectedVersion: args.expectedVersion }
+                        : null;
         const input: SessionOp =
           workoutOp ??
           (args.operation === "add"

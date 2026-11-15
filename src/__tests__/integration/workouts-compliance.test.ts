@@ -25,6 +25,7 @@ import { registerSessionTools } from "@/lib/mcp/tools/sessions";
 import { registerComplianceTools, registerWorkoutLibraryTools } from "@/lib/mcp/tools/workouts-compliance";
 import { syncPeriodizedTargets } from "@/lib/periodization-sync";
 import { sessionCompliance } from "@/lib/session-compliance";
+import { storePairings } from "@/lib/garmin/pairing";
 import { and, asc, eq, isNull } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createExercise, createProgram, createUser } from "./factories";
@@ -312,6 +313,7 @@ describe("planned vs done", () => {
       (await db.insert(garminActivities).values({ userId: admin, garminActivityId: Math.floor(Math.random() * 1e9), startTimeLocal: new Date(`${day}T06:00:00Z`), activityType: type, data: { duration, distance: 10000 } }).returning())[0].id;
     await act("2026-11-03", "running", 3500);
     const odd = await act("2026-11-04", "cycling", 3600); // not a run: never matches
+    await storePairings(admin, new Date());
     const s = await sessionCompliance(admin, "2026-11-03", "2026-11-04", { cycleId });
     expect(s.map((x) => [x.date, x.state, x.matchedBy, x.band])).toEqual([
       ["2026-11-03", "done", "garmin", "green"],

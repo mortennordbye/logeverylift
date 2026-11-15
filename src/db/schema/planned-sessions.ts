@@ -65,6 +65,8 @@ export const plannedSessions = pgTable(
     brickParentId: integer("brick_parent_id").references((): AnyPgColumn => plannedSessions.id, { onDelete: "set null" }),
     // A Garmin activity the user or the assistant picked as this session (admins).
     garminActivityId: integer("garmin_activity_id").references(() => garminActivities.id, { onDelete: "set null" }),
+    // "None of these": the worker must not pair a Garmin activity with this session by itself.
+    garminUnpaired: boolean("garmin_unpaired").notNull().default(false),
     // Free text with a confirmed miss.
     missedReason: text("missed_reason"),
     // The user's date when the status last became skipped or missed: a skip

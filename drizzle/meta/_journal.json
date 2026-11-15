@@ -652,6 +652,13 @@
       "when": 1794747295336,
       "tag": "0092_bike_hr_zones",
       "breakpoints": true
+    },
+    {
+      "idx": 93,
+      "version": "7",
+      "when": 1794748768522,
+      "tag": "0093_garmin_pairs",
+      "breakpoints": true
     }
   ]
 }

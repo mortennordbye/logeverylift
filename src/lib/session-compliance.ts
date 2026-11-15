@@ -157,6 +157,7 @@ async function completedWithDisciplines(userId: string, from: string, to: string
       plannedSessionId: workoutSessions.plannedSessionId,
       readiness: workoutSessions.readiness,
       source: workoutSessions.source,
+      garminActivityId: workoutSessions.garminActivityId,
     })
     .from(workoutSessions)
     .where(
@@ -239,29 +240,20 @@ export async function sessionCompliance(userId: string, from: string, to: string
   const [facts, hard] = await Promise.all([programFacts(programIds), hardPrograms(db, programIds)]);
 
   const views = rows.map(({ row, programName, programDeletedAt }) => {
-    const workout = storedWorkout(row.workout, row.id);
-    const programId = programDeletedAt ? null : row.programId;
-    const pf = programId != null ? facts.get(programId) : undefined;
-    const sport: Sport | null = workout ? workout.sport : (pf?.sport ?? null);
-    const sports: Sport[] = workout ? [workout.sport] : (pf?.sports ?? []);
-    const est = workout ? estimateWorkout(workout, thresholds) : null;
-    const planned: Amount = est
-      ? { durationSeconds: est.durationComplete && est.durationSeconds ? est.durationSeconds : null, distanceMeters: est.distanceComplete && est.distanceMeters ? est.distanceMeters : null }
-      : (pf?.planned ?? { durationSeconds: null, distanceMeters: null });
+    const v = viewOf(row, programDeletedAt, facts, thresholds);
     return {
-      row,
-      programId,
+      ...v,
       programName: programDeletedAt ? null : programName,
-      workout,
-      sport,
-      sports,
-      planned,
-      hard: workout ? isHardWorkout(workout, thresholds) : programId != null ? (hard.get(programId) ?? false) : false,
+      hard: v.workout ? isHardWorkout(v.workout, thresholds) : v.programId != null ? (hard.get(v.programId) ?? false) : false,
     };
   });
 
   const until = to < today ? to : today;
-  const completed = await completedWithDisciplines(userId, from, until, rows.map((r) => r.row.id));
+  const all = await completedWithDisciplines(userId, from, until, rows.map((r) => r.row.id));
+  // Stored pairs (src/lib/garmin/pairing.ts) are not logged workouts: they never match by day or program.
+  const completed = all.filter((c) => c.source !== "garmin");
+  const stored = new Map<number, number>();
+  if (garmin) for (const c of all) if (c.source === "garmin" && c.plannedSessionId != null && c.garminActivityId != null) stored.set(c.plannedSessionId, c.garminActivityId);
   const matchable = views.filter((v) => v.row.status === "planned");
   // With the switch off, C2's matcher exactly (lifters see no change).
   const match = endurance
@@ -277,28 +269,15 @@ export async function sessionCompliance(userId: string, from: string, to: string
   const linkedTo = new Map<number, number>();
   for (const c of completed) if (c.plannedSessionId != null) linkedTo.set(c.plannedSessionId, c.id);
 
-  const activities = garmin ? await garminCandidates(userId, from, until) : [];
   const picks = new Set(views.map((v) => v.row.garminActivityId).filter((id): id is number => id != null));
-  // A logged workout of a sport on a day stands for one Garmin activity of that sport that day.
-  const takenByApp = new Set<number>();
+  const garminMatch = new Map<number, number>();
   for (const v of views) {
-    const m = match.get(v.row.id) ?? (linkedTo.has(v.row.id) ? { sessionId: linkedTo.get(v.row.id)! } : undefined);
-    if (!m || !v.sport) continue;
-    const a = activities.find((x) => !takenByApp.has(x.id) && !picks.has(x.id) && x.date === v.row.date && x.sport === v.sport);
-    if (a) takenByApp.add(a.id);
+    const a = stored.get(v.row.id);
+    if (a != null && v.row.garminActivityId == null) garminMatch.set(v.row.id, a);
   }
-  const garminMatch = garmin
-    ? pairGarmin(
-        views
-          .filter((v) => v.sport && v.row.status === "planned" && !match.has(v.row.id) && !linkedTo.has(v.row.id) && v.row.garminActivityId == null && v.row.date! <= today)
-          .map((v) => ({ id: v.row.id, date: v.row.date!, position: v.row.position, sport: v.sport!, plannedDurationS: v.planned.durationSeconds, plannedDistanceM: v.planned.distanceMeters })),
-        activities,
-        new Set([...picks, ...takenByApp]),
-      )
-    : new Map<number, number>();
-  const actById = new Map(activities.map((a) => [a.id, a]));
-  const missingPicks = [...picks].filter((id) => !actById.has(id));
-  if (garmin && missingPicks.length) for (const a of await garminCandidates(userId, null, null, missingPicks)) actById.set(a.id, a);
+  const actById = new Map<number, GarminCandidate>();
+  const wanted = [...picks, ...garminMatch.values()];
+  if (garmin && wanted.length) for (const a of await garminCandidates(userId, null, null, wanted)) actById.set(a.id, a);
 
   const illness = endurance ? await illnessOf(userId) : [];
   const priorities = effectivePriorities(
@@ -369,4 +348,78 @@ export async function sessionCompliance(userId: string, from: string, to: string
       version: r.version,
     };
   });
+}
+
+/** One dated session's workout, sport and planned amount. */
+function viewOf(row: PlannedRow, programDeletedAt: Date | null, facts: Awaited<ReturnType<typeof programFacts>>, thresholds: ThresholdValues) {
+  const workout = storedWorkout(row.workout, row.id);
+  const programId = programDeletedAt ? null : row.programId;
+  const pf = programId != null ? facts.get(programId) : undefined;
+  const sport: Sport | null = workout ? workout.sport : (pf?.sport ?? null);
+  const sports: Sport[] = workout ? [workout.sport] : (pf?.sports ?? []);
+  const est = workout ? estimateWorkout(workout, thresholds) : null;
+  const planned: Amount = est
+    ? { durationSeconds: est.durationComplete && est.durationSeconds ? est.durationSeconds : null, distanceMeters: est.distanceComplete && est.distanceMeters ? est.distanceMeters : null }
+    : (pf?.planned ?? { durationSeconds: null, distanceMeters: null });
+  return { row, programId, workout, sport, sports, planned };
+}
+
+/** A ride under this share of the planned time does not pair by itself (D5); a pick still can. */
+export const PAIR_MIN_SHARE = 0.5;
+
+/**
+ * The Garmin activity each dated session in [from, to] should be stored with
+ * (docs/plans/bike-sessions.md, D4): the user's pick, else the computed pair
+ * (6.4) for a session no logged workout clears. `rowIds` holds every session
+ * read, so the caller can drop stored pairs that no longer hold.
+ */
+export async function garminPairsToStore(userId: string, from: string, to: string): Promise<{ pairs: Map<number, number>; rowIds: Set<number> }> {
+  const today = toDateStr(await userToday(userId));
+  const until = to < today ? to : today;
+  const rows = await plannedRowsInRange(db, userId, from, until);
+  const pairs = new Map<number, number>();
+  if (!rows.length) return { pairs, rowIds: new Set() };
+  const thresholds = await thresholdValues(userId);
+  const facts = await programFacts([...new Set(rows.map((r) => r.row.programId).filter((id): id is number => id != null))]);
+  const views = rows.map(({ row, programDeletedAt }) => viewOf(row, programDeletedAt, facts, thresholds));
+  const completed = (await completedWithDisciplines(userId, from, until, rows.map((r) => r.row.id))).filter((c) => c.source !== "garmin");
+  const match = matchEndurance(
+    views.filter((v) => v.row.status === "planned").map((v) => ({ id: v.row.id, date: v.row.date!, position: v.row.position, programId: v.programId, sport: v.sport })),
+    completed,
+  );
+  const linkedTo = new Map<number, number>();
+  for (const c of completed) if (c.plannedSessionId != null) linkedTo.set(c.plannedSessionId, c.id);
+
+  const activities = await garminCandidates(userId, from, until);
+  const picks = new Set(views.map((v) => v.row.garminActivityId).filter((id): id is number => id != null));
+  // A logged workout of a sport on a day stands for one Garmin activity of that sport that day.
+  const takenByApp = new Set<number>();
+  for (const v of views) {
+    const m = match.get(v.row.id) ?? (linkedTo.has(v.row.id) ? { sessionId: linkedTo.get(v.row.id)! } : undefined);
+    if (!m || !v.sport) continue;
+    const a = activities.find((x) => !takenByApp.has(x.id) && !picks.has(x.id) && x.date === v.row.date && x.sport === v.sport);
+    if (a) takenByApp.add(a.id);
+  }
+  const eligible = views.filter(
+    (v) => v.sport && v.row.status === "planned" && !match.has(v.row.id) && !linkedTo.has(v.row.id) && v.row.garminActivityId == null && !v.row.garminUnpaired && v.row.date! <= today,
+  );
+  const computed = pairGarmin(
+    eligible.map((v) => ({ id: v.row.id, date: v.row.date!, position: v.row.position, sport: v.sport!, plannedDurationS: v.planned.durationSeconds, plannedDistanceM: v.planned.distanceMeters })),
+    activities,
+    new Set([...picks, ...takenByApp]),
+  );
+  const actById = new Map(activities.map((a) => [a.id, a]));
+  for (const v of views) {
+    if (linkedTo.has(v.row.id)) continue;
+    if (v.row.garminActivityId != null) {
+      pairs.set(v.row.id, v.row.garminActivityId);
+      continue;
+    }
+    const a = computed.get(v.row.id);
+    if (a == null) continue;
+    const planned = v.planned.durationSeconds;
+    if (planned && (actById.get(a)?.durationS ?? 0) < planned * PAIR_MIN_SHARE) continue;
+    pairs.set(v.row.id, a);
+  }
+  return { pairs, rowIds: new Set(rows.map((r) => r.row.id)) };
 }

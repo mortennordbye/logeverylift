@@ -94,7 +94,7 @@ async function templateSlots(ex: Executor, cycleId: number): Promise<TemplateSlo
 }
 
 /** Completed workouts that can match planned sessions dated in [from, to], or linked to these rows. */
-export async function completedFor(ex: Executor, userId: string, from: string, to: string, rowIds: number[] = []): Promise<CompletedForMatch[]> {
+export async function completedFor(ex: Executor, userId: string, from: string, to: string, rowIds: number[] = []): Promise<(CompletedForMatch & { source: string })[]> {
   return ex
     .select({
       id: workoutSessions.id,
@@ -102,6 +102,7 @@ export async function completedFor(ex: Executor, userId: string, from: string, t
       intendedDate: workoutSessions.intendedDate,
       programId: workoutSessions.programId,
       plannedSessionId: workoutSessions.plannedSessionId,
+      source: workoutSessions.source,
     })
     .from(workoutSessions)
     .where(
@@ -769,7 +770,9 @@ export type SessionOp =
   | { op: "unlink_brick"; id: number; expectedVersion?: number }
   | { op: "miss"; id: number; reason?: string | null; expectedVersion?: number }
   | { op: "unmiss"; id: number; expectedVersion?: number }
-  | { op: "pick"; id: number; garminActivityId: number; expectedVersion?: number };
+  | { op: "pick"; id: number; garminActivityId: number; expectedVersion?: number }
+  /** "None of these": no Garmin activity is this session, and the worker must not pair one. */
+  | { op: "unpick"; id: number; expectedVersion?: number };
 
 export class SessionInputError extends PlanStateError {}
 
@@ -794,7 +797,7 @@ export async function resolveWorkoutInput(ex: Executor, userId: string, input: {
   return { workout: parsed.workout, workoutId: null };
 }
 
-const ENDURANCE_OPS = new Set(["set_workout", "clear_workout", "update_from_library", "set_priority", "link_brick", "unlink_brick", "miss", "unmiss", "pick"]);
+const ENDURANCE_OPS = new Set(["set_workout", "clear_workout", "update_from_library", "set_priority", "link_brick", "unlink_brick", "miss", "unmiss", "pick", "unpick"]);
 
 async function ownedProgram(ex: Executor, userId: string, programId: number) {
   const [p] = await ex.select({ userId: programs.userId }).from(programs).where(and(eq(programs.id, programId), livePrograms));
@@ -857,13 +860,13 @@ export async function isPlannedDone(userId: string, id: number): Promise<boolean
   return db.transaction(async (tx) => isDone(tx, userId, row, toDateStr(await userToday(userId))));
 }
 
-async function isDone(tx: Tx, userId: string, row: PlannedRow, today: string): Promise<boolean> {
+async function isDone(tx: Tx, userId: string, row: PlannedRow, today: string, skipGarmin = false): Promise<boolean> {
   if (row.date == null || row.date > today || row.status !== "planned") return false;
   const sameDay = await tx
     .select()
     .from(plannedSessions)
     .where(and(eq(plannedSessions.cycleId, row.cycleId), eq(plannedSessions.date, row.date), livePlannedSessions));
-  const sessions = await completedFor(tx, userId, row.date, row.date, [row.id]);
+  const sessions = (await completedFor(tx, userId, row.date, row.date, [row.id])).filter((s) => !skipGarmin || s.source !== "garmin");
   return doneIds(sameDay, sessions).has(row.id);
 }
 
@@ -991,7 +994,9 @@ async function sessionOpBody(w: PlanWriteSession, ctx: PlanWriteContext, input: 
   await w.touch({ type: "planned_session", id: input.id }, { expectedVersion: input.expectedVersion });
   const { row, cycle } = await liveRow(tx, ctx.userId, input.id);
   const block = cycleBlock(cycle);
-  if (await isDone(tx, ctx.userId, row, today)) {
+  // A stored Garmin pair marks the session done, but the pair itself can still be changed.
+  const garminOp = input.op === "pick" || input.op === "unpick";
+  if (await isDone(tx, ctx.userId, row, today, garminOp)) {
     throw new SessionInputError("This session is logged; past sessions do not change.");
   }
   let set: Partial<typeof plannedSessions.$inferInsert> = {};
@@ -1076,7 +1081,17 @@ async function sessionOpBody(w: PlanWriteSession, ctx: PlanWriteContext, input: 
         .where(and(eq(plannedSessions.garminActivityId, act.id), livePlannedSessions, ne(plannedSessions.id, row.id)))
         .limit(1);
       if (other) throw new SessionInputError("That activity is already matched to another session.");
-      set = { garminActivityId: act.id, status: "planned", missedReason: null, statusOn: null };
+      set = { garminActivityId: act.id, garminUnpaired: false, status: "planned", missedReason: null, statusOn: null };
+      const { replacePair } = await import("@/lib/garmin/pairing");
+      await replacePair(tx, ctx.userId, row.id, act.id);
+      break;
+    }
+    case "unpick": {
+      const { garminAllowedFor } = await import("@/lib/garmin/access");
+      if (!(await garminAllowedFor(ctx.userId))) throw new SessionInputError("Garmin is not on for this account.");
+      set = { garminActivityId: null, garminUnpaired: true };
+      const { replacePair } = await import("@/lib/garmin/pairing");
+      await replacePair(tx, ctx.userId, row.id, null);
       break;
     }
     case "unskip":

@@ -51,7 +51,7 @@ export function SessionDetailClient({ detail }: { detail: SessionDetail }) {
 
   // Auto sessions have no sets and their day is the cycle's; a session still
   // in progress is edited on the workout screen.
-  const editable = detail.source !== "auto" && detail.isCompleted;
+  const editable = detail.source !== "auto" && detail.source !== "garmin" && detail.isCompleted;
   const sessionChanged = date !== detail.date || notes.trim() !== (detail.notes ?? "");
 
   const startTime = new Date(detail.startTime);

@@ -14,7 +14,7 @@ import { plannedSessions } from "./planned-sessions";
 import { users } from "./users";
 import { workoutSessions } from "./workout-sessions";
 
-export const STEP_RESULT_SOURCES = ["player", "manual", "assistant"] as const;
+export const STEP_RESULT_SOURCES = ["player", "manual", "assistant", "garmin"] as const;
 
 export const workoutStepResults = pgTable(
   "workout_step_results",
