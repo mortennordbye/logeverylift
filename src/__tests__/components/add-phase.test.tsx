@@ -145,6 +145,9 @@ describe("Add a phase, fix round 4", () => {
   });
 
   it("Weeks to Days converts the number, and Days to Weeks only when it is whole weeks", () => {
+    // jsdom has no scrollIntoView; the length note scrolls itself into view, as in the phase sheet.
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
     render(<AddPhaseForm {...props} />);
     const length = screen.getByLabelText("Length") as HTMLInputElement;
     const unit = (name: string) => screen.getByRole("button", { name });
@@ -159,7 +162,8 @@ describe("Add a phase, fix round 4", () => {
     // The unit shown is the unit saved: Weeks, with the days rounded (round 8).
     expect(length.value).toBe("1");
     expect(unit("Weeks").getAttribute("aria-pressed")).toBe("true");
-    expect(screen.getByText("10 days is not a whole number of weeks, so it is now 1 week.")).toBeTruthy();
+    const note = screen.getByText("10 days is not a whole number of weeks, so it is now 1 week.");
+    expect(scroll.mock.contexts).toContain(note);
   });
 
   it("step 2 Cancel offers to remove the phase this flow made", async () => {

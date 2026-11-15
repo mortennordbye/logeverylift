@@ -244,7 +244,12 @@ export function AddPhaseForm(p: Props) {
               ]}
             />
           </div>
-          {unitNote && <span className="text-[13px] text-muted-foreground">{unitNote}</span>}
+          {unitNote && (
+            // Scrolled into view when it shows, as in the phase sheet.
+            <span ref={(el) => el?.scrollIntoView({ block: "nearest" })} className="text-[13px] text-muted-foreground">
+              {unitNote}
+            </span>
+          )}
           <span className="text-[13px] text-muted-foreground">
             Starts {shortDay(p.startsOn).slice(4)}, {p.afterName ? "the day after the phase before ends." : "when the season starts."}
           </span>
