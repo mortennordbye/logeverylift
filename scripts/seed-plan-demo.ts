@@ -34,6 +34,9 @@ const EDGE = "plan-edge@demo.local";
 const EDGE2 = "plan-edge2@demo.local";
 const EMPTY = "plan-empty@demo.local";
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "postgres"]);
+// Every demo user lives here. Dates and times are built in this zone, not the
+// zone the script runs in, so a run near midnight matches what the app shows.
+const DEMO_TZ = "Europe/Oslo";
 
 function assertLocal() {
   if (process.env.NODE_ENV === "production") throw new Error("Refusing to run with NODE_ENV=production");
@@ -58,8 +61,9 @@ async function main() {
   const { writeLoggedSession } = await import("../src/lib/logged-sessions");
   const { sessionCompliance } = await import("../src/lib/session-compliance");
   const { confirmDone, moveSuggestion } = await import("../src/lib/session-answers");
-  const { mondayOf } = await import("../src/lib/utils/session-compliance");
+  const { PROMPT_DAYS, mondayOf } = await import("../src/lib/utils/session-compliance");
   const { userToday } = await import("../src/lib/user-settings");
+  const { instantInZone } = await import("../src/lib/utils/user-date");
   const { toDateStr } = await import("../src/lib/utils/cycle-position");
   const { addDaysStr } = await import("../src/lib/utils/seasons");
   const { createTriathlonPlan } = await import("../src/lib/triathlon-plan");
@@ -92,7 +96,7 @@ async function main() {
         policySeenVersion: LEGAL_VERSION,
         termsAcceptedAt: new Date(),
         healthConsentAt: new Date(),
-        timeZone: "Europe/Oslo",
+        timeZone: DEMO_TZ,
         enduranceEnabled: endurance,
       })
       .where(eq(s.users.id, id));
@@ -213,7 +217,7 @@ async function main() {
   async function logWorkout(userId: string, programId: number, lifts: Lift[], date: string, plannedSessionId: number | null = null) {
     await writeLoggedSession(userId, {
       date,
-      start: new Date(`${date}T17:00:00`),
+      start: instantInZone(date, 17, 0, DEMO_TZ),
       programId,
       plannedSessionId,
       durationMinutes: 60,
@@ -570,17 +574,29 @@ async function main() {
     });
     await seasonsLib.deleteSeason(ctx, oldSeason.id);
 
-    // Last week: all done but Saturday's ride (unconfirmed). This week: strength
+    // Last week: all done but one ride (unconfirmed). This week: strength
     // done, key sessions missed, the swim unconfirmed, the rest done. Next week:
     // the bike skipped, the swim moved to Friday, the tempo run changed.
+    //
+    // "Did you do it?" asks only for the last PROMPT_DAYS days. On a Sunday,
+    // last Saturday is 8 days back and shows Missed, so the ride left to answer
+    // is one added on last Sunday, the rest day. The app adds no session to a
+    // past day, so the seed writes that row itself.
+    let unconfirmedRide = addDaysStr(blockStart, 5);
+    if (unconfirmedRide < addDaysStr(today, -PROMPT_DAYS)) {
+      unconfirmedRide = addDaysStr(blockStart, 6);
+      await rev.planWrite(ctx, async (w) => {
+        await w.touch({ type: "cycle", id: running });
+        await w.tx.insert(s.plannedSessions).values({ userId, cycleId: running, date: unconfirmedRide, programId: ride, priority: "support" });
+      });
+    }
     const rows = await sessionsLib.listPlanned(userId, blockStart, addDaysStr(nextMonday, 6), running);
-    const lastSaturday = addDaysStr(blockStart, 5);
     for (const r of rows.filter((x) => x.id != null && x.programId != null && x.date < today)) {
       const id = r.id!;
       const lifts = liftsOf.get(r.programId!);
       if (lifts) await logWorkout(userId, r.programId!, lifts, r.date, id);
       else if (r.date < monday) {
-        if (r.date !== lastSaturday) await confirmDone(ctx, id, { durationSeconds: 45 * 60, rpe: 5 }, "app");
+        if (r.date !== unconfirmedRide) await confirmDone(ctx, id, { durationSeconds: 45 * 60, rpe: 5 }, "app");
       } else if (keyIds.has(r.programId!)) await sessionsLib.applySessionOp(ctx, { op: "miss", id, reason: "Long day at work" });
       else if (r.programId !== swim) await confirmDone(ctx, id, { durationSeconds: 40 * 60, rpe: 4 }, "app");
     }
