@@ -301,7 +301,8 @@ function SlotSheet({
   const [label, setLabel] = useState(slot.label ?? "");
   const [notes, setNotes] = useState(slot.notes ?? "");
   const [labelOpen, setLabelOpen] = useState(false);
-  const rest = isRest(slot);
+  // A rest day (no session, and no name such as "Mobility" that makes it a day of its own).
+  const rest = isRest(slot) && (slot.label == null || slot.label === "Rest");
 
   function done() {
     const changes: SlotChanges = {};
@@ -324,7 +325,7 @@ function SlotSheet({
           <div className="flex items-center justify-between py-2 min-h-[52px] border-b border-hairline">
             <span className="flex flex-col gap-0.5 min-w-0">
               <span className={LABEL}>Program</span>
-              <span className="text-base font-medium truncate">{slot.program?.name ?? slot.label ?? "Workout"}</span>
+              <span className="text-base font-medium truncate">{slot.program?.name ?? (isRest(slot) ? "Rest" : slot.label ?? "Workout")}</span>
             </span>
             <button type="button" onClick={onChangeProgram} className="h-11 px-3 text-[15px] font-medium text-brand active:opacity-70">
               Change
