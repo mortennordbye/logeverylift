@@ -11,14 +11,16 @@
  */
 
 import { db } from "@/db";
-import { trainingCycleSlots, trainingCycles, workouts, type SessionPriority } from "@/db/schema";
+import { plannedSessions, trainingCycleSlots, trainingCycles, workouts, type SessionPriority } from "@/db/schema";
+import { livePlannedSessions } from "@/lib/plan-live";
 import { assertAthleteRoom, lockCycleRows, planWrite, PlanNotFoundError, type PlanWriteContext, type PlanWriteSession, type Tx } from "@/lib/plan-revisions";
-import { withLimits, type LimitContext, type LimitOverride } from "@/lib/training-limits";
+import { NO_OVERRIDE, withLimits, type LimitContext, type LimitMode, type LimitOverride } from "@/lib/training-limits";
 import type { LimitCheck, LimitRule } from "@/lib/utils/training-limits";
 import { regenerateCycleSessions, WorkoutSchemaError } from "@/lib/planned-sessions";
 import { getUserSettings } from "@/lib/user-settings";
+import { mondayOf } from "@/lib/utils/planned-sessions";
 import { describeWorkout, estimateWorkout, parseWorkout, type Workout, type WorkoutEstimate } from "@/lib/utils/workout-steps";
-import { and, asc, eq, ilike, isNotNull, isNull, or } from "drizzle-orm";
+import { and, asc, eq, gte, ilike, inArray, isNotNull, isNull, or } from "drizzle-orm";
 
 export type LibraryWorkout = {
   id: number;
@@ -149,8 +151,8 @@ export async function updateWorkout(
   ctx: PlanWriteContext,
   id: number,
   input: { workout?: unknown; priority?: SessionPriority | null; name?: string; expectedVersion?: number },
-  /** An assistant's edit runs the training limits on the sessions it rewrites (D3, review 3); the app's never does (D4). */
-  limits?: { lc: LimitContext; override: LimitOverride },
+  /** The training limits on the sessions it rewrites: an assistant's edit checks (D3, review 3); the editor warns (bike plan 5.3). */
+  limits?: { lc: LimitContext; override: LimitOverride; mode?: LimitMode },
 ): Promise<{ id: number; version: number; sessionsRegenerated: number; limits: { check: LimitCheck; unusedOverrides: LimitRule[] } | null }> {
   const workout = input.workout !== undefined ? checked(input.workout) : null;
   const cycleIds = await cyclesUsingWorkout(ctx.userId, id);
@@ -158,7 +160,7 @@ export async function updateWorkout(
     if (cycleIds.length) await lockCycleRows(w.tx, cycleIds);
     const write = () => applyUpdate(w, ctx, id, input, workout);
     if (!limits || !cycleIds.length) return { regenerated: await write(), limits: null };
-    const { result: regenerated, check, unusedOverrides } = await withLimits(w, limits.lc, { programIds: [], cycleIds }, limits.override, write);
+    const { result: regenerated, check, unusedOverrides } = await withLimits(w, limits.lc, { programIds: [], cycleIds }, limits.override, write, limits.mode);
     return { regenerated, limits: { check, unusedOverrides } };
   });
   return { id, version: versions.get(`workout:${id}`) ?? 0, sessionsRegenerated: result.regenerated, limits: result.limits };
@@ -204,4 +206,80 @@ export async function deleteWorkout(ctx: PlanWriteContext, id: number, expectedV
     return regenerateUsers(w.tx, ctx.userId, id);
   });
   return { sessionsRegenerated: result };
+}
+
+// ── The editor's save sheet (docs/plans/bike-sessions.md, 5.3) ──────────────
+
+/** Thrown inside a dry run so its transaction rolls back with nothing applied. */
+class DryRun extends Error {
+  constructor(readonly check: LimitCheck) {
+    super("dry run");
+  }
+}
+
+/** Run a write in a plan write, read what the limits find, and roll it all back. */
+async function dryRun(ctx: PlanWriteContext, fn: (w: PlanWriteSession) => Promise<LimitCheck>): Promise<LimitCheck> {
+  try {
+    await planWrite({ ...ctx }, async (w) => {
+      throw new DryRun(await fn(w));
+    });
+  } catch (e) {
+    if (e instanceof DryRun) return e.check;
+    throw e;
+  }
+  throw new Error("dry run did not roll back");
+}
+
+/** What the limits would warn about if the library workout changed to `workout`. Writes nothing. */
+export async function previewWorkoutUpdate(ctx: PlanWriteContext, id: number, workout: unknown, lc: LimitContext): Promise<LimitCheck> {
+  const wk = checked(workout);
+  const cycleIds = await cyclesUsingWorkout(ctx.userId, id);
+  return dryRun(ctx, async (w) => {
+    if (cycleIds.length) await lockCycleRows(w.tx, cycleIds);
+    const { check } = await withLimits(w, lc, { programIds: [], cycleIds }, NO_OVERRIDE, () => applyUpdate(w, ctx, id, {}, wk), "warn");
+    return check;
+  });
+}
+
+/** What the limits would warn about if one dated session ran `workout`. Writes nothing. */
+export async function previewSessionWorkout(ctx: PlanWriteContext, sessionId: number, workout: unknown, lc: LimitContext): Promise<LimitCheck> {
+  const wk = checked(workout);
+  return dryRun(ctx, async (w) => {
+    const [row] = await w.tx
+      .select({ date: plannedSessions.date })
+      .from(plannedSessions)
+      .where(and(eq(plannedSessions.id, sessionId), eq(plannedSessions.userId, ctx.userId), livePlannedSessions));
+    if (!row) throw new PlanNotFoundError({ type: "planned_session", id: sessionId });
+    const scope = { programIds: [], cycleIds: [], sessionWeeks: { userId: ctx.userId, mondays: row.date ? [mondayOf(row.date)] : [], sessionIds: [sessionId] } };
+    const { check } = await withLimits(w, lc, scope, NO_OVERRIDE, async () => {
+      await w.tx.update(plannedSessions).set({ workout: wk, workoutId: null, programId: null }).where(eq(plannedSessions.id, sessionId));
+    }, "warn");
+    return check;
+  });
+}
+
+/**
+ * Coming sessions from a slot that uses this library workout but were changed
+ * by hand: a library update leaves them on their own version. By date.
+ */
+export async function handEditedSessions(userId: string, workoutId: number, today: string): Promise<{ id: number; date: string }[]> {
+  const cycleIds = await cyclesUsingWorkout(userId, workoutId);
+  if (!cycleIds.length) return [];
+  const rows = await db
+    .select({ id: plannedSessions.id, date: plannedSessions.date })
+    .from(plannedSessions)
+    .innerJoin(trainingCycleSlots, eq(trainingCycleSlots.id, plannedSessions.slotId))
+    .where(
+      and(
+        eq(plannedSessions.userId, userId),
+        inArray(plannedSessions.cycleId, cycleIds),
+        eq(trainingCycleSlots.workoutId, workoutId),
+        isNotNull(plannedSessions.touchedAt),
+        eq(plannedSessions.status, "planned"),
+        gte(plannedSessions.date, today),
+        livePlannedSessions,
+      ),
+    )
+    .orderBy(asc(plannedSessions.date), asc(plannedSessions.position));
+  return rows.filter((r): r is { id: number; date: string } => r.date != null);
 }

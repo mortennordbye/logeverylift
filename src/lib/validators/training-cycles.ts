@@ -49,7 +49,9 @@ export const upsertCycleSlotSchema = z.object({
   notes: z.string().max(500).nullable().optional(),
   // Day tracked outside the app: completes itself (see autoCompleteDue).
   autoComplete: z.boolean().optional(),
-  // Endurance features only: a key session, and the next slot of the day as the run of a brick.
+  // Endurance features only: a library workout instead of a program (weekday cycles), a key
+  // session, and the next slot of the day as the run of a brick.
+  workoutId: z.number().int().positive().nullable().optional(),
   priority: z.enum(["key", "support", "optional"]).nullable().optional(),
   brickWithNext: z.boolean().optional(),
 });
