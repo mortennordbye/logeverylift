@@ -42,6 +42,19 @@ beforeEach(() => {
   mocks.replace.mockClear();
 });
 
+describe("Use cycles I already have", () => {
+  it("with no cycle to add, says the rule, not that there are no cycles, and keeps its text readable (round 9)", () => {
+    // A user with only completed cycles: those cannot be phases (seasonlessCycles).
+    render(<SeasonForm {...create} candidates={[]} />);
+    const card = screen.getByText("Use cycles I already have").closest("label")!;
+    expect((within(card).getByRole("radio") as HTMLInputElement).disabled).toBe(true);
+    expect(card.textContent).not.toContain("You have no cycles outside a season yet.");
+    expect(card.textContent).toContain("No cycle can be added. Only a draft or the running cycle outside a season can be a phase.");
+    // Dimming the whole card put the muted line under 4.5:1.
+    expect(card.className).not.toMatch(/opacity-/);
+  });
+});
+
 describe("New season for a gym user", () => {
   it("shows no race and no triathlon plan, and makes a goal season with no race", async () => {
     render(<SeasonForm {...create} enduranceEnabled={false} />);
