@@ -4,6 +4,7 @@ import { BottomSheet } from "@/components/ui/BottomSheet";
 import { manageWorkout } from "@/lib/actions/workouts-compliance";
 import { callAction } from "@/lib/utils/stale-bundle";
 import { ChevronRight } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -17,9 +18,10 @@ const SPORTS: { sport: LibraryRow["sport"]; title: string }[] = [
 
 /**
  * The workouts library (docs/plans/workouts-and-compliance.md, 7): workouts
- * by sport with their summary. Tap one to duplicate, rename or delete it;
- * deleted ones come back from Recently deleted. No step editor: the
- * assistant creates and edits workouts until package C6 adds one.
+ * by sport with their summary. Tap one to edit (bike workouts, in the editor
+ * of docs/plans/bike-sessions.md, 5.3), duplicate, rename or delete it;
+ * deleted ones come back from Recently deleted. "New workout" opens the
+ * editor with an empty bike workout.
  */
 export function WorkoutsLibraryClient({ workouts, deleted }: { workouts: LibraryRow[]; deleted: LibraryRow[] }) {
   const router = useRouter();
@@ -56,9 +58,12 @@ export function WorkoutsLibraryClient({ workouts, deleted }: { workouts: Library
 
   return (
     <div className="flex-1 overflow-y-auto px-4 pb-8 space-y-5">
+      <Link href="/more/workouts/new" className="flex min-h-[52px] items-center justify-center rounded-2xl bg-primary text-base font-semibold text-primary-foreground active:opacity-80">
+        New workout
+      </Link>
       {workouts.length === 0 && (
         <p className="text-sm text-muted-foreground" data-testid="workouts-empty">
-          No workouts yet. Ask your assistant to create workouts.
+          No workouts yet.
         </p>
       )}
       {SPORTS.map(({ sport, title }) => {
@@ -138,6 +143,11 @@ export function WorkoutsLibraryClient({ workouts, deleted }: { workouts: Library
               </div>
             ) : (
               <>
+                {open.sport === "bike" && (
+                  <Link href={`/more/workouts/${open.id}/edit`} className={`${button} flex items-center justify-center bg-primary text-primary-foreground font-semibold`}>
+                    Edit
+                  </Link>
+                )}
                 <button onClick={() => run({ op: "duplicate", id: open.id })} disabled={pending} className={`${button} bg-muted`}>
                   Duplicate
                 </button>

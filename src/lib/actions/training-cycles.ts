@@ -7,7 +7,7 @@
  */
 
 import { db } from "@/db";
-import { dismissedMakeups, programExercises, programSets, programs, trainingCycleSlots, trainingCycles, users, workoutSessions } from "@/db/schema";
+import { dismissedMakeups, programExercises, programSets, programs, trainingCycleSlots, trainingCycles, users, workoutSessions, workouts } from "@/db/schema";
 import {
   cycleLoad,
   phaseLabel,
@@ -50,7 +50,7 @@ import {
   toDateStr,
 } from "@/lib/utils/cycle-position";
 import { MAX_SCHEDULE_DAYS, startDayProblem } from "@/lib/utils/cycle-start";
-import { and, asc, eq, gte, inArray } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNull } from "drizzle-orm";
 import { SEASON_CYCLE_LENGTH, SEASON_CYCLE_RACE } from "@/lib/utils/seasons";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -861,9 +861,17 @@ export async function upsertCycleSlot(
     }
 
     if (dayOfWeek === undefined && orderIndex === undefined) return { success: false, error: "Invalid input" };
-    // A key session and a brick are part of the endurance add-on (src/lib/endurance.ts).
-    if ((rest.priority !== undefined || rest.brickWithNext !== undefined) && !(await enduranceEnabledFor(auth.user.id))) {
+    // A workout, a key session and a brick are part of the endurance add-on (src/lib/endurance.ts).
+    if ((rest.workoutId !== undefined || rest.priority !== undefined || rest.brickWithNext !== undefined) && !(await enduranceEnabledFor(auth.user.id))) {
       return { success: false, error: "Endurance features are not on for this account" };
+    }
+    if (rest.workoutId != null) {
+      if (rest.programId != null) return { success: false, error: "Pick a program or a workout, not both" };
+      const [w] = await db
+        .select({ id: workouts.id })
+        .from(workouts)
+        .where(and(eq(workouts.id, rest.workoutId), eq(workouts.userId, auth.user.id), isNull(workouts.deletedAt)));
+      if (!w) return { success: false, error: "Workout not found" };
     }
     // A day can hold up to three sessions (docs/plans/sessions.md, 3.1).
     const done = await writeCycle(auth.user.id, trainingCycleId, (tx) =>

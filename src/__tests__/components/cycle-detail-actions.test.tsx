@@ -9,6 +9,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 /** The cycle page's actions show a refused write, and starting a later season phase asks first. */
 
 const openWorkout = "A workout from this cycle is still open. Finish or discard it first.";
+vi.mock("@/lib/actions/workout-editor", () => ({ addWorkoutSession: vi.fn(), libraryForPicker: vi.fn(), sessionMenuOp: vi.fn() }));
 vi.mock("@/lib/actions/training-cycles", () => ({
   deleteTrainingCycle: vi.fn(),
   restartTrainingCycle: vi.fn(),

@@ -8,7 +8,7 @@ import { BackLink } from "@/components/ui/BackLink";
 
 /**
  * The workouts library (docs/plans/workouts-and-compliance.md, 7), behind the
- * endurance switch (D18). No step editor yet: the assistant creates workouts.
+ * endurance switch (D18). New and Edit open the workout editor.
  */
 export default async function WorkoutsPage() {
   const { user } = await requireSession();

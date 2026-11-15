@@ -5,6 +5,7 @@ import { ACCENT_TINT, LABEL, PRIMARY_BUTTON } from "@/components/features/season
 import type { LibraryRow } from "@/components/features/WorkoutsLibraryClient";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { updatePlannedSession } from "@/lib/actions/planned-sessions";
+import { sessionMenuOp } from "@/lib/actions/workout-editor";
 import { dayMonth } from "@/lib/home/labels";
 import { type DetailSession, canBackToTemplate, sessionDayLabel, sessionState, weekdayShort } from "@/lib/utils/cycle-detail";
 import { shortDay } from "@/lib/utils/seasons";
@@ -121,6 +122,164 @@ export function PlannedSessionActions({
           {error}
         </p>
       )}
+    </div>
+  );
+}
+
+/** A dated workout session as the session page passes it to its actions. */
+export type SessionPageSession = {
+  id: number;
+  date: string;
+  status: "planned" | "done" | "missed" | "skipped";
+  /** The stored priority; null when the app derives it. */
+  priority: "key" | "support" | "optional" | null;
+  /** The session runs a copy of a library workout: "Update from library" applies. */
+  fromLibrary: boolean;
+  /** A workout was started for it: it no longer changes. */
+  started: boolean;
+};
+
+const PRIORITIES = [
+  { value: "key", label: "Key" },
+  { value: "support", label: "Support" },
+  { value: "optional", label: "Optional" },
+] as const;
+
+/**
+ * The session page's actions (docs/plans/bike-sessions.md, 5.2 and 5.3): Edit,
+ * Move, Skip, and a menu with the priority, "Update from library" and "Not
+ * missed", so every bike action over MCP has an app control. A done or
+ * started session has none.
+ */
+export function SessionPageActions({ session, today, lastDay }: { session: SessionPageSession; today: string; lastDay: string }) {
+  const router = useRouter();
+  const [moving, setMoving] = useState(false);
+  const [menu, setMenu] = useState(false);
+  const [date, setDate] = useState(session.date < today ? today : session.date);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  if (session.status === "done" || session.started) return null;
+
+  async function run(call: () => Promise<{ success: boolean; error?: string }>) {
+    if (pending) return;
+    setPending(true);
+    setError(null);
+    const result = await callAction(call());
+    setPending(false);
+    if (!result.success) {
+      setError(result.error ?? "Could not save");
+      return;
+    }
+    setMoving(false);
+    setMenu(false);
+    router.refresh();
+  }
+
+  const button = "min-h-[46px] rounded-2xl bg-widget-2 px-3 text-[15px] font-semibold active:opacity-70 disabled:opacity-50 flex items-center justify-center";
+  const coming = session.date >= today;
+  const listed = (session.fromLibrary && coming) || session.status === "missed";
+  return (
+    <div className="flex flex-col gap-2" data-testid="session-actions">
+      <div className="grid grid-cols-4 gap-2">
+        {coming ? (
+          <Link href={`/planned/${session.id}/edit`} className={button}>
+            Edit
+          </Link>
+        ) : (
+          <span aria-hidden />
+        )}
+        <button type="button" disabled={pending} aria-expanded={moving} onClick={() => setMoving(!moving)} className={button}>
+          Move
+        </button>
+        {session.status === "skipped" ? (
+          <button type="button" disabled={pending || !coming} onClick={() => run(() => updatePlannedSession({ op: "unskip", id: session.id }))} className={button}>
+            Plan again
+          </button>
+        ) : (
+          <button type="button" disabled={pending} onClick={() => run(() => updatePlannedSession({ op: "skip", id: session.id }))} className={button}>
+            Skip
+          </button>
+        )}
+        <button type="button" aria-label="More actions" onClick={() => setMenu(true)} className={button}>
+          ⋯
+        </button>
+      </div>
+      {moving && (
+        <div className="flex items-center gap-2">
+          <label className="flex-1">
+            <span className="sr-only">New day</span>
+            <input
+              type="date"
+              value={date}
+              min={today}
+              max={lastDay}
+              onChange={(e) => setDate(e.target.value)}
+              className="w-full min-h-11 rounded-xl border border-border bg-background px-3"
+            />
+          </label>
+          <button
+            type="button"
+            disabled={pending || !date}
+            onClick={() => run(() => updatePlannedSession({ op: "move", id: session.id, date }))}
+            className="min-h-11 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-50"
+          >
+            Move
+          </button>
+        </div>
+      )}
+      {error && !menu && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
+      <BottomSheet open={menu} onClose={() => setMenu(false)}>
+        {menu && (
+          <PlanSheetPanel label="Session actions" title="Session" testId="session-menu">
+            <div role="group" aria-label="Priority" className="flex flex-col gap-2">
+              <span className={LABEL}>Priority</span>
+              <div className="grid grid-cols-3 gap-2">
+                {PRIORITIES.map((p) => (
+                  <button
+                    key={p.value}
+                    type="button"
+                    aria-pressed={session.priority === p.value}
+                    disabled={pending || !coming}
+                    onClick={() => run(() => sessionMenuOp({ op: "set_priority", id: session.id, priority: session.priority === p.value ? null : p.value }))}
+                    className={`min-h-11 rounded-xl text-[15px] font-medium disabled:opacity-50 ${session.priority === p.value ? `${ACCENT_TINT} ring-1 ring-inset ring-primary` : "bg-widget-2"}`}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {listed && (
+              <div className="flex flex-col rounded-2xl bg-widget-2 overflow-hidden">
+                {session.fromLibrary && coming && (
+                  <button type="button" disabled={pending} onClick={() => run(() => sessionMenuOp({ op: "update_from_library", id: session.id }))} className={`${sheetRow} flex-col !items-start justify-center gap-0.5 min-h-[60px] py-2`}>
+                    Update from library
+                    <span className="text-[13px] font-normal text-muted-foreground">Take the newest version of the library workout</span>
+                  </button>
+                )}
+                {session.status === "missed" && (
+                  <button type="button" disabled={pending} onClick={() => run(() => sessionMenuOp({ op: "unmiss", id: session.id }))} className={`${sheetRow} flex-col !items-start justify-center gap-0.5 min-h-[60px] py-2`}>
+                    Not missed
+                    <span className="text-[13px] font-normal text-muted-foreground">Take away the missed mark</span>
+                  </button>
+                )}
+              </div>
+            )}
+            {error && (
+              <p role="alert" className="text-sm text-destructive">
+                {error}
+              </p>
+            )}
+            <button type="button" onClick={() => setMenu(false)} className={SHEET_CANCEL}>
+              Close
+            </button>
+          </PlanSheetPanel>
+        )}
+      </BottomSheet>
     </div>
   );
 }
@@ -463,7 +622,7 @@ export function PlannedSessionSheet({
               pending={pending}
               onPick={(workoutId) => run({ op: "set_workout", id: s.id, workoutId })}
               onBack={() => setView("main")}
-              empty="No workouts yet. Ask your assistant to create workouts."
+              empty="No workouts yet. Make one under More, Workouts."
             />
           )}
 
