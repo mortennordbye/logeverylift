@@ -134,6 +134,12 @@ describe("weekday week", () => {
     expect(screen.queryByText("Long ride")).toBeNull();
   });
 
+  it("a cut block shows Week N without of M, as the hero and the cycle header (round 11 I2)", () => {
+    renderWeek({ weeks: blockWeeks("2026-11-16", 7), cut: true });
+    expect(screen.getByText("Week 1")).toBeTruthy();
+    expect(screen.queryByText("Week 1 of 1")).toBeNull();
+  });
+
   it("names a labelled day with no session, and marks a moved session and the day it left", () => {
     renderWeek({ dayLabels: { 5: "Mobility" } });
     const rows = screen.getAllByTestId("week-row");

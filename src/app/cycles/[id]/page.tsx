@@ -276,6 +276,7 @@ export default async function CycleDetailPage({ params }: { params: Promise<{ id
           <CycleWeek
             weeks={blockWeeks(blockStart, runDays)}
             initialWeek={weekIndexOf(blockWeeks(blockStart, runDays), today)}
+            cut={cut}
             sessions={sessions}
             today={today}
             phaseLine={phaseLine}
