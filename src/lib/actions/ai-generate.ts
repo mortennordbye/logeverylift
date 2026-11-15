@@ -13,7 +13,7 @@ import { getAllExercises } from "@/lib/actions/exercises";
 import { env } from "@/lib/env";
 import { GENERATION_DEADLINE_MS, generateWithModel, MIN_CALL_MS } from "@/lib/ai-generation";
 import type { LlmModel } from "@/lib/llm";
-import { checkEdit, editCacheMaterial, genericProfile, normalizeEditRequest } from "@/lib/utils/ai-edit";
+import { OWN_AI_NEEDED, checkEdit, editCacheMaterial, genericProfile, normalizeEditRequest } from "@/lib/utils/ai-edit";
 import {
   aiPlanJsonSchema,
   matchLibraryNames,
@@ -35,9 +35,7 @@ import {
 import { requireSession } from "@/lib/utils/session";
 import { aiEditSchema } from "@/lib/validators/ai-setup";
 import { createHash } from "crypto";
-import { and, asc, count, eq, gte, isNull, sql } from "drizzle-orm";
-
-const DAILY_LIMIT = 5;
+import { and, asc, eq, isNull, sql } from "drizzle-orm";
 
 /** editPlanWithAi's error when the user hasn't opted in to AI editing. */
 const AI_CONSENT_REQUIRED = "Turn on AI editing first.";
@@ -56,25 +54,12 @@ type ActionResult<T = undefined> =
   | { success: true; data: T }
   | { success: false; error: string };
 
-export type RateLimitInfo = {
-  generationsToday: number;
-  dailyLimit: number;
-};
-
 export type AiEditResult = {
   /** The edited plan, with this athlete's starting weights and unique program names. */
   plan: AiPlan;
   /** True when a saved result was reused and no model was called. */
   fromCache: boolean;
-  generationsToday: number;
-  dailyLimit: number;
 };
-
-function startOfToday(): Date {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
 
 /** Enabled models in priority order, free ones only (isFreeModel). */
 async function getEnabledModels(): Promise<LlmModel[]> {
@@ -99,43 +84,12 @@ async function getEnabledModels(): Promise<LlmModel[]> {
   return usable;
 }
 
-export async function getAiRateLimitStatus(): Promise<ActionResult<RateLimitInfo>> {
-  const auth = await requireSession();
-  if (auth.user.role === "admin") {
-    return { success: true, data: { generationsToday: 0, dailyLimit: Infinity } };
-  }
-  try {
-    const [{ value }] = await db
-      .select({ value: count() })
-      .from(aiGenerations)
-      .where(
-        and(
-          eq(aiGenerations.userId, auth.user.id),
-          gte(aiGenerations.createdAt, startOfToday()),
-        ),
-      );
-    return {
-      success: true,
-      data: { generationsToday: Number(value), dailyLimit: DAILY_LIMIT },
-    };
-  } catch (err) {
-    return { success: false, error: String(err) };
-  }
-}
-
-async function generationsToday(userId: string): Promise<number> {
-  const [{ value }] = await db
-    .select({ value: count() })
-    .from(aiGenerations)
-    .where(and(eq(aiGenerations.userId, userId), gte(aiGenerations.createdAt, startOfToday())));
-  return Number(value);
-}
-
 /**
- * Edits the plan built from `picks` as the request asks, on free models only.
+ * Edits the plan built from `picks` as the request asks (docs/plans/ai-coach-hub.md).
  * A request with the same picks, generic profile and normalized wording
- * reuses the saved result without calling a model and without counting
- * toward the daily limit; a model call counts only when it returns a valid plan.
+ * reuses the saved result without calling a model. Only admins call a model
+ * on a miss, on free models only, which fills the cache; a user's miss
+ * returns OWN_AI_NEEDED, so a user's request never leaves the server.
  */
 export async function editPlanWithAi(data: unknown): Promise<ActionResult<AiEditResult>> {
   const auth = await requireSession();
@@ -147,7 +101,7 @@ export async function editPlanWithAi(data: unknown): Promise<ActionResult<AiEdit
   const isAdmin = auth.user.role === "admin";
 
   try {
-    const [user, rawPrs, userPrograms, exerciseResult, usedToday] = await Promise.all([
+    const [user, rawPrs, userPrograms, exerciseResult] = await Promise.all([
       db.query.users.findFirst({ where: eq(users.id, userId) }),
       db
         .select({ exerciseName: exercises.name, prType: exercisePrs.prType, value: exercisePrs.value })
@@ -156,11 +110,7 @@ export async function editPlanWithAi(data: unknown): Promise<ActionResult<AiEdit
         .where(and(eq(exercisePrs.userId, userId), isNull(exercisePrs.supersededAt))),
       db.select({ name: programs.name }).from(programs).where(and(eq(programs.userId, userId), livePrograms)),
       getAllExercises(),
-      generationsToday(userId),
     ]);
-    const dailyLimit = isAdmin ? Infinity : DAILY_LIMIT;
-    // The request goes to outside model providers: only with the user's opt-in.
-    if (!user?.aiConsentAt) return { success: false, error: AI_CONSENT_REQUIRED };
 
     // Estimated 1RM per exercise, else the best weight: the template builder's input.
     const lifts: Record<string, number> = {};
@@ -183,7 +133,6 @@ export async function editPlanWithAi(data: unknown): Promise<ActionResult<AiEdit
 
     let edited: AiPlan | null = null;
     let fromCache = false;
-    let used = usedToday;
 
     const [cached] = await db.select({ plan: aiPlanCache.plan }).from(aiPlanCache).where(eq(aiPlanCache.key, key));
     if (cached) {
@@ -201,12 +150,9 @@ export async function editPlanWithAi(data: unknown): Promise<ActionResult<AiEdit
     }
 
     if (!edited) {
-      if (!isAdmin && usedToday >= DAILY_LIMIT) {
-        return {
-          success: false,
-          error: `You've used all ${DAILY_LIMIT} AI edits for today. Saved edits still work, and the plan builder is always free.`,
-        };
-      }
+      if (!isAdmin) return { success: false, error: OWN_AI_NEEDED };
+      // The request goes to outside model providers: only with the admin's opt-in.
+      if (!user?.aiConsentAt) return { success: false, error: AI_CONSENT_REQUIRED };
       if (!env.OPENROUTER_API_KEY && !env.GOOGLE_API_KEY) {
         return { success: false, error: "AI editing is not configured on this server." };
       }
@@ -256,7 +202,6 @@ export async function editPlanWithAi(data: unknown): Promise<ActionResult<AiEdit
         .values({ key, templateVersion: TEMPLATE_VERSION, picks: { ...picks, profile }, edit: request, plan: edited, modelUsed })
         .onConflictDoNothing();
       await db.insert(aiGenerations).values({ userId });
-      used += 1;
       console.log(`[AI] edit via ${modelUsed}`);
     }
 
@@ -265,7 +210,7 @@ export async function editPlanWithAi(data: unknown): Promise<ActionResult<AiEdit
       fillStartingWeights(matchLibraryNames(edited, libraryNames), picks.level, athlete),
       userPrograms.map((p) => p.name),
     );
-    return { success: true, data: { plan, fromCache, generationsToday: used, dailyLimit } };
+    return { success: true, data: { plan, fromCache } };
   } catch (err) {
     console.error("[editPlanWithAi] failed", err);
     return { success: false, error: "Something went wrong while editing the plan. Please try again." };

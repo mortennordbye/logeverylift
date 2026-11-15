@@ -2,7 +2,7 @@
 
 /**
  * In-app help for connecting an MCP client (e.g. Claude) to the user's account.
- * Shown on the AI Setup page. The endpoint is computed server-side from env and
+ * Shown on the AI coach connect page. The endpoint is computed server-side from env and
  * passed in; copy buttons mirror the app's existing clipboard pattern.
  */
 

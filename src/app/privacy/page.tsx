@@ -66,7 +66,7 @@ export default function PrivacyPage() {
         <li>
           <strong>Coach memory:</strong> short notes that you or an AI assistant you connected keep about your
           training (preferences, limits in your life, observations and decisions), so the assistant knows your
-          context next time. You see and edit them in More → Coach memory. Only you and your own connected
+          context next time. You see and edit them in More → AI coach → Memory. Only you and your own connected
           assistant read them.
         </li>
         <li>
@@ -124,8 +124,9 @@ export default function PrivacyPage() {
           service and your account safe, Article 6(1)(f).
         </li>
         <li>
-          <strong>AI editing in AI Setup:</strong> a separate consent you are asked for before the first use,
-          Article 6(1)(a) and 9(2)(a).
+          <strong>AI editing in the plan builder:</strong> for the app&apos;s admins only, a separate consent they are
+          asked for before the first use, Article 6(1)(a) and 9(2)(a). For everyone else, a change you ask for comes
+          from changes already saved in the app, and your request is not sent to anyone.
         </li>
         <li>
           <strong>Feedback:</strong> legitimate interest in improving the app, Article 6(1)(f).
@@ -173,7 +174,9 @@ export default function PrivacyPage() {
           leave the server, and Google does not have the key.
         </li>
         <li>
-          <strong>OpenRouter and the AI model providers it routes to</strong>, only if you opt in to AI editing. What
+          <strong>OpenRouter and the AI model providers it routes to</strong>, only for the app&apos;s admins, and only if
+          they opt in to AI editing. A change no one asked for before goes to a model, and the answer is saved
+          without any user id for everyone to reuse. Other users&apos; requests are never sent. What
           is sent: an age band (not your birth year), gender, goals, experience level, what you picked (training
           days, equipment, session length, muscles to prioritise and joints to spare), the names of the exercises
           available to you including custom ones, the draft plan, and up to 200 characters of the change you typed.
@@ -217,10 +220,10 @@ export default function PrivacyPage() {
         access they can also change your profile, body weight, time zone, display units, programs, cycles, dated sessions, structured workouts, seasons and races, see and restore earlier
         versions of your programs, cycles and seasons, write coach memory, thresholds, the athlete profile, injuries and sick periods, log fuel, sweat tests and fuel products, change race plans, create custom exercises, log a workout you did and its step results, mark a planned day
         or session as done, and mark a planned session as missed. History shows such a workout as logged by your assistant. That provider&apos;s own privacy
-        policy applies to what it does with the data. You can disconnect an assistant at any time in More →
-        Connected assistants, and it loses access at once.
+        policy applies to what it does with the data. You can disconnect an assistant at any time in More → AI
+        coach → Connection, and it loses access at once.
       </p>
-      <p>The &quot;Copy prompt&quot; button in AI Setup only copies text to your clipboard; nothing is sent from our server.</p>
+      <p>The &quot;Copy prompt&quot; button on More → AI coach → Your own AI chat only copies text to your clipboard; nothing is sent from our server.</p>
 
       <h2>How long we keep it</h2>
       <ul>

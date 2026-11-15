@@ -1,7 +1,7 @@
 /**
  * MCP tools: coach memory (docs/plans/ai-coach.md, 2.5; decision T10). The
  * context an assistant keeps between conversations, read and written by the
- * user in the app too (More → Coach memory). Every write is a revision.
+ * user in the app too (More → AI coach → Memory). Every write is a revision.
  */
 
 import { COACH_MEMORY_KINDS } from "@/db/schema";

@@ -95,6 +95,13 @@ export function genericProfile(
   };
 }
 
+/**
+ * editPlanWithAi's answer to a user when no saved edit matches: the built-in
+ * AI gives saved answers only, and a new change needs the user's own AI
+ * (docs/plans/ai-coach-hub.md). The client shows the ways to it under this text.
+ */
+export const OWN_AI_NEEDED = "No saved answer for this change yet. Make it with your own AI.";
+
 /** Lowercased, trimmed, whitespace collapsed, trailing punctuation dropped. */
 export function normalizeEditText(text: string): string {
   return text.toLowerCase().replace(/\s+/g, " ").trim().replace(/[\s.!?,;:]+$/, "");

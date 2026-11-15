@@ -59,7 +59,7 @@ export default async function OAuthConsentPage({
                 or add one), seasons, races and structured workouts, write coach memory, thresholds, your athlete profile, injuries and
                 sick periods, log fuel and sweat tests, change race plans, mark a planned session as done or missed, create custom exercises, log workouts you did, and restore earlier versions of
                 your programs, cycles and seasons. Changes apply at once, and each plan change is kept in the plan&apos;s history, where you can
-                undo it. You can disconnect it at any time in More → Connected assistants.
+                undo it. You can disconnect it at any time in More → AI coach → Connection.
               </p>
             </div>
             <OAuthConsentForm

@@ -21,7 +21,7 @@ export const MCP_SCOPES = [MCP_READ_SCOPE, MCP_WRITE_SCOPE] as const;
 export type McpAccess = "read" | "write";
 
 export const READ_ONLY_REFUSAL =
-  "This connection is read-only. To let the assistant make changes, the user can disconnect it in LogEveryLift (More → Connected assistants) and connect again with read and change access.";
+  "This connection is read-only. To let the assistant make changes, the user can disconnect it in LogEveryLift (More → AI coach → Connection) and connect again with read and change access.";
 
 /**
  * The access a request has, or null for none. `consentScopes` null means the

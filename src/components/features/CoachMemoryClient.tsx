@@ -105,12 +105,12 @@ export function CoachMemoryClient({ entries, deleted }: { entries: MemoryRow[]; 
   return (
     <div className="flex-1 overflow-y-auto px-4 pb-28 space-y-5">
       <p className="text-sm text-muted-foreground">
-        What your connected assistant keeps between conversations: your preferences, limits, what it noticed and what
-        you agreed. Only your own assistant reads it. Friends never see it.
+        What your coach knows about you: your preferences, limits, what it noticed and what you agreed. Add notes
+        yourself, or your own connected AI adds them as you talk. Only your own AI reads them. Friends never see them.
       </p>
       {entries.length === 0 && (
         <p className="text-sm text-muted-foreground" data-testid="memory-empty">
-          Nothing yet. Your assistant adds entries as you talk, or add one yourself.
+          Nothing yet. Add a note, or your own AI adds them as you talk.
         </p>
       )}
       {KINDS.map((k) => {

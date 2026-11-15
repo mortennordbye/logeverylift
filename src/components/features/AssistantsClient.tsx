@@ -17,7 +17,7 @@ function formatDate(iso: string) {
   return dateLabel(new Date(iso), "d MMM yyyy", { utc: true });
 }
 
-/** The list on More → Connected assistants, with a confirm sheet for disconnect. */
+/** The list on AI coach → Connection, with a confirm sheet for disconnect. */
 export function AssistantsClient({ assistants }: { assistants: Assistant[] }) {
   const router = useRouter();
   const [confirming, setConfirming] = useState<Assistant | null>(null);
@@ -45,7 +45,7 @@ export function AssistantsClient({ assistants }: { assistants: Assistant[] }) {
       </p>
       {assistants.length === 0 ? (
         <p className="text-sm text-muted-foreground" data-testid="assistants-empty">
-          No assistants connected. To connect one, add LogEveryLift&apos;s MCP server in your assistant&apos;s settings.
+          No assistants connected.
         </p>
       ) : (
         <div className="rounded-xl bg-card divide-y divide-border">
@@ -72,17 +72,10 @@ export function AssistantsClient({ assistants }: { assistants: Assistant[] }) {
       )}
 
       <Link
-        href="/more/assistants/changes"
+        href="/more/ai-coach/connect"
         className="mt-4 flex items-center justify-between rounded-xl bg-card px-4 min-h-[44px] text-sm font-medium active:opacity-60"
       >
-        Assistant changes
-        <span className="text-muted-foreground">›</span>
-      </Link>
-      <Link
-        href="/more/coach-memory"
-        className="mt-2 flex items-center justify-between rounded-xl bg-card px-4 min-h-[44px] text-sm font-medium active:opacity-60"
-      >
-        Coach memory
+        {assistants.length === 0 ? "Connect an assistant" : "Connect another"}
         <span className="text-muted-foreground">›</span>
       </Link>
 

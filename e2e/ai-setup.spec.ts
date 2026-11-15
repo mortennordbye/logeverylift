@@ -5,11 +5,12 @@ import { expect, test } from "./fixtures/test";
 import { testDb } from "./fixtures/reset";
 
 /**
- * AI Setup: building a plan from picks, importing it, and the parts of the AI
- * edit flow that don't need a model.
+ * The plan builder under the AI coach hub (docs/plans/ai-coach-hub.md):
+ * building a plan from picks, starting it, and the parts of the AI edit flow
+ * that don't need a model.
  *
- * The AI edit itself calls free models that can take minutes or be rate
- * limited, so it is not driven here; src/__tests__/ai-edit.test.ts covers the
+ * A user's AI edit only reads saved answers; an admin's miss calls free
+ * models, which is not driven here: src/__tests__/ai-edit.test.ts covers the
  * action against a mocked model and ai-responses.test.ts replays real model
  * output. These specs cover what only a browser can: the picks, the preview,
  * the import, and restoring an edit that finished after the user left.
@@ -20,10 +21,30 @@ import { testDb } from "./fixtures/reset";
 
 async function openAiSetup(page: Page) {
   await page.goto("/more/ai-setup");
-  await expect(page.getByRole("heading", { name: "AI Setup" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Your plan" })).toBeVisible();
   // Picks are client state: wait for hydration so a tap isn't lost.
   await expect(page.getByRole("radiogroup", { name: "Goal" })).toBeVisible();
   await page.waitForLoadState("networkidle");
+}
+
+/** Opens "More options" on the picks, where the rarer picks live. */
+async function openMoreOptions(page: Page) {
+  const more = page.getByRole("button", { name: /More options/ });
+  await expect(async () => {
+    if ((await more.getAttribute("aria-expanded")) !== "true") await more.click();
+    await expect(more).toHaveAttribute("aria-expanded", "true");
+  }).toPass({ timeout: 10_000 });
+}
+
+/** Taps Build and waits out the "Building your plan" screen. */
+async function build(page: Page, ready: ReturnType<Page["getByText"]>) {
+  // Assert the outcome and retry the tap, like pick(): a WebKit tap can focus
+  // the button without its click handler running (seen once in CI).
+  await expect(async () => {
+    await page.getByRole("button", { name: "Build my plan" }).click();
+    await expect(page.getByText("Building your plan")).toBeVisible({ timeout: 2_000 });
+  }).toPass({ timeout: 15_000 });
+  await expect(ready).toBeVisible({ timeout: 10_000 });
 }
 
 async function pick(page: Page, group: string, name: string) {
@@ -41,6 +62,8 @@ test("builds a plan from picks, previews it, and imports it", async ({ page }) =
   await pick(page, "Goal", "Build muscle");
   await pick(page, "Experience", "Intermediate");
   await pick(page, "Days per week", "2");
+  await pick(page, "Equipment", "Dumbbells");
+  await openMoreOptions(page);
   await pick(page, "Training days", "Choose days");
   const weekdays = page.getByRole("group", { name: "Weekdays" });
   await weekdays.getByRole("button", { name: "Tue" }).click();
@@ -48,16 +71,10 @@ test("builds a plan from picks, previews it, and imports it", async ({ page }) =
   await expect(weekdays.getByRole("button", { name: "Mon" })).toBeDisabled();
   await pick(page, "Session length", "45 min");
   await pick(page, "Split", "Upper/Lower");
-  await pick(page, "Equipment", "Dumbbells");
   await pick(page, "Cycle length", "16 wk");
   await page.getByRole("group", { name: "Go easy on" }).getByRole("button", { name: "Knees" }).click();
 
-  // Assert the outcome and retry the tap, like pick(): a WebKit tap can focus
-  // the button without its click handler running (seen once in CI).
-  await expect(async () => {
-    await page.getByRole("button", { name: "Build my plan" }).click();
-    await expect(page.getByText("16-Week Upper/Lower")).toBeVisible({ timeout: 2_000 });
-  }).toPass({ timeout: 15_000 });
+  await build(page, page.getByText("16-Week Upper/Lower"));
 
   // The preview: the cycle on the chosen weekdays, every exercise listed.
   await expect(page.getByText(/^Tue Upper A.* · Sat Lower A/)).toBeVisible();
@@ -75,7 +92,7 @@ test("builds a plan from picks, previews it, and imports it", async ({ page }) =
   const programNames = (await page.getByTestId("plan-program-name").allInnerTexts()).filter((t) => /^(Upper|Lower) A/.test(t));
   expect(programNames).toHaveLength(2);
 
-  await page.getByRole("button", { name: "Import" }).click();
+  await page.getByRole("button", { name: "Start this plan" }).click();
   await expect(page.getByText("All done!")).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText(/Created 2 programs and cycle "16-Week Upper\/Lower"/)).toBeVisible();
 
@@ -113,6 +130,7 @@ test("builds a plan from picks, previews it, and imports it", async ({ page }) =
 
 test("only offers splits and focus muscles the picks allow", async ({ page }) => {
   await openAiSetup(page);
+  await openMoreOptions(page);
   const split = page.getByRole("radiogroup", { name: "Split" });
 
   await pick(page, "Days per week", "3");
@@ -135,12 +153,8 @@ test("only offers splits and focus muscles the picks allow", async ({ page }) =>
 
 test("asks for a note before swapping named exercises", async ({ page }) => {
   await openAiSetup(page);
-  const edit = page.getByRole("button", { name: "Edit with AI" });
-  // Retried for the same dropped-tap reason as the first spec.
-  await expect(async () => {
-    await page.getByRole("button", { name: "Build my plan" }).click();
-    await expect(edit).toBeVisible({ timeout: 2_000 });
-  }).toPass({ timeout: 15_000 });
+  const edit = page.getByRole("button", { name: "Change my plan" });
+  await build(page, edit);
   await expect(edit).toBeDisabled();
   await page.getByRole("group", { name: "Changes" }).getByRole("button", { name: "Swap exercises I name" }).click();
   await expect(edit).toBeDisabled();
@@ -168,7 +182,7 @@ test("restores an AI edit that failed after the user left, request intact", asyn
   await expect(page.getByText("12-Week Upper/Lower")).toBeVisible();
   await expect(page.getByRole("group", { name: "Changes" }).getByRole("button", { name: "Swap exercises I name" })).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator("textarea").first()).toHaveValue("no lunges");
-  await expect(page.getByRole("button", { name: "Edit with AI" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Change my plan" })).toBeEnabled();
   expect(await page.evaluate(() => localStorage.getItem("ai_pending_error"))).toBeNull();
 
   // Back to the picks: they are the restored ones.
@@ -177,22 +191,18 @@ test("restores an AI edit that failed after the user left, request intact", asyn
   await expect(page.getByRole("radiogroup", { name: "Experience" }).getByRole("radio", { name: "Advanced" })).toHaveAttribute("aria-checked", "true");
 });
 
-test("asks for consent before the first AI edit, and sends nothing on cancel", async ({ page }) => {
+test("a change with no saved answer sends nothing out and points to the user's own AI", async ({ page }) => {
   await openAiSetup(page);
-  const edit = page.getByRole("button", { name: "Edit with AI" });
-  await expect(async () => {
-    await page.getByRole("button", { name: "Build my plan" }).click();
-    await expect(edit).toBeVisible({ timeout: 2_000 });
-  }).toPass({ timeout: 15_000 });
+  const edit = page.getByRole("button", { name: "Change my plan" });
+  await build(page, edit);
   await page.getByRole("group", { name: "Changes" }).getByRole("button", { name: "Swap exercises I name" }).click();
-  await page.getByPlaceholder(/Which exercises\?/).fill("no lunges");
+  // A request no one made before, so the shared cache has no answer.
+  await page.getByPlaceholder(/Which exercises\?/).fill(`no lunges ${Date.now()}`);
 
   await edit.click();
-  const sheet = page.getByRole("heading", { name: "Turn on AI editing?" });
-  await expect(sheet).toBeVisible();
-  await expect(page.getByText(/OpenRouter/)).toBeVisible();
-  await page.getByRole("button", { name: "Cancel" }).click();
-  await expect(sheet).toBeHidden();
-  // Still on the preview, nothing in flight.
-  await expect(edit).toBeEnabled();
+  // A user never meets the consent sheet: nothing leaves the server.
+  await expect(page.getByText("No saved answer for this change yet. Make it with your own AI.")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Turn on AI editing?" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Connect an assistant" })).toHaveAttribute("href", "/more/ai-coach/connect");
+  await expect(page.getByRole("link", { name: "Use your own AI chat" })).toHaveAttribute("href", "/more/ai-coach/own-chat");
 });

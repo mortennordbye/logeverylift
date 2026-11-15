@@ -12,6 +12,7 @@ import {
   genericProfile,
   normalizeEditRequest,
   normalizeEditText,
+  OWN_AI_NEEDED,
   type GenericProfile,
 } from "@/lib/utils/ai-edit";
 import type { AiPlan } from "@/lib/utils/ai-plan";
@@ -248,19 +249,19 @@ const request = { picks, request: { chips: ["swap_named"], text: "No barbell row
 
 beforeEach(() => {
   rows.clear();
-  rows.set(aiGenerations, [{ value: 0 }]);
   rows.set(aiModelConfigs, [FREE]);
   rows.set(exercisePrs, []);
   rows.set(programs, [{ name: "Full Body A" }]);
   inserts.length = 0;
   updates.length = 0;
   callModel.mockReset();
-  role = "user";
+  // Only admins call a model on a miss; the user cases set role = "user".
+  role = "admin";
   aiConsentAt = new Date();
 });
 
 describe("editPlanWithAi", () => {
-  it("calls a model on a miss, caches the plan without loads, counts it, and returns it with this athlete's loads", async () => {
+  it("calls a model on an admin's miss, caches the plan without loads, records it, and returns it with this athlete's loads", async () => {
     callModel.mockResolvedValue({ ok: true, text: JSON.stringify(swapped()), truncated: false });
 
     const result = await editPlanWithAi(request);
@@ -268,7 +269,6 @@ describe("editPlanWithAi", () => {
     expect(result.success).toBe(true);
     if (!result.success) return;
     expect(result.data.fromCache).toBe(false);
-    expect(result.data.generationsToday).toBe(1);
     const cached = inserts.find((i) => i.table === aiPlanCache)!.values;
     expect(cached.modelUsed).toBe("openrouter/free");
     expect(cached.edit).toEqual({ chips: ["swap_named"], text: "no barbell rows" });
@@ -282,9 +282,10 @@ describe("editPlanWithAi", () => {
     expect(row.sets.every((s) => (s.kg ?? 0) > 0)).toBe(true);
   });
 
-  it("reuses a cached edit without calling a model or counting it, even at the daily limit", async () => {
+  it("gives a user a cached edit without calling a model, even without the AI opt-in", async () => {
+    role = "user";
+    aiConsentAt = null;
     rows.set(aiPlanCache, [{ plan: swapped() }]);
-    rows.set(aiGenerations, [{ value: 5 }]);
 
     const result = await editPlanWithAi(request);
 
@@ -294,22 +295,16 @@ describe("editPlanWithAi", () => {
     expect(updates.map((u) => u.table)).toEqual([aiPlanCache]);
   });
 
-  it("stops at the daily limit on a miss", async () => {
-    rows.set(aiGenerations, [{ value: 5 }]);
-    const result = await editPlanWithAi(request);
-    expect(result.success).toBe(false);
-    expect(callModel).not.toHaveBeenCalled();
-  });
-
-  it("lets admins past the limit", async () => {
-    role = "admin";
-    rows.set(aiGenerations, [{ value: 50 }]);
+  it("sends a user's miss to no model and points to their own AI", async () => {
+    role = "user";
     callModel.mockResolvedValue({ ok: true, text: JSON.stringify(swapped()), truncated: false });
     const result = await editPlanWithAi(request);
-    expect(result.success).toBe(true);
+    expect(result).toEqual({ success: false, error: OWN_AI_NEEDED });
+    expect(callModel).not.toHaveBeenCalled();
+    expect(inserts).toEqual([]);
   });
 
-  it("calls no model without the user's AI opt-in", async () => {
+  it("calls no model without the admin's AI opt-in", async () => {
     aiConsentAt = null;
     const result = await editPlanWithAi(request);
     expect(result).toEqual({ success: false, error: "Turn on AI editing first." });
