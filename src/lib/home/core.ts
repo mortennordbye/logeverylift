@@ -24,7 +24,9 @@ import { listIllness } from "@/lib/illness";
 import { distanceLabel } from "@/lib/planned-view";
 import { readinessSwapFor } from "@/lib/readiness-swap";
 import { homeEndurance } from "@/lib/session-answers";
-import { sessionCompliance } from "@/lib/session-compliance";
+import { getBikeNumbers } from "@/lib/bike-numbers";
+import { sessionCompliance, thresholdValues } from "@/lib/session-compliance";
+import { bikeAnchors, bikeCardView } from "@/lib/utils/bike-view";
 import { getUserSettings, type UserSettings } from "@/lib/user-settings";
 import { cycleLengthDays, parseDateStr } from "@/lib/utils/cycle-position";
 import { upcomingCycle } from "@/lib/cycle-start";
@@ -52,15 +54,17 @@ function toDateStr(d: Date): string {
 /** Today's sessions with a structured workout (docs/plans/endurance-app.md, 4.1). */
 async function enduranceToday(userId: string, today: string): Promise<EnduranceTodayRow[]> {
   const [sessions, { units }] = await Promise.all([sessionCompliance(userId, today, today), getUserSettings(userId)]);
-  return sessions
-    .filter((s) => s.workout && s.sport && s.status === "planned")
+  const planned = sessions.filter((s) => s.workout && s.sport && s.status === "planned");
+  const bike = planned.some((s) => s.workout!.sport === "bike") ? await Promise.all([thresholdValues(userId), getBikeNumbers(userId)]) : null;
+  return planned
     .map((s) => {
       const a = answerSession(s);
       const parts = [
         s.planned.durationSeconds ? `${Math.round(s.planned.durationSeconds / 60)} min` : null,
         s.planned.distanceMeters ? distanceLabel(s.planned.distanceMeters, s.sport!, units) : null,
       ].filter(Boolean);
-      return { id: s.id, name: a.name, sport: s.sport!, summary: a.summary, amount: parts.length ? parts.join(" · ") : null, done: s.state === "done" };
+      const ride = bike && s.workout!.sport === "bike" ? bikeCardView(s.workout!, bikeAnchors(bike[0], bike[1]), units, bike[1]) : null;
+      return { id: s.id, name: a.name, sport: s.sport!, summary: a.summary, amount: parts.length ? parts.join(" · ") : null, done: s.state === "done", priority: s.priority, bike: ride };
     });
 }
 

@@ -1,4 +1,5 @@
 import { answerSession } from "@/components/features/answer-session";
+import { getBikeNumbers } from "@/lib/bike-numbers";
 import { enduranceEnabledFor } from "@/lib/endurance";
 import { distanceLabel } from "@/lib/planned-view";
 import { sessionCompliance, thresholdValues } from "@/lib/session-compliance";
@@ -6,6 +7,7 @@ import { appSessionLoads, getTrainingLoad } from "@/lib/training-load";
 import { getUserSettings, userToday } from "@/lib/user-settings";
 import { toDateStr } from "@/lib/utils/cycle-position";
 import { formatTime } from "@/lib/utils/format";
+import { bikeAnchors, bikeRowSummary } from "@/lib/utils/bike-view";
 import { addDaysStr, shortDay } from "@/lib/utils/seasons";
 import { mondayOf } from "@/lib/utils/session-compliance";
 import { requireSession } from "@/lib/utils/session";
@@ -42,13 +44,15 @@ export default async function WeekPage({ searchParams }: { searchParams: Promise
   const { w } = await searchParams;
   const monday = w && /^\d{4}-\d{2}-\d{2}$/.test(w) ? mondayOf(w) : mondayOf(today);
   const sunday = addDaysStr(monday, 6);
-  const [sessions, loads, anchors, { units }, training] = await Promise.all([
+  const [sessions, loads, anchors, { units }, training, bike] = await Promise.all([
     sessionCompliance(user.id, monday, sunday),
     appSessionLoads(user.id, monday, sunday),
     thresholdValues(user.id),
     getUserSettings(user.id),
     getTrainingLoad(user.id, 42),
+    getBikeNumbers(user.id),
   ]);
+  const bikeAt = bikeAnchors(anchors, bike);
 
   const totals = Object.fromEntries(SPORTS.map((s) => [s, { plannedS: 0, plannedM: 0, plannedLoad: 0, doneS: 0, doneM: 0, doneLoad: 0, count: 0 }])) as Record<
     (typeof SPORTS)[number],
@@ -183,11 +187,12 @@ export default async function WeekPage({ searchParams }: { searchParams: Promise
                 <ul className="flex flex-col gap-1 mt-1">
                   {mine.map((s) => {
                     const a = answerSession(s);
+                    const summary = s.workout?.sport === "bike" ? bikeRowSummary(s.workout, bikeAt, bike.zones) : a.summary;
                     const body = (
                       <>
                         <div className="min-w-0">
                           <p className="text-sm font-medium truncate">{a.name}</p>
-                          {a.summary && <p className="text-xs text-muted-foreground truncate">{a.summary}</p>}
+                          {summary && <p className="text-xs text-muted-foreground truncate">{summary}</p>}
                           {s.done?.durationSeconds ? <p className="text-xs text-muted-foreground">done {formatTime(s.done.durationSeconds)}</p> : null}
                         </div>
                         <p className="shrink-0 text-xs text-right">
