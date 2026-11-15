@@ -39,6 +39,8 @@ describe("cycle actions show a refused write", () => {
     render(<CycleMenu cycle={{ ...cycle, status: "active" } as TrainingCycle} />);
     fireEvent.click(screen.getByRole("button", { name: "More actions" }));
     fireEvent.click(screen.getByRole("button", { name: "Delete cycle" }));
+    // The running cycle says so: deleting it ends it now (round 9).
+    expect(screen.getByText("“Build” is running. Deleting it ends it now. It goes to Recently deleted. You can restore it for 90 days.")).toBeTruthy();
     expect(deleteTrainingCycle).not.toHaveBeenCalled();
     fireEvent.click(screen.getAllByRole("button", { name: "Delete cycle" }).at(-1)!);
     await waitFor(() => expect(screen.getByRole("alert").textContent).toBe(openWorkout));
@@ -51,7 +53,8 @@ describe("cycle actions show a refused write", () => {
     fireEvent.click(screen.getByRole("button", { name: "More actions" }));
     fireEvent.click(screen.getByRole("button", { name: "Delete cycle" }));
     // The confirm says what it deletes and for how long it can come back, as the season's does (J8-06).
-    expect(screen.getByText("It goes to Recently deleted. You can restore it for 90 days.")).toBeTruthy();
+    // It names the cycle (round 9).
+    expect(screen.getByText("“Build” goes to Recently deleted. You can restore it for 90 days.")).toBeTruthy();
     fireEvent.click(screen.getAllByRole("button", { name: "Delete cycle" }).at(-1)!);
     await waitFor(() => expect(returnTo).toHaveBeenCalledWith("/cycles"));
     expect(deleteTrainingCycle).toHaveBeenCalledWith(3);
