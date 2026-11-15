@@ -528,6 +528,15 @@ describe("rotation order", () => {
     expect(screen.getAllByTestId("rotation-row")[0].textContent).toBe("1Full bodySwapped");
   });
 
+  it("a swapped position that becomes next after a skip keeps its Swapped mark", () => {
+    const changed = walk.map((d) =>
+      d.rotationPosition === 1 ? { ...d, status: "skipped" as const } : d.rotationPosition === 3 ? { ...d, programId: 9, programName: "Full body" } : d,
+    );
+    render(<RotationOrder cycleId={5} rows={rotationRows(slots, changed, TODAY)} today={TODAY} programs={[]} programsMap={programsMap} editHref="/cycles/5/template" active />);
+    const rows = screen.getAllByTestId("rotation-row").map((r) => r.textContent);
+    expect(rows[3]).toBe("4Full bodyNext · Swapped");
+  });
+
   it("gives a skipped position its skip reason", () => {
     const skipped = walk.map((d) => (d.rotationPosition === 3 ? { ...d, status: "skipped" as const, skipReason: "Work trip" } : d));
     render(<RotationOrder cycleId={5} rows={rotationRows(slots, skipped, TODAY)} today={TODAY} programs={[]} programsMap={programsMap} editHref="/cycles/5/template" active />);
