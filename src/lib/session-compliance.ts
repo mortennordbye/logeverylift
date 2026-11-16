@@ -69,7 +69,7 @@ export type SessionCompliance = {
   hard: boolean;
   workout: Workout | null;
   /** The structured exercises of the program as step trees (docs/plans/one-program-model.md, 2). */
-  programWorkouts: Workout[];
+  programWorkouts: ProgramWorkout[];
   workoutSummary: string | null;
   brickParentId: number | null;
   planned: Amount;
@@ -265,10 +265,10 @@ export async function sessionCompliance(userId: string, from: string, to: string
     const sport: Sport | null = workout ? workout.sport : (pf?.sport ?? null);
     const sports: Sport[] = workout ? [workout.sport] : (pf?.sports ?? []);
     const est = workout ? estimateWorkout(workout, thresholds) : null;
-    const programWorkoutList = programId != null ? (stepped.get(programId) ?? []).map((p) => p.workout) : [];
+    const programWorkoutList = programId != null ? (stepped.get(programId) ?? []) : [];
     const planned: Amount = est
       ? { durationSeconds: est.durationComplete && est.durationSeconds ? est.durationSeconds : null, distanceMeters: est.distanceComplete && est.distanceMeters ? est.distanceMeters : null }
-      : withSteps(pf?.planned ?? { durationSeconds: null, distanceMeters: null }, pf?.sport ? programWorkoutList.map((w) => estimateWorkout(w, thresholds)) : []);
+      : withSteps(pf?.planned ?? { durationSeconds: null, distanceMeters: null }, pf?.sport ? programWorkoutList.map((p) => estimateWorkout(p.workout, thresholds)) : []);
     return {
       row,
       programId,
@@ -375,7 +375,7 @@ export async function sessionCompliance(userId: string, from: string, to: string
       workoutSummary: v.workout
         ? describeWorkout(v.workout, settings.units)
         : v.programWorkouts.length
-          ? v.programWorkouts.map((w) => describeWorkout(w, settings.units)).join(" + ")
+          ? v.programWorkouts.map((p) => describeWorkout(p.workout, settings.units)).join(" + ")
           : null,
       brickParentId: r.brickParentId,
       planned: v.planned,

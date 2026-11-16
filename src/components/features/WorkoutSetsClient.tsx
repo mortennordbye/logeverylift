@@ -1,5 +1,6 @@
 "use client";
 
+import type { StepLabel } from "@/lib/program-steps-view";
 import { WorkoutSetsList } from "@/components/features/WorkoutSetsList";
 import {
   addWarmupSets,
@@ -193,6 +194,8 @@ type Props = {
   /** Stack pattern learned from logged custom weights, shown in the sheet. */
   weightStack?: string | null;
   initialEditing?: boolean;
+  /** Endurance step rows: kind, round and target per set id (docs/plans/one-program-model.md, 3). */
+  stepLabels?: Record<number, StepLabel> | null;
 };
 
 export function WorkoutSetsClient({
@@ -223,6 +226,7 @@ export function WorkoutSetsClient({
   equipment = null,
   weightStack: initialWeightStack = null,
   initialEditing = false,
+  stepLabels = null,
 }: Props) {
   const router = useRouter();
   const [isEditing, setIsEditing] = useState(initialEditing);
@@ -934,6 +938,7 @@ export function WorkoutSetsClient({
             isTimed={exerciseIsTimed && !isRunning}
             isRunning={isRunning}
             discipline={exerciseDiscipline}
+            stepLabels={stepLabels}
             exerciseId={exerciseId}
             sessionId={workoutSession?.sessionId ?? undefined}
             onDeleteSet={handleDeleteSet}

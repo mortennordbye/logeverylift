@@ -199,7 +199,7 @@ function TodayCard({ data, size }: { data: TodayData; size: WidgetSize }) {
 }
 
 const planMeta = (p: TodayPlan) =>
-  `${p.exerciseCount} ${p.exerciseCount === 1 ? "exercise" : "exercises"} · ${p.setCount} ${p.setCount === 1 ? "set" : "sets"} · about ${p.minutes} min`;
+  `${p.exerciseCount} ${p.exerciseCount === 1 ? "exercise" : "exercises"} · ${p.setCount} ${p.stepsOnly ? (p.setCount === 1 ? "step" : "steps") : p.setCount === 1 ? "set" : "sets"}${p.minutes != null ? ` · about ${p.minutes} min` : ""}`;
 
 /** L: the first three exercises with their sets, then the names of the rest. */
 function PlanList({ plan }: { plan: TodayPlan }) {

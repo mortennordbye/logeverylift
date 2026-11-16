@@ -255,3 +255,134 @@ describe("a structured program session in compliance (step 2)", () => {
     }
   });
 });
+
+describe("logging a structured program session (step 3)", () => {
+  const timed: Workout = {
+    v: 1,
+    sport: "run",
+    name: "Threshold",
+    steps: [
+      { type: "warmup", end: { type: "time", seconds: 600 } },
+      { type: "repeat", count: 2, steps: [{ type: "work", end: { type: "distance", meters: 1000 }, target: { metric: "pace", anchor: "threshold_pace", low: 98, high: 102 } }, { type: "recovery", end: { type: "time", seconds: 120 } }] },
+    ],
+  };
+
+  async function plannedRun(user: string, w: Workout = timed) {
+    const { trainingCycles, trainingCycleSlots, plannedSessions } = await import("@/db/schema");
+    const { getActiveCycleForUser } = await import("@/lib/actions/training-cycles");
+    const { workoutToRows } = await import("@/lib/utils/program-steps");
+    const run = await createExercise({ name: `Run ${Math.random()}`, category: "cardio", discipline: "run" });
+    const { program, slots } = await createProgram(user, [{ exerciseId: run.id, sets: workoutToRows(w).map((r) => ({ ...r, targetReps: null, weightKg: null, restTimeSeconds: 0 })) }]);
+    const [c] = await db.insert(trainingCycles).values({ userId: user, name: "Block", durationWeeks: 1, status: "active", startDate: "2026-11-02" }).returning();
+    await db.insert(trainingCycleSlots).values({ trainingCycleId: c.id, daySlot: 1, dayOfWeek: 1, programId: program.id });
+    await getActiveCycleForUser();
+    const [ps] = await db.select().from(plannedSessions).where(and(eq(plannedSessions.cycleId, c.id), eq(plannedSessions.date, "2026-11-02")));
+    return { run, program, slot: slots[0], plannedSessionId: ps.id };
+  }
+
+  async function withClock<T>(fn: (user: string) => Promise<T>) {
+    const { vi } = await import("vitest");
+    const user = (await createUser({ timeZone: "UTC", enduranceEnabled: true })).id;
+    asUser(user);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-02T18:00:00Z"));
+    try {
+      return await fn(user);
+    } finally {
+      vi.useRealTimers();
+    }
+  }
+
+  it("a player save writes one set per step with its status, plan copy and the session RPE, once", async () => {
+    await withClock(async (user) => {
+      const { saveStepResults, getStepResults } = await import("@/lib/step-results");
+      const { plannedSessionView } = await import("@/lib/planned-view");
+      const { workoutSessions, workoutSets } = await import("@/db/schema");
+      const { run, program, plannedSessionId } = await plannedRun(user);
+
+      const view = await plannedSessionView(user, plannedSessionId);
+      expect(view?.player.steps.map((s) => s.key)).toEqual(["s1", "s3#1", "s4#1", "s3#2", "s4#2"]);
+      const steps = [
+        { key: "s1", status: "done", activeSeconds: 600 },
+        { key: "s3#1", status: "done", activeSeconds: 250, distanceMeters: 1000, value: 4.1 },
+        { key: "s4#1", status: "done", activeSeconds: 120, extendedSeconds: 30 },
+        { key: "s3#2", status: "partial", activeSeconds: 180, distanceMeters: 700 },
+        { key: "s4#2", status: "skipped" },
+      ];
+      const saved = await saveStepResults(user, { plannedSessionId, steps, sessionRpe: 8, clientKey: "run-abc-12345", pausedSeconds: 40, startedAt: new Date("2026-11-02T17:00:00Z") }, "player");
+      expect(saved.created).toBe("session");
+      const again = await saveStepResults(user, { plannedSessionId, steps, clientKey: "run-abc-12345" }, "player");
+      expect(again).toMatchObject({ created: "repeat", workoutSessionId: saved.workoutSessionId });
+
+      const [ws] = await db.select().from(workoutSessions).where(eq(workoutSessions.id, saved.workoutSessionId));
+      expect(ws).toMatchObject({ programId: program.id, plannedSessionId, pausedSeconds: 40, clientKey: "run-abc-12345", isCompleted: true });
+      const sets = await db.select().from(workoutSets).where(eq(workoutSets.sessionId, ws.id)).orderBy(asc(workoutSets.setNumber));
+      expect(sets.map((s) => [s.setNumber, s.stepStatus, s.isCompleted, s.durationSeconds, s.distanceMeters, s.rpe])).toEqual([
+        [1, "done", true, 600, null, 8],
+        [2, "done", true, 250, 1000, 8],
+        [3, "done", true, 120, null, 8],
+        [4, "partial", true, 180, 700, 8],
+        [5, "skipped", false, null, null, null],
+      ]);
+      expect(sets[1]).toMatchObject({ measuredValue: 4.1, exerciseId: run.id });
+      expect(sets[2].extendedSeconds).toBe(30);
+      expect((sets[1].plannedStep as { step: { type: string } }).step.type).toBe("work");
+
+      const results = await getStepResults(user, { plannedSessionId });
+      expect(results?.rows.map((r) => [r.key, r.result?.status ?? null])).toEqual([["s1", "done"], ["s3#1", "done"], ["s4#1", "done"], ["s3#2", "partial"], ["s4#2", "skipped"]]);
+      expect(results?.sessionRpe).toBe(8);
+    });
+  });
+
+  it("a guided save takes over the workout the workout screen left open, and ends it", async () => {
+    await withClock(async (user) => {
+      const { saveStepResults } = await import("@/lib/step-results");
+      const { createSession } = await import("./factories");
+      const { workoutSessions } = await import("@/db/schema");
+      const { program, plannedSessionId } = await plannedRun(user);
+      const open = await createSession(user, program.id, { date: "2026-11-02", startTime: new Date("2026-11-02T17:00:00Z") });
+      const steps = [{ key: "s1", status: "done", activeSeconds: 600 }];
+      const r = await saveStepResults(user, { plannedSessionId, steps, clientKey: "run-open-123456" }, "player");
+      expect(r).toMatchObject({ created: "attached", workoutSessionId: open.id });
+      const all = await db.select().from(workoutSessions).where(eq(workoutSessions.userId, user));
+      expect(all.map((x) => [x.id, x.plannedSessionId, x.isCompleted])).toEqual([[open.id, plannedSessionId, true]]);
+    });
+  });
+
+  it("records one distance PR for the session's steps together", async () => {
+    await withClock(async (user) => {
+      const { saveStepResults } = await import("@/lib/step-results");
+      const { exercisePrs } = await import("@/db/schema");
+      const { run, plannedSessionId } = await plannedRun(user);
+      const steps = [
+        { key: "s1", status: "done", activeSeconds: 600, distanceMeters: 2000 },
+        { key: "s3#1", status: "done", activeSeconds: 250, distanceMeters: 1000 },
+        { key: "s4#1", status: "done", activeSeconds: 120, distanceMeters: 300 },
+        { key: "s3#2", status: "done", activeSeconds: 250, distanceMeters: 1000 },
+        { key: "s4#2", status: "done", activeSeconds: 120, distanceMeters: 300 },
+      ];
+      await saveStepResults(user, { plannedSessionId, steps }, "manual");
+      const prs = await db.select().from(exercisePrs).where(and(eq(exercisePrs.userId, user), eq(exercisePrs.exerciseId, run.id), eq(exercisePrs.prType, "distance")));
+      expect(prs).toHaveLength(1);
+      expect(Number(prs[0].value)).toBe(4600);
+    });
+  });
+
+  it("a set logged by hand on a step keeps its plan and counts toward the session's effort", async () => {
+    await withClock(async (user) => {
+      const { logWorkoutSet } = await import("@/lib/actions/workout-sets");
+      const { createSession } = await import("./factories");
+      const { workoutSets, exercisePrs } = await import("@/db/schema");
+      const { run, program, slot } = await plannedRun(user);
+      const session = await createSession(user, program.id);
+      for (const [i, id] of slot.setIds.slice(0, 2).entries()) {
+        const r = await logWorkoutSet({ sessionId: session.id, exerciseId: run.id, setNumber: i + 1, programSetId: id, actualReps: 0, weightKg: 0, distanceMeters: i === 0 ? 2000 : 1000, durationSeconds: 600, restTimeSeconds: 0, isCompleted: true, isFailed: false, wasEasy: false, rpe: 7 });
+        expect(r.success, !r.success ? r.error : "").toBe(true);
+      }
+      const sets = await db.select().from(workoutSets).where(eq(workoutSets.sessionId, session.id)).orderBy(asc(workoutSets.setNumber));
+      expect(sets.map((s) => [s.stepStatus, (s.plannedStep as { step: { type: string } } | null)?.step.type])).toEqual([["done", "warmup"], ["done", "work"]]);
+      const prs = await db.select().from(exercisePrs).where(and(eq(exercisePrs.userId, user), eq(exercisePrs.exerciseId, run.id), eq(exercisePrs.prType, "distance")));
+      expect(prs.filter((p) => p.supersededAt == null).map((p) => Number(p.value))).toEqual([3000]);
+    });
+  });
+});

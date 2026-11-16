@@ -29,6 +29,8 @@ type Exercise = {
   isTimed?: boolean;
   isRunning?: boolean;
   discipline?: Discipline | null;
+  /** A structured endurance exercise's steps in one line (docs/plans/one-program-model.md). */
+  stepSummary?: string | null;
 };
 
 type LastSession = {
@@ -66,6 +68,8 @@ type Props = {
   lastSession?: LastSession | null;
   insight?: WorkoutInsight | null;
   periodization?: { headline: string; note: string } | null;
+  /** Structured endurance steps: the planned totals, and the guided player for today's planned session. */
+  guided?: { totals: string; href: string | null } | null;
 };
 
 export function WorkoutSessionClient({
@@ -75,6 +79,7 @@ export function WorkoutSessionClient({
   lastSession = null,
   insight = null,
   periodization = null,
+  guided = null,
 }: Props) {
   const router = useRouter();
   const [isEditing, setIsEditing] = useState(false);
@@ -198,6 +203,17 @@ export function WorkoutSessionClient({
         <p className="text-sm text-muted-foreground">{programName}</p>
         <p className="text-xs text-muted-foreground/60 tabular-nums">{formatTime(elapsed)}</p>
       </div>
+
+      {guided && (
+        <div className="px-4 pb-3 shrink-0 flex flex-col items-center gap-2" data-testid="guided-entry">
+          {guided.totals && <p className="text-xs text-muted-foreground tabular-nums">{guided.totals}</p>}
+          {guided.href && (
+            <Link href={guided.href} className="min-h-11 w-full rounded-2xl bg-primary px-4 py-3 text-center text-sm font-semibold text-primary-foreground active:opacity-80">
+              Start guided
+            </Link>
+          )}
+        </div>
+      )}
 
       {/* Periodization phase note — only for programs in an active periodized cycle */}
       {periodization && (

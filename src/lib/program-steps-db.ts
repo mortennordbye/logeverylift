@@ -9,9 +9,10 @@
 
 import { db } from "@/db";
 import { exercises, programExercises, programSets, programs } from "@/db/schema";
-import { checkStepRows, stepProblemText, type StepRow } from "@/lib/utils/program-steps";
-import type { WorkoutSport } from "@/lib/utils/workout-steps";
-import { and, asc, eq, isNotNull, isNull } from "drizzle-orm";
+import { checkStepRows, stepOfRow, stepProblemText, workoutToRows, type PlannedStepSnapshot, type StepRow } from "@/lib/utils/program-steps";
+import type { Tx } from "@/lib/plan-revisions";
+import type { Workout, WorkoutSport } from "@/lib/utils/workout-steps";
+import { and, asc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 
 type Executor = Pick<typeof db, "select">;
 
@@ -55,4 +56,73 @@ export async function assertStepRows(ex: Executor, programExerciseId: number): P
     poolLengthM: slot?.poolLengthM,
   });
   if (problems.length) throw new StepRowsError(stepProblemText(problems));
+}
+
+/**
+ * The plan of one step row as a logged step keeps it, with the user's
+ * threshold values now. Null when the row is not a step.
+ */
+export async function plannedStepSnapshot(ex: Executor, programSetId: number, userId: string): Promise<PlannedStepSnapshot | null> {
+  const [row] = await ex
+    .select({ set: programSets, discipline: exercises.discipline })
+    // plan-read: includes deleted (a step removed mid-workout still logs with its plan)
+    .from(programSets)
+    .innerJoin(programExercises, eq(programExercises.id, programSets.programExerciseId))
+    .innerJoin(exercises, eq(exercises.id, programExercises.exerciseId))
+    .where(eq(programSets.id, programSetId));
+  if (!row?.discipline) return null;
+  const step = stepOfRow(row.set as StepRow);
+  if (!step) return null;
+  const { thresholdValues } = await import("@/lib/session-compliance");
+  return { v: 1, sport: row.discipline, step, blockId: row.set.blockId, blockRound: row.set.blockRound, thresholds: await thresholdValues(userId) };
+}
+
+/**
+ * Replace an exercise's sets with a step tree, in a plan write's transaction
+ * (docs/plans/one-program-model.md, step 4). Rows are matched by position, so
+ * a step keeps its id (and the rows logged against it keep their link) while
+ * its place stays; extra rows are added and left-over ones soft-deleted. A
+ * row keeps its weekly-sync anchor and role only when it stays outside a
+ * repeat block with the same kind of end, and its rest after the step stays
+ * with its place. Throws StepRowsError when the
+ * result breaks a rule.
+ */
+export async function replaceExerciseSteps(tx: Tx, programExerciseId: number, workout: Workout): Promise<void> {
+  const next = workoutToRows(workout);
+  const old = await tx
+    .select()
+    .from(programSets)
+    .where(and(eq(programSets.programExerciseId, programExerciseId), isNull(programSets.deletedAt)))
+    .orderBy(asc(programSets.setNumber), asc(programSets.id));
+  for (const [i, row] of next.entries()) {
+    const prev = old[i];
+    const keepsAnchor =
+      prev != null &&
+      row.blockId == null &&
+      ((prev.peakDistanceMeters != null && row.distanceMeters != null) || (prev.peakDurationSeconds != null && row.durationSeconds != null));
+    const values = {
+      ...row,
+      targetReps: null,
+      repRangeMin: null,
+      repRangeMax: null,
+      weightKg: null,
+      targetRir: null,
+      startDelaySeconds: null,
+      inclinePercent: null,
+      targetHeartRateZone: null,
+      setType: "working",
+      // The tree has no rest after a step (a rest is a step of its own), so the
+      // rest a row had stays with its place.
+      restTimeSeconds: prev?.restTimeSeconds ?? 0,
+      peakDistanceMeters: keepsAnchor && row.distanceMeters != null ? prev.peakDistanceMeters : null,
+      peakDurationSeconds: keepsAnchor && row.durationSeconds != null ? prev.peakDurationSeconds : null,
+      sessionRole: keepsAnchor ? prev.sessionRole : null,
+    };
+    if (prev) await tx.update(programSets).set(values).where(eq(programSets.id, prev.id));
+    else await tx.insert(programSets).values({ ...values, programExerciseId });
+  }
+  const gone = old.slice(next.length).map((r) => r.id);
+  if (gone.length) await tx.update(programSets).set({ deletedAt: new Date() }).where(inArray(programSets.id, gone));
+  await tx.update(programExercises).set({ poolLengthM: workout.poolLengthM ?? null }).where(eq(programExercises.id, programExerciseId));
+  await assertStepRows(tx, programExerciseId);
 }

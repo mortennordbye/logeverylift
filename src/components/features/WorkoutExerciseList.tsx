@@ -35,6 +35,8 @@ type Exercise = {
   isTimed?: boolean;
   isRunning?: boolean;
   discipline?: Discipline | null;
+  /** A structured endurance exercise's steps in one line (docs/plans/one-program-model.md). */
+  stepSummary?: string | null;
 };
 
 type Props = {
@@ -184,7 +186,9 @@ export function WorkoutExerciseList({
             isCompleted={isExerciseCompleted(exercise)}
             isPartial={isExercisePartial(exercise)}
             summary={
-              exercise.isRunning
+              exercise.stepSummary
+                ? exercise.stepSummary
+                : exercise.isRunning
                 ? buildRunSetSummary(exercise.sets, exercise.discipline, units)
                 : buildSetSummary(
                     exercise.sets.map((s) => {

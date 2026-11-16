@@ -49,18 +49,20 @@ function toDateStr(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-/** Today's sessions with a structured workout (docs/plans/endurance-app.md, 4.1). */
+/** Today's sessions with structured steps (docs/plans/endurance-app.md, 4.1). */
 async function enduranceToday(userId: string, today: string): Promise<EnduranceTodayRow[]> {
   const [sessions, { units }] = await Promise.all([sessionCompliance(userId, today, today), getUserSettings(userId)]);
   return sessions
-    .filter((s) => s.workout && s.sport && s.status === "planned")
+    // A workout of its own, or a program with structured steps (docs/plans/one-program-model.md).
+    .filter((s) => (s.workout ? s.sport : s.programWorkouts.length) && s.status === "planned")
     .map((s) => {
       const a = answerSession(s);
+      const sport = s.sport ?? s.programWorkouts[0].sport;
       const parts = [
         s.planned.durationSeconds ? `${Math.round(s.planned.durationSeconds / 60)} min` : null,
-        s.planned.distanceMeters ? distanceLabel(s.planned.distanceMeters, s.sport!, units) : null,
+        s.planned.distanceMeters ? distanceLabel(s.planned.distanceMeters, sport, units) : null,
       ].filter(Boolean);
-      return { id: s.id, name: a.name, sport: s.sport!, summary: a.summary, amount: parts.length ? parts.join(" · ") : null, done: s.state === "done" };
+      return { id: s.id, name: a.name, sport, summary: a.summary, amount: parts.length ? parts.join(" · ") : null, done: s.state === "done" };
     });
 }
 
@@ -82,6 +84,10 @@ export async function readTodayPlan(userId: string, programId: number) {
       durationSeconds: programSets.durationSeconds,
       distanceMeters: programSets.distanceMeters,
       restTimeSeconds: programSets.restTimeSeconds,
+      stepKind: programSets.stepKind,
+      blockId: programSets.blockId,
+      blockRound: programSets.blockRound,
+      endsOnLap: programSets.endsOnLap,
     })
     .from(programExercises)
     .innerJoin(programs, and(eq(programs.id, programExercises.programId), eq(programs.userId, userId), livePrograms))

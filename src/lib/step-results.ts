@@ -86,6 +86,10 @@ async function plannedWithWorkout(userId: string, id: number): Promise<{ id: num
 }
 
 export async function saveStepResults(userId: string, input: SaveStepResultsInput, source: "player" | "manual" | "assistant"): Promise<SaveStepResultsResult> {
+  // A session that runs a program with steps logs its results as sets
+  // (docs/plans/one-program-model.md, 1.2).
+  const program = await import("@/lib/program-step-results");
+  if (await program.isProgramStepSession(userId, input.plannedSessionId)) return program.saveProgramStepResults(userId, input, source);
   if (input.clientKey) {
     const [repeat] = await db
       .select({ id: workoutStepResults.id, sessionId: workoutStepResults.workoutSessionId })
@@ -232,6 +236,13 @@ export type StepResultsView = {
 
 /** The results of one logged session, by planned or logged session id; null when there are none. */
 export async function getStepResults(userId: string, by: { plannedSessionId?: number; workoutSessionId?: number }): Promise<StepResultsView | null> {
+  const program = await import("@/lib/program-step-results");
+  let plannedId = by.plannedSessionId;
+  if (plannedId == null && by.workoutSessionId != null) {
+    const [ws] = await db.select({ plannedSessionId: workoutSessions.plannedSessionId }).from(workoutSessions).where(and(eq(workoutSessions.id, by.workoutSessionId), eq(workoutSessions.userId, userId)));
+    plannedId = ws?.plannedSessionId ?? undefined;
+  }
+  if (plannedId != null && (await program.isProgramStepSession(userId, plannedId))) return program.getProgramStepResults(userId, plannedId);
   const where = by.workoutSessionId != null ? eq(workoutStepResults.workoutSessionId, by.workoutSessionId) : eq(workoutStepResults.plannedSessionId, by.plannedSessionId ?? -1);
   const [row] = await db
     .select({ r: workoutStepResults, date: workoutSessions.date })

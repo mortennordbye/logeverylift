@@ -60,6 +60,8 @@ export async function appSessionLoads(userId: string, from: string | null, to: s
       distanceMeters: workoutSets.distanceMeters,
       inclinePercent: workoutSets.inclinePercent,
       rpe: workoutSets.rpe,
+      plannedStep: workoutSets.plannedStep,
+      stepStatus: workoutSets.stepStatus,
     })
     .from(workoutSessions)
     .innerJoin(workoutSets, eq(workoutSets.sessionId, workoutSessions.id))
@@ -80,6 +82,16 @@ export async function appSessionLoads(userId: string, from: string | null, to: s
     // Moving time only when every step that was swum has its time; otherwise the logged time counts (review fix 3).
     const complete = steps.every((s) => s.status === "skipped" || s.status === "not_done" || s.activeSeconds !== undefined);
     if (complete) moving.set(r.sessionId, steps.reduce((a, s) => a + (s.activeSeconds ?? 0), 0));
+  }
+  // Program steps (docs/plans/one-program-model.md, 2): the same moving time,
+  // from the logged steps that are not rest steps.
+  const byStepSession = new Map<number, typeof rows>();
+  for (const r of rows) if (r.plannedStep != null && r.discipline === "swim") byStepSession.set(r.id, [...(byStepSession.get(r.id) ?? []), r]);
+  for (const [sessionId, list] of byStepSession) {
+    if (moving.has(sessionId)) continue;
+    const swum = list.filter((r) => (r.plannedStep as { step?: { type?: string } }).step?.type !== "rest");
+    const complete = swum.every((r) => r.stepStatus === "skipped" || r.stepStatus === "not_done" || r.durationSeconds != null);
+    if (complete) moving.set(sessionId, swum.reduce((a, r) => a + (r.durationSeconds ?? 0), 0));
   }
   const anchors = loadAnchors(await thresholdValues(userId));
 

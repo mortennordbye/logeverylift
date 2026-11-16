@@ -66,7 +66,7 @@ export default async function WeekPage({ searchParams }: { searchParams: Promise
       t.plannedS += s.planned.durationSeconds ?? 0;
       t.plannedM += s.planned.distanceMeters ?? 0;
       if (s.workout) t.plannedLoad += workoutPlannedLoad(s.workout, anchors).load;
-      for (const w of s.programWorkouts) t.plannedLoad += workoutPlannedLoad(w, anchors).load;
+      for (const p of s.programWorkouts) t.plannedLoad += workoutPlannedLoad(p.workout, anchors).load;
     }
   }
   for (const l of loads) {
@@ -200,7 +200,7 @@ export default async function WeekPage({ searchParams }: { searchParams: Promise
                     );
                     return (
                       <li key={s.id}>
-                        {s.workout ? (
+                        {s.workout || s.programWorkouts.length ? (
                           <Link href={`/planned/${s.id}`} className="flex items-start justify-between gap-2 rounded-xl bg-muted px-3 py-2 min-h-11 active:opacity-70" data-testid="week-session">
                             {body}
                           </Link>

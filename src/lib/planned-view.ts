@@ -15,8 +15,9 @@ import { getStepResults, type StepResultsView } from "@/lib/step-results";
 import { getUserSettings } from "@/lib/user-settings";
 import { formatEnduranceDistance } from "@/lib/utils/format";
 import { plannedRows, workoutPlannedLoad, type PlannedRow } from "@/lib/utils/step-results";
+import { programPlay } from "@/lib/program-step-results";
 import type { Units } from "@/lib/utils/units";
-import { flattenWorkout, workoutHash } from "@/lib/utils/workout-player";
+import { flattenWorkout, workoutHash, type PlayStep } from "@/lib/utils/workout-player";
 import { estimateWorkout, resolveWorkout, type ThresholdValues, type Workout, type WorkoutEstimate, type WorkoutStep } from "@/lib/utils/workout-steps";
 
 export type PlannedSessionView = {
@@ -39,7 +40,11 @@ export function distanceLabel(meters: number, sport: Workout["sport"], units: Un
 export function playerSession(id: number, workout: Workout, anchors: ThresholdValues, units: Units): PlayerSession {
   const flat = flattenWorkout(workout);
   const rows = plannedRows(workout, anchors, units);
-  const steps: PlayerStepView[] = flat.map((p, i) => {
+  return { plannedSessionId: id, workoutHash: workoutHash(workout), name: workout.name, sport: workout.sport, poolLengthM: workout.poolLengthM ?? null, steps: stepViews(flat, rows, workout, units) };
+}
+
+function stepViews(flat: PlayStep[], rows: PlannedRow[], workout: Workout, units: Units): PlayerStepView[] {
+  return flat.map((p, i) => {
     const step = p.step as WorkoutStep;
     const row = rows[i];
     return {
@@ -59,13 +64,52 @@ export function playerSession(id: number, workout: Workout, anchors: ThresholdVa
       sendOff: step.sendOffSeconds !== undefined,
     };
   });
-  return { plannedSessionId: id, workoutHash: workoutHash(workout), name: workout.name, sport: workout.sport, poolLengthM: workout.poolLengthM ?? null, steps };
 }
 
-/** Null when the session is not the user's, not live, or runs a program. */
+/**
+ * A planned session that runs a program with steps (docs/plans/one-program-model.md, 2):
+ * every structured exercise in order, as one run.
+ */
+async function programSessionView(userId: string, session: SessionCompliance): Promise<PlannedSessionView | null> {
+  const all = session.programWorkouts;
+  if (!all.length) return null;
+  const [anchors, { units }, results] = await Promise.all([thresholdValues(userId), getUserSettings(userId), getStepResults(userId, { plannedSessionId: session.id })]);
+  const plays = programPlay(all, anchors, units);
+  const first = all[0].workout;
+  const estimates = all.map((p) => estimateWorkout(p.workout, anchors));
+  const loads = all.map((p) => workoutPlannedLoad(p.workout, anchors));
+  const name = session.label ?? session.programName ?? first.name;
+  const swim = all.find((p) => p.sport === "swim");
+  return {
+    session,
+    workout: { ...first, name, steps: all.flatMap((p) => p.workout.steps) },
+    units,
+    rows: plays.flatMap((p) => p.rows),
+    player: {
+      plannedSessionId: session.id,
+      workoutHash: workoutHash(all.map((p) => p.workout)),
+      name,
+      sport: first.sport,
+      poolLengthM: swim?.workout.poolLengthM ?? null,
+      steps: plays.flatMap((p) => stepViews(p.play, p.rows, p.pw.workout, units)),
+    },
+    estimate: {
+      durationSeconds: estimates.reduce((a, e) => a + e.durationSeconds, 0),
+      distanceMeters: estimates.reduce((a, e) => a + e.distanceMeters, 0),
+      durationComplete: estimates.every((e) => e.durationComplete),
+      distanceComplete: estimates.every((e) => e.distanceComplete),
+    },
+    plannedLoad: { load: loads.reduce((a, l) => a + l.load, 0), partial: loads.some((l) => l.partial) },
+    missingAnchors: [...new Set(all.flatMap((p) => resolveWorkout(p.workout, anchors, units).missingAnchors))],
+    results,
+  };
+}
+
+/** Null when the session is not the user's, not live, or has no structured steps. */
 export async function plannedSessionView(userId: string, id: number): Promise<PlannedSessionView | null> {
   const session = await oneSession(userId, id);
-  if (!session?.workout) return null;
+  if (!session) return null;
+  if (!session.workout) return programSessionView(userId, session);
   const workout = storedWorkout(session.workout, session.id);
   if (!workout) return null;
   const [anchors, { units }, results] = await Promise.all([thresholdValues(userId), getUserSettings(userId), getStepResults(userId, { plannedSessionId: id })]);

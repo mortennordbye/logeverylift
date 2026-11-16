@@ -68,6 +68,7 @@ import type {
     WorkoutSet,
     WorkoutStats,
 } from "@/types/workout";
+import { plannedStepSnapshot } from "@/lib/program-steps-db";
 import { and, asc, desc, eq, gte, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -92,6 +93,8 @@ type PlanSlot = {
   setType: string;
   /** Working sets the slot prescribes right now. Null when the slot has none. */
   prescribedWorkingSets: number | null;
+  /** Set when the program set is an endurance step (docs/plans/one-program-model.md). */
+  stepKind?: string | null;
 };
 
 /**
@@ -135,6 +138,7 @@ async function resolvePlanSlot(
         programExerciseId: programSets.programExerciseId,
         programId: programExercises.programId,
         setType: programSets.setType,
+        stepKind: programSets.stepKind,
         prescribedWorkingSets: workingSetCount('"program_sets"."program_exercise_id"'),
       })
       // plan-read: includes deleted (a set deleted mid-workout keeps the rows logged against it)
@@ -155,6 +159,7 @@ async function resolvePlanSlot(
           programSetId: row.programSetId,
           setType: row.setType,
           prescribedWorkingSets: row.prescribedWorkingSets || null,
+          stepKind: row.stepKind,
         },
       };
     }
@@ -339,7 +344,7 @@ export async function logWorkoutSet(
 
     // Verify the session belongs to the authenticated user
     const [session] = await db
-      .select({ userId: workoutSessions.userId, programId: workoutSessions.programId })
+      .select({ userId: workoutSessions.userId, programId: workoutSessions.programId, startTime: workoutSessions.startTime })
       .from(workoutSessions)
       .where(eq(workoutSessions.id, sessionId))
       .limit(1);
@@ -363,6 +368,8 @@ export async function logWorkoutSet(
       return { success: false, error: resolved.error };
     }
     const slot = resolved.slot;
+    // An endurance step keeps its plan with the log (docs/plans/one-program-model.md, 1.2).
+    const plannedStep = slot?.stepKind != null && slot.programSetId != null ? await plannedStepSnapshot(db, slot.programSetId, auth.user.id) : null;
 
     // Timed exercises must record a duration. Without this guard, a quick-tap
     // completion (no override, program had no planned duration) silently logs
@@ -424,6 +431,7 @@ export async function logWorkoutSet(
       isCompleted,
       isFailed,
       wasEasy,
+      ...(plannedStep && { plannedStep, stepStatus: isCompleted ? ("done" as const) : null }),
     };
     // One transaction for the row and the records it earns, under a per-user,
     // per-exercise lock (lockRecords).
@@ -462,9 +470,21 @@ export async function logWorkoutSet(
             isCompleted: setValues.isCompleted,
             isFailed: setValues.isFailed,
             wasEasy: setValues.wasEasy,
+            ...(plannedStep && { plannedStep, stepStatus: isCompleted ? ("done" as const) : null }),
           },
         })
         .returning();
+
+      // A step counts toward records as part of its session's effort, not
+      // alone (docs/plans/one-program-model.md, 2): the replay sums the
+      // session's steps, so the records are rebuilt from the session's start.
+      if (plannedStep) {
+        await detectNonCritical(tx, "pr_rebuild_failed", async (sp) => {
+          await rebuildPRsFrom(sp, auth.user.id, exerciseId, session.startTime);
+          return [];
+        });
+        return { set, newPRs: [] };
+      }
 
       // A re-log of a set with later sets or records after it (correcting set 1
       // once set 2 is logged) changes the chain they were built on: rebuild it.

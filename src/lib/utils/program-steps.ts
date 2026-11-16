@@ -124,6 +124,27 @@ function rowStep(r: StepRow): { step: WorkoutStep } | { problem: string } {
   return { step };
 }
 
+/** One step row as a tree step, or null when its end is broken. */
+export function stepOfRow(r: StepRow): WorkoutStep | null {
+  if (r.stepKind == null) return null;
+  const s = rowStep(r);
+  return "step" in s ? s.step : null;
+}
+
+/**
+ * What a logged step keeps of its plan (workout_sets.plannedStep): the step,
+ * its place in a repeat block and the threshold values its targets resolved
+ * with, so a later edit, the weekly sync or a retest never changes it.
+ */
+export type PlannedStepSnapshot = {
+  v: 1;
+  sport: WorkoutSport;
+  step: WorkoutStep;
+  blockId: number | null;
+  blockRound: number | null;
+  thresholds: Partial<Record<string, number>>;
+};
+
 /** Same step content (round copies must match). */
 function sameStep(a: WorkoutStep, b: WorkoutStep): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
@@ -304,4 +325,38 @@ export function workoutToRows(w: Workout): (StepFields & { setNumber: number })[
     }
   }
   return out;
+}
+
+/** The fields of an older plain endurance set (no step kind) that a conversion reads. */
+export type PlainEnduranceSet = {
+  setNumber: number;
+  durationSeconds: number | null;
+  distanceMeters: number | null;
+  targetHeartRateZone: number | null;
+  sessionRole: string | null;
+};
+
+/**
+ * Older plain endurance sets as a step tree (docs/plans/one-program-model.md,
+ * step 4): each set becomes one step, a work rep or zone 4-5 a work step,
+ * zone 1 an easy step, the rest steady work. Its zone becomes an HR zone
+ * target on LTHR (bike and run). A set with a distance ends on it, else on
+ * its time, else on the lap button. Rest after a set stays on the set.
+ */
+export function plainSetsToWorkout(sets: PlainEnduranceSet[], meta: { sport: WorkoutSport; name: string; poolLengthM?: number | null }): Workout {
+  const steps: WorkoutStep[] = [...sets]
+    .sort((a, b) => a.setNumber - b.setNumber)
+    .map((s) => {
+      const zone = s.targetHeartRateZone;
+      const type: WorkoutStep["type"] = s.sessionRole === "work" || (zone ?? 0) >= 4 ? "work" : zone === 1 ? "recovery" : "work";
+      const end: WorkoutStep["end"] =
+        s.distanceMeters != null && s.distanceMeters > 0
+          ? { type: "distance", meters: s.distanceMeters }
+          : s.durationSeconds != null && s.durationSeconds > 0
+            ? { type: "time", seconds: s.durationSeconds }
+            : { type: "lap" };
+      const target: WorkoutTarget | undefined = zone != null && meta.sport !== "swim" ? { metric: "hr", anchor: "lthr", zone } : undefined;
+      return { type, end, ...(target && { target }) };
+    });
+  return { v: 1, sport: meta.sport, name: meta.name.trim().slice(0, 80) || "Session", ...(meta.poolLengthM != null && { poolLengthM: meta.poolLengthM }), steps: steps.length ? steps : [{ type: "work", end: { type: "lap" } }] };
 }
