@@ -118,15 +118,14 @@ export function registerEnduranceAppTools(server: McpServer, userId: string) {
     {
       description: [
         "Log the per-step results of a structured session, for example from what the athlete tells you.",
-        "plannedSessionId and steps (keys from get_step_results or get_workout: the step id, plus #n for round n of a repeat). Optional sessionRpe (1-10; without it and without a threshold the session has no load), distanceMeters, notes.",
-        "When the session is not logged yet, this writes it as a completed session linked to the planned one, with the total active time. When it is, the results attach to it and replace earlier ones; sessionRpe fills only sets with no RPE, and distanceMeters goes on the session only when it has no distance. Step results are logged data: they make no revision.",
+        "plannedSessionId (a session whose program has steps) and steps: each key is the step id, plus #n for round n of a repeat (s3#2). Steps are numbered s1, s2 … in the order of the program's step tree (a repeat takes one number, its steps the next ones); with more than one structured exercise each key starts with the exercise's place (e2:s1). get_step_results lists the keys once results exist. Optional sessionRpe (1-10; without it and without a threshold the session has no load), notes. Give each step its own distanceMeters.",
+        "Each step is logged as one set of the session. When the session is not logged yet, this writes it as a completed session linked to the planned one. When it is, the results attach to it: each step's set is written again, and a step already logged as done stays done. sessionRpe goes on each done step without its own RPE. Step results are logged data: they make no revision.",
         "Requires reason.",
       ].join(" "),
       inputSchema: {
         plannedSessionId: z.number().int().positive(),
         steps: z.array(stepArg).min(1).max(400),
         sessionRpe: z.number().int().min(1).max(10).optional(),
-        distanceMeters: z.number().int().min(0).max(1_000_000).optional(),
         notes: z.string().max(500).optional(),
         reason: reasonArg,
       },
@@ -136,7 +135,7 @@ export function registerEnduranceAppTools(server: McpServer, userId: string) {
       try {
         const r = await saveStepResults(
           userId,
-          { plannedSessionId: args.plannedSessionId, steps: args.steps, sessionRpe: args.sessionRpe, distanceMeters: args.distanceMeters, notes: args.notes },
+          { plannedSessionId: args.plannedSessionId, steps: args.steps, sessionRpe: args.sessionRpe, notes: args.notes },
           "assistant",
         );
         audit("log_step_results", { plannedSessionId: args.plannedSessionId, workoutSessionId: r.workoutSessionId });

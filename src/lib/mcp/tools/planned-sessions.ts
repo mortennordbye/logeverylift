@@ -7,7 +7,7 @@
 import { LIMITS_TEXT, limitRefusal, limitSummary, overrideArgs, overrideFrom } from "@/lib/mcp/limits";
 import { audit, fail, failInternal, ok } from "@/lib/mcp/result";
 import { REVISION_RULES, assistantContext, planErrorResult, reasonArg } from "@/lib/mcp/revisions";
-import { applyRotationOp, applySessionOp, listPlanned, WorkoutSchemaError, type SessionOp } from "@/lib/planned-sessions";
+import { applyRotationOp, applySessionOp, listPlanned, type SessionOp } from "@/lib/planned-sessions";
 import { moveSuggestion } from "@/lib/session-answers";
 import { enduranceEnabledFor } from "@/lib/endurance";
 import { sessionCompliance, thresholdValues } from "@/lib/session-compliance";
@@ -28,6 +28,9 @@ const sessionVersionArg = z
 
 const roundLoad = (p: { load: number; partial: boolean }) => ({ value: Math.round(p.load), partial: p.partial });
 
+/** The planned load of a session: the sum of its structured exercises. */
+const plannedLoadOf = (loads: { load: number; partial: boolean }[]) => ({ load: loads.reduce((a, l) => a + l.load, 0), partial: loads.some((l) => l.partial) });
+
 /** The load of a logged session for the planned session's sport (all sports when it has none). */
 function doneLoad(rows: SessionLoadRow[], sessionId: number, sport: string | null) {
   const mine = rows.filter((r) => r.id === sessionId && (sport === null || r.sport === sport));
@@ -47,7 +50,7 @@ export function registerPlannedSessionTools(server: McpServer, userId: string, c
         "A weekday cycle makes one dated session per program slot for the whole block, and a day can hold up to three (position 1-3). Each can be moved, skipped or changed alone; a template edit rewrites the sessions nobody changed (touched: false) from this week's Monday on. Done sessions, changed ones and earlier weeks never change.",
         "A rotation cycle has no fixed dates: its sessions are worked out from the walk (a missed session repeats the next day), so they have rotationPosition and an id only when you or the user stored a skip or a change for that position.",
         "Each entry: id, cycleId, date, position, programId, programName, label, notes, status (planned; done with loggedSessionId; missed = a past day not done; skipped with skipReason), autoComplete (a day tracked outside the app), touched, templateDate, version.",
-        "Weekday sessions also carry: sport, priority (stored or derived: key = hard, or the longest bike or run of its week at 90 minutes or more), hard, workoutSummary, brickParentId, planned and done (durationSeconds, distanceMeters), state (planned, done, missed, unconfirmed = a past endurance session with no match and no answer, illness, sick, skipped), matchedBy (link, pick, app, garmin), ratio and band (green, yellow, orange, red, done, illness), missedReason, illnessId, and suggestedMoveTo for a confirmed missed key session. Matching to Garmin activities is for admins only. A session with a workout also has plannedLoad ({value, partial}: an estimate from its targets, 100 = one hour at threshold; partial when a step had no power or pace target). With endurance features on, a done session has load ({value, method}: run_pace, swim_css, srpe or strength_srpe; null with reason needs_rpe when nothing measured it). Garmin load is not shown here; read get_training_load.",
+        "Weekday sessions also carry: sport, priority (stored or derived: key = hard, or the longest bike or run of its week at 90 minutes or more), hard, workoutSummary, brickParentId, planned and done (durationSeconds, distanceMeters), state (planned, done, missed, unconfirmed = a past endurance session with no match and no answer, illness, sick, skipped), matchedBy (link, pick, app, garmin), ratio and band (green, yellow, orange, red, done, illness), missedReason, illnessId, and suggestedMoveTo for a confirmed missed key session. Matching to Garmin activities is for admins only. A session whose program has steps also has plannedLoad ({value, partial}: an estimate from its targets, 100 = one hour at threshold; partial when a step had no power or pace target). workoutSummary describes those steps. With endurance features on, a done session has load ({value, method}: run_pace, swim_css, srpe or strength_srpe; null with reason needs_rpe when nothing measured it). Garmin load is not shown here; read get_training_load.",
         "With endurance features on: readinessSwap on today's session when this morning is a low-readiness day (HRV below the athlete's band two days and resting HR up, from Garmin): the reason, the easy session it would become, and that apply_readiness_swap makes it easy; and heavyLegsBeforeKey on a strength session with heavy leg work 1-2 days before a key bike or run session, or earlier the same day (the rule heavy_legs_before_key), with heavyLegsBeforeKeyOf on the key session.",
       ].join(" "),
       inputSchema: { from: dateArg, to: dateArg, cycleId: z.number().int().positive().optional() },
@@ -60,7 +63,7 @@ export function registerPlannedSessionTools(server: McpServer, userId: string, c
       try {
         const sessions = await listPlanned(userId, from, to, cycleId);
         const facts = new Map((await sessionCompliance(userId, from, to, { cycleId })).map((s) => [s.id, s]));
-        // Load (docs/plans/endurance-app.md, 7): planned from a workout's targets, done from what was logged.
+        // Load (docs/plans/endurance-app.md, 7): planned from the program's step targets, done from what was logged.
         // Endurance switch only (review fix 7); by the linked sessions' ids, so one logged on another day counts (review fix 8).
         const endurance = await enduranceEnabledFor(userId);
         const linked = [...facts.values()].flatMap((f) => (f.loggedSessionId != null ? [f.loggedSessionId] : []));
@@ -92,7 +95,7 @@ export function registerPlannedSessionTools(server: McpServer, userId: string, c
             band: f.band,
             missedReason: f.missedReason,
             illnessId: f.illnessId,
-            ...(endurance && f.workout && { plannedLoad: roundLoad(workoutPlannedLoad(f.workout, anchors)) }),
+            ...(endurance && f.programWorkouts.length > 0 && { plannedLoad: roundLoad(plannedLoadOf(f.programWorkouts.map((p) => workoutPlannedLoad(p.workout, anchors)))) }),
             ...(endurance && f.loggedSessionId != null && { load: doneLoad(logged, f.loggedSessionId, f.sport) }),
             ...(suggestion && { suggestedMoveTo: suggestion }),
             ...(swap?.sessionId === f.id && {
@@ -124,15 +127,13 @@ export function registerPlannedSessionTools(server: McpServer, userId: string, c
         "A session that is logged, or a day that has passed, does not change: a past session can only be skipped (declined), or moved forward if it was missed.",
         `Every operation requires reason; all but add, and the first change to a rotation position, require expectedVersion (the session's version). ${REVISION_RULES}`,
         `On move, change, add, unskip and reset: ${LIMITS_TEXT} Hard sessions are counted in each Monday-to-Sunday week the change touches.`,
-        "With endurance features on (docs: logeverylift://docs/workout-steps): 'set_workout' (workout JSON, or workoutId to copy a library workout: the session gets its own copy and runs it instead of a program), 'clear_workout' (programId to run instead), 'update_from_library' (copy the library workout again), 'set_priority' (priority key, support, optional, or null for derived), 'link_brick' (brickParentId: the ride before this run, same day, earlier position), 'unlink_brick'. 'add' also takes workout or workoutId instead of programId, priority and brickParentId. Moving the first session of a brick moves the brick; its later session cannot move alone. set_workout and add run the limits too. A workout that breaks the schema check is refused with every problem and its path, and that check cannot be overridden.",
+        "With endurance features on: 'set_priority' (priority key, support, optional, or null for derived), 'link_brick' (brickParentId: the ride before this run, same day, earlier position), 'unlink_brick'. 'add' also takes priority and brickParentId. Moving the first session of a brick moves the brick; its later session cannot move alone. A structured session runs a program with steps (docs: logeverylift://docs/workout-steps): put one on a day with 'change' (programId) or 'add'.",
         "operation='apply_readiness_swap' (id, expectedVersion, endurance features on): make today's hard session the easy one that readinessSwap in list_planned_sessions shows. The app reads the suggestion again and refuses when it no longer holds. The revision keeps the session as it was, so it can be restored.",
       ].join(" "),
       annotations: { destructiveHint: true, openWorldHint: false },
       inputSchema: {
         ...overrideArgs,
-        operation: z.enum(["move", "skip", "unskip", "change", "reset", "remove", "add", "set_workout", "clear_workout", "update_from_library", "set_priority", "link_brick", "unlink_brick", "apply_readiness_swap"]),
-        workout: z.unknown().optional(),
-        workoutId: z.number().int().positive().optional(),
+        operation: z.enum(["move", "skip", "unskip", "change", "reset", "remove", "add", "set_priority", "link_brick", "unlink_brick", "apply_readiness_swap"]),
         priority: z.enum(["key", "support", "optional"]).nullable().optional(),
         brickParentId: z.number().int().positive().optional(),
         id: z.number().int().positive().optional(),
@@ -179,37 +180,28 @@ export function registerPlannedSessionTools(server: McpServer, userId: string, c
           return ok({ session: row, version, ...(limits && { limits: limitSummary(limits.check, limits.unusedOverrides) }) });
         }
         if (args.operation === "add") {
-          if (args.cycleId == null || args.date == null) return fail("add requires cycleId and date");
-          if ((args.programId == null) === (args.workout === undefined && args.workoutId == null)) return fail("add requires programId, or workout or workoutId: one of them");
+          if (args.cycleId == null || args.date == null || args.programId == null) return fail("add requires cycleId, date and programId");
         } else {
           if (args.id == null) return fail(`${args.operation} requires id`);
           if (args.expectedVersion == null) return fail("expectedVersion is required: read the session with list_planned_sessions");
           if (args.operation === "move" && args.date == null) return fail("move requires date");
         }
         const lc = await limitContext(userId);
-        const checked = ["move", "change", "add", "unskip", "reset", "set_workout", "clear_workout", "update_from_library"].includes(args.operation);
-        if (args.operation === "clear_workout" && args.programId == null) return fail("clear_workout requires programId");
+        const checked = ["move", "change", "add", "unskip", "reset"].includes(args.operation);
         if (args.operation === "set_priority" && args.priority === undefined) return fail("set_priority requires priority (or null)");
         if (args.operation === "link_brick" && args.brickParentId == null) return fail("link_brick requires brickParentId");
-        if (args.operation === "set_workout" && args.workout === undefined && args.workoutId == null) return fail("set_workout requires workout or workoutId");
-        const workoutOp: SessionOp | null =
-          args.operation === "set_workout"
-            ? { op: "set_workout", id: args.id!, workout: args.workout, workoutId: args.workoutId, expectedVersion: args.expectedVersion }
-            : args.operation === "clear_workout"
-              ? { op: "clear_workout", id: args.id!, programId: args.programId!, expectedVersion: args.expectedVersion }
-              : args.operation === "update_from_library"
-                ? { op: "update_from_library", id: args.id!, expectedVersion: args.expectedVersion }
-                : args.operation === "set_priority"
-                  ? { op: "set_priority", id: args.id!, priority: args.priority ?? null, expectedVersion: args.expectedVersion }
-                  : args.operation === "link_brick"
-                    ? { op: "link_brick", id: args.id!, brickParentId: args.brickParentId!, expectedVersion: args.expectedVersion }
-                    : args.operation === "unlink_brick"
-                      ? { op: "unlink_brick", id: args.id!, expectedVersion: args.expectedVersion }
-                      : null;
+        const enduranceOp: SessionOp | null =
+          args.operation === "set_priority"
+            ? { op: "set_priority", id: args.id!, priority: args.priority ?? null, expectedVersion: args.expectedVersion }
+            : args.operation === "link_brick"
+              ? { op: "link_brick", id: args.id!, brickParentId: args.brickParentId!, expectedVersion: args.expectedVersion }
+              : args.operation === "unlink_brick"
+                ? { op: "unlink_brick", id: args.id!, expectedVersion: args.expectedVersion }
+                : null;
         const input: SessionOp =
-          workoutOp ??
+          enduranceOp ??
           (args.operation === "add"
-            ? { op: "add" as const, cycleId: args.cycleId!, date: args.date!, programId: args.programId, workout: args.workout, workoutId: args.workoutId, priority: args.priority, brickParentId: args.brickParentId, position: args.position, label: args.label, notes: args.notes }
+            ? { op: "add" as const, cycleId: args.cycleId!, date: args.date!, programId: args.programId!, priority: args.priority, brickParentId: args.brickParentId, position: args.position, label: args.label, notes: args.notes }
             : args.operation === "move"
               ? { op: "move" as const, id: args.id!, date: args.date!, position: args.position, expectedVersion: args.expectedVersion }
               : args.operation === "skip"
@@ -222,7 +214,6 @@ export function registerPlannedSessionTools(server: McpServer, userId: string, c
         return ok({ session: row, version, ...(limits && { limits: limitSummary(limits.check, limits.unusedOverrides) }) });
       } catch (e) {
         if (e instanceof LimitRefusedError) return limitRefusal(e);
-        if (e instanceof WorkoutSchemaError) return fail(`${e.message}. Fix each problem and send it again.`);
         return (await planErrorResult(userId, e)) ?? failInternal("planned_sessions", e);
       }
     },

@@ -18,7 +18,7 @@ import { registerSeasonTools } from "@/lib/mcp/tools/seasons";
 import { registerPlannedSessionTools } from "@/lib/mcp/tools/planned-sessions";
 import { registerSessionTools } from "@/lib/mcp/tools/sessions";
 import { registerWorkoutTools } from "@/lib/mcp/tools/workouts";
-import { registerComplianceTools, registerWorkoutLibraryTools } from "@/lib/mcp/tools/workouts-compliance";
+import { registerComplianceTools, registerEnduranceAnswerTools } from "@/lib/mcp/tools/workouts-compliance";
 import { registerEnduranceAppTools } from "@/lib/mcp/tools/endurance-app";
 import { registerNutritionTools } from "@/lib/mcp/tools/nutrition";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -169,11 +169,8 @@ describe("MCP tool registration", () => {
     expect(hints(registerSessionTools)).toEqual({ log_session: false, confirm_session: false });
   });
 
-  it("registers the workout, answer and sick-period tools (endurance only), and compliance for everyone", () => {
-    expect(hints(registerWorkoutLibraryTools)).toEqual({
-      list_workouts: true,
-      get_workout: true,
-      manage_workout: false,
+  it("registers the answer and sick-period tools (endurance only), and compliance for everyone", () => {
+    expect(hints(registerEnduranceAnswerTools)).toEqual({
       confirm_planned_session: false,
       manage_illness: false,
     });

@@ -44,7 +44,7 @@ what it describes, that package updates this file and the server instructions in
   date change of any race, or an A race added, removed or changed in priority, flags the season
   for a re-plan; the app never moves phases itself. Re-plan, then `clear_replan`. Deleting a
   season keeps its cycles; they act as cycles with no season until it is restored.
-- **Dated session.** A weekday cycle makes one dated session per program or workout slot for the
+- **Dated session.** A weekday cycle makes one dated session per program slot for the
   whole block, when it starts or is scheduled (`list_planned_sessions`). Each can be moved (from
   today to the block's last day), skipped, changed (program, label, notes, order) or added by hand
   (`manage_planned_session`); a day holds at most three. A slot change rewrites the sessions nobody
@@ -54,20 +54,19 @@ what it describes, that package updates this file and the server instructions in
   "Planned vs done" below apply instead. A rotation cycle has no fixed dates, since a missed
   session repeats the next day: its sessions are worked out from the walk, and one still to come
   can only be skipped, unskipped or given another program, by `rotationPosition`.
-- **Structured workout** (endurance features only). A swim, bike or run workout as steps and
-  repeats, each step with an end (time, distance or lap) and an optional target as a percent of
-  the user's thresholds. The syntax and every rule are in `logeverylift://docs/workout-steps`:
-  read it before your first workout write. A workout that breaks a rule is refused with every
-  problem and its path, and no override exists. The library holds reusable workouts
-  (`list_workouts`, `get_workout`, `manage_workout`). A dated session runs a program or a
-  workout, never both. A session holds its own copy of a workout, not a reference, so a past
-  session keeps what was planned. A library edit or delete reaches only the untouched sessions
-  from this week's Monday on, of the active or scheduled cycles whose slots use it; `update_from_library`
-  copies it again onto one session. A workout goes on a day with `manage_planned_session`
-  `set_workout` (or `add` with `workout` or `workoutId`), and on a weekday slot with
-  `edit_cycle_slot` `workoutId`. A brick is two sessions on one day, the run linked to the ride
-  before it (`link_brick`, or `add` with `brickParentId`; a slot with `brickWithNext`). Moving the
-  ride moves the run; the run cannot move alone. Rotation cycles get no workouts and no bricks.
+- **Structured session** (endurance features only). A program whose swim, bike or run exercise
+  holds steps and repeats, each step with an end (time, distance or lap) and an optional target
+  as a percent of the user's thresholds. Write the steps with `edit_program_exercise`: sets with
+  `stepKind`, or `workout`, a step tree that becomes the set list. The syntax and every rule are
+  in `logeverylift://docs/workout-steps`: read it before your first step write. Steps that break a
+  rule are refused with every problem, and no override exists. A dated session runs a program;
+  put one with steps on a day with `manage_planned_session` `change` or `add` (`programId`), and
+  on a weekday slot with `edit_cycle_slot` `programId`. A program edit reaches every session that
+  runs it. To change one day only, the user taps "Change this day only" in the app, which gives
+  that day its own copy of the program; no tool does that. A brick is two sessions on one day,
+  the run linked to the ride before it (`link_brick`, or `add` with `brickParentId`; a slot with
+  `brickWithNext`). Moving the ride moves the run; the run cannot move alone. Rotation cycles
+  get no bricks.
 - **Planned vs done.** Each dated session has a state, first match wins (`sessionState` in
   `src/lib/utils/session-compliance.ts:378`): `done` (a workout is logged for it, an activity was
   picked for it, or a match below), `skipped`, `missed` (the user or you confirmed a miss),
@@ -97,13 +96,15 @@ what it describes, that package updates this file and the server instructions in
   (`countsInWeek`, `src/lib/utils/session-compliance.ts:87`). Consistency is the share of
   complete weeks over the last 12 full weeks, with this week shown apart. `get_compliance` is
   for every user.
-- **Step results** (endurance features only). A done session with a workout can hold the result
-  of each step: status (`done`, `partial`, `skipped`, `not_done`), active time, distance, one
+- **Step results** (endurance features only). A done session whose program has steps holds the
+  result of each step, as one logged set per step: status (`done`, `partial`, `skipped`, `not_done`), active time, distance, one
   measured value in the target's unit, RPE and a note. They come from the guided player in the
   app, the user typing them, or `log_step_results`. Step keys are the step id, plus `#n` for round
-  n of a repeat (`s3#2`). `get_step_results` gives planned against done per step, resolved with
-  the thresholds of that day. They are logged data: no revision, no restore. `log_step_results`
-  logs the session first when it is not logged yet, as `confirm_planned_session` does.
+  n of a repeat (`s3#2`); with more than one structured exercise in the program, each key starts
+  with the exercise's place (`e2:s1`). `get_step_results` gives planned against done per step,
+  resolved with the thresholds of that day. They are logged data: no revision, no restore.
+  `log_step_results` logs the session first when it is not logged yet, as
+  `confirm_planned_session` does.
 - **Fueling and race plans** (endurance features only). A fuel log belongs to one completed
   session logged in the app (`workoutSessionId`) or one Garmin activity: carbohydrate, fluid,
   sodium, caffeine, the products used and a GI score (0 = no gut symptoms, 10 = worst). Gut
@@ -122,8 +123,8 @@ what it describes, that package updates this file and the server instructions in
   `hours x (speed / CSS)^3 x 100`, anything else `minutes x RPE x 0.22`, strength as before. The
   two series are never added; on a pair (same sport and day, closest duration) Garmin wins. A
   session with no RPE and no threshold has no load and is listed, never guessed. These three
-  models are Inference: say so when you use them. `list_planned_sessions` and `get_workout` add
-  a planned load estimate from the targets; compliance stays on duration, then distance.
+  models are Inference: say so when you use them. `list_planned_sessions` and `get_step_results`
+  add a planned load estimate from the step targets; compliance stays on duration, then distance.
 - **Sick period** (endurance features only). One entry per period: a first day, a last day or
   none while still sick, an optional IOC severity (mild, moderate, severe) and the user's notes
   (`manage_illness`; `get_athlete_profile` lists the open one and those of the last 90 days).
@@ -186,7 +187,7 @@ lasts only until that writer runs again.
 | Heart rate zone and rest on `work` sets with a peak anchor | The weekly sync, by phase (`src/lib/periodization-sync.ts:335-337`) | A different value is refused. An omitted value keeps the sync's. Send `sessionRole: null` on the set to take zone and rest over; the sync still scales its distance or duration. |
 | The cycle's volume factor (`adaptationPct`) | The weekly sync, from adherence, readiness and effort; a Garmin suggestion the user applies | `manage_training_cycle` `set_volume` (50-110) sets it for this week and rewrites this week's targets. The next weekly sync computes its own. |
 | A session the assistant logged (`log_session`, `confirm_planned_session` `done`) | The assistant at the time, then the user | You cannot edit or delete it; the user can. |
-| Structured workouts, in the library and on dated sessions | The user and the assistant. The weekly sync never changes a workout | To change a structured session's volume, edit the session; `set_volume` does not scale it. |
+| Steps of a structured session | The user and the assistant. The weekly sync changes a step only as it changes any set (the two rows above) | To change a structured session's volume, edit its program's steps. |
 | Everything else in programs and cycles | The user and the assistant | Stays until changed again. |
 
 ## Limits of the app today
@@ -202,7 +203,7 @@ lasts only until that writer runs again.
   history. `expectedVersion` is the program's, cycle's or dated session's `version` from
   `get_program`, `get_training_cycle`, `list_planned_sessions` or your last write's result. If the user (or another assistant) changed
   it since, the write is refused with what changed; read it again and redo the change.
-- **Deletes can be undone.** Deleted programs, cycles, seasons, library workouts and sick periods
+- **Deletes can be undone.** Deleted programs, cycles, seasons and sick periods
   stay restorable for 90 days.
 - **Six training limits in code** (`src/lib/utils/training-limits.ts`), for users with
   endurance features on, on assistant plan writes only (the user's own edits are never checked):
@@ -248,9 +249,9 @@ lasts only until that writer runs again.
 
   Checked writes: program set edits, slot changes, starting or scheduling a cycle, `set_volume`,
   a change to the active cycle's length, goal or level (they rescale this week's targets), and a
-  dated session moved, changed, added, given a workout or planned again (counted in each
-  Monday-to-Sunday week it touches, with moved sessions where they land and skipped ones left
-  out), and a library workout edit, on the weeks of the sessions it rewrites.
+  dated session moved, changed, added or planned again (counted in each Monday-to-Sunday week it
+  touches, with moved sessions where they land and skipped ones left out). A session changed to
+  or added with a program whose run has steps counts that run for `long_run_cap`.
 
   A limit blocks only a write that makes things worse. A refused write changes nothing; send it
   again with `overrideLimits` and `overrideReason` if it still fits, and the revision stores the
@@ -268,14 +269,6 @@ lasts only until that writer runs again.
   are always kg.
 - **Notes are private.** Session, set and exercise notes are the user's own words and can hold
   health details. Use them for coaching only.
-
-## Not in the app yet
-
-- The step editor for structured workouts. You create and change workouts; the app's library
-  screen only lists, duplicates, renames, deletes and restores them, and puts one on a day.
-- The guided player that runs a workout step by step on the phone.
-- A dated session that runs a workout, not a program, does not show on the home screen's
-  today card or week strip yet.
 
 ## Access
 

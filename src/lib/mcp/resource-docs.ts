@@ -29,6 +29,6 @@ export const MCP_RESOURCE_DOCS = [
     path: "docs/mcp/workout-steps.md",
     title: "Workout step syntax",
     description:
-      "The JSON shape of a structured endurance workout (steps, repeats, end conditions, targets relative to thresholds, swim send-offs) and every rule the app checks, with examples. Read before creating or changing a workout.",
+      "The steps of a structured endurance session (steps, repeats, end conditions, targets relative to thresholds, swim send-offs), as a step tree or as program sets, and every rule the app checks, with examples. Read before writing steps with edit_program_exercise.",
   },
 ] as const;
