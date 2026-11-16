@@ -75,7 +75,7 @@ async function weekHero(userId: string, c: Cycle, today: string, active: boolean
   const labels = withSlots.success ? dayLabels(withSlots.data.slots) : {};
   const sessions: WeekSession[] = rows.map((r) => ({
     date: r.date,
-    name: r.programName ?? r.label ?? r.workout?.name ?? null,
+    name: r.programName ?? r.label ?? null,
     sport: r.sport,
     sports: r.sports,
     key: r.priority === "key",

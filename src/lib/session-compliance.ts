@@ -46,7 +46,7 @@ import {
   type Sport,
 } from "@/lib/utils/session-compliance";
 import { currentThresholds } from "@/lib/utils/thresholds";
-import { describeWorkout, estimateWorkout, isHardWorkout, parseWorkout, type ThresholdValues, type Workout, type WorkoutEstimate } from "@/lib/utils/workout-steps";
+import { describeWorkout, estimateWorkout, type ThresholdValues, type WorkoutEstimate } from "@/lib/utils/workout-steps";
 import { programWorkouts, type ProgramWorkout } from "@/lib/program-workouts";
 import { and, asc, eq, gte, inArray, isNull, lte, or } from "drizzle-orm";
 
@@ -67,7 +67,6 @@ export type SessionCompliance = {
   storedPriority: "key" | "support" | "optional" | null;
   priority: "key" | "support" | "optional";
   hard: boolean;
-  workout: Workout | null;
   /** The structured exercises of the program as step trees (docs/plans/one-program-model.md, 2). */
   programWorkouts: ProgramWorkout[];
   workoutSummary: string | null;
@@ -95,15 +94,6 @@ export async function thresholdValues(userId: string): Promise<ThresholdValues> 
   const rows = await db.select().from(athleteThresholds).where(and(eq(athleteThresholds.userId, userId), isNull(athleteThresholds.deletedAt)));
   const cur = currentThresholds(rows);
   return Object.fromEntries(Object.entries(cur).map(([k, r]) => [k, r!.value])) as ThresholdValues;
-}
-
-/** A stored workout, parsed; null (and logged) when it does not pass the schema, which should never happen. */
-export function storedWorkout(json: unknown, id: number): Workout | null {
-  if (json == null) return null;
-  const r = parseWorkout(json);
-  if (r.ok) return r.workout;
-  console.error("[workouts] invalid_stored", { id });
-  return null;
 }
 
 /**
@@ -259,26 +249,21 @@ export async function sessionCompliance(userId: string, from: string, to: string
   const stepped = steppedIds.length ? await programWorkouts(db, steppedIds) : new Map<number, ProgramWorkout[]>();
 
   const views = rows.map(({ row, programName, programDeletedAt }) => {
-    const workout = storedWorkout(row.workout, row.id);
     const programId = programDeletedAt ? null : row.programId;
     const pf = programId != null ? facts.get(programId) : undefined;
-    const sport: Sport | null = workout ? workout.sport : (pf?.sport ?? null);
-    const sports: Sport[] = workout ? [workout.sport] : (pf?.sports ?? []);
-    const est = workout ? estimateWorkout(workout, thresholds) : null;
+    const sport: Sport | null = pf?.sport ?? null;
+    const sports: Sport[] = pf?.sports ?? [];
     const programWorkoutList = programId != null ? (stepped.get(programId) ?? []) : [];
-    const planned: Amount = est
-      ? { durationSeconds: est.durationComplete && est.durationSeconds ? est.durationSeconds : null, distanceMeters: est.distanceComplete && est.distanceMeters ? est.distanceMeters : null }
-      : withSteps(pf?.planned ?? { durationSeconds: null, distanceMeters: null }, pf?.sport ? programWorkoutList.map((p) => estimateWorkout(p.workout, thresholds)) : []);
+    const planned: Amount = withSteps(pf?.planned ?? { durationSeconds: null, distanceMeters: null }, pf?.sport ? programWorkoutList.map((p) => estimateWorkout(p.workout, thresholds)) : []);
     return {
       row,
       programId,
       programName: programDeletedAt ? null : programName,
-      workout,
       programWorkouts: programWorkoutList,
       sport,
       sports,
       planned,
-      hard: workout ? isHardWorkout(workout, thresholds) : programId != null ? (hard.get(programId) ?? false) : false,
+      hard: programId != null ? (hard.get(programId) ?? false) : false,
     };
   });
 
@@ -370,13 +355,8 @@ export async function sessionCompliance(userId: string, from: string, to: string
       storedPriority: r.priority,
       priority: priorities.get(r.id)!,
       hard: v.hard,
-      workout: v.workout,
       programWorkouts: v.programWorkouts,
-      workoutSummary: v.workout
-        ? describeWorkout(v.workout, settings.units)
-        : v.programWorkouts.length
-          ? v.programWorkouts.map((p) => describeWorkout(p.workout, settings.units)).join(" + ")
-          : null,
+      workoutSummary: v.programWorkouts.length ? v.programWorkouts.map((p) => describeWorkout(p.workout, settings.units)).join(" + ") : null,
       brickParentId: r.brickParentId,
       planned: v.planned,
       state,

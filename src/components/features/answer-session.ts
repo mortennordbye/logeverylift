@@ -12,8 +12,8 @@ export type AnswerSession = { id: number; date: string; name: string; summary: s
 
 const SPORT_NAME: Record<Sport, string> = { swim: "Swim", bike: "Ride", run: "Run" };
 
-/** A session as the answers show it: its label or workout name, then its program, then its sport. */
-export function answerSession(s: Pick<SessionCompliance, "id" | "date" | "label" | "programName" | "workout" | "workoutSummary" | "sport" | "planned">): AnswerSession {
-  const name = s.label ?? s.workout?.name ?? s.programName ?? (s.sport ? SPORT_NAME[s.sport] : "Session");
+/** A session as the answers show it: its label, then its program, then its sport. */
+export function answerSession(s: Pick<SessionCompliance, "id" | "date" | "label" | "programName" | "workoutSummary" | "sport" | "planned">): AnswerSession {
+  const name = s.label ?? s.programName ?? (s.sport ? SPORT_NAME[s.sport] : "Session");
   return { id: s.id, date: s.date, name, summary: s.workoutSummary, sport: s.sport, plannedSeconds: s.planned.durationSeconds ?? null };
 }

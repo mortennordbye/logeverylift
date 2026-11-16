@@ -89,7 +89,7 @@ export default async function PlannedSessionPage({ params }: { params: Promise<{
             Pool view
           </Link>
         )}
-        {!done && session.programId != null && !session.workout && session.date >= today && <DayOnlyButton plannedSessionId={id} />}
+        {!done && session.programId != null && session.date >= today && <DayOnlyButton plannedSessionId={id} />}
         <Link href={`/planned/${id}/results`} className="min-h-12 rounded-2xl border border-border px-4 py-3 text-center text-base font-medium active:opacity-70">
           {v.results ? "Step results" : done ? "Add step results" : "Log results by hand"}
         </Link>

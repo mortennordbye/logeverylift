@@ -20,7 +20,6 @@ import {
 import { z } from "zod";
 
 export const STEP_RESULT_STATUSES = ["done", "skipped", "partial", "not_done"] as const;
-export const STEP_RESULTS_MAX_BYTES = 64 * 1024;
 export const STEP_NOTE_MAX = 280;
 
 export const stepResultSchema = z.strictObject({
@@ -37,22 +36,6 @@ export const stepResultSchema = z.strictObject({
 export type StepResult = z.infer<typeof stepResultSchema>;
 
 export const stepResultsSchema = z.array(stepResultSchema).min(1).max(400);
-
-/** Results that fit the workout: known keys, each once, within the size limit. Errors carry a path. */
-export function checkResults(workout: Workout, input: unknown): { ok: true; steps: StepResult[] } | { ok: false; errors: { path: string; message: string }[] } {
-  const r = stepResultsSchema.safeParse(input);
-  if (!r.success) return { ok: false, errors: r.error.issues.map((i) => ({ path: i.path.join("."), message: i.message })) };
-  const keys = new Set(flattenWorkout(workout).map((s) => s.key));
-  const seen = new Set<string>();
-  const errors: { path: string; message: string }[] = [];
-  r.data.forEach((s, i) => {
-    if (!keys.has(s.key)) errors.push({ path: `${i}.key`, message: `no step "${s.key}" in this workout` });
-    else if (seen.has(s.key)) errors.push({ path: `${i}.key`, message: `step "${s.key}" is given twice` });
-    seen.add(s.key);
-  });
-  if (new TextEncoder().encode(JSON.stringify(r.data)).length > STEP_RESULTS_MAX_BYTES) errors.push({ path: "", message: "the results are larger than 64 KB" });
-  return errors.length ? { ok: false, errors } : { ok: true, steps: r.data };
-}
 
 /** The threshold values of a workout's targets, as the anchors stored with the results and used for load. */
 export function loadAnchors(t: ThresholdValues): LoadAnchors {

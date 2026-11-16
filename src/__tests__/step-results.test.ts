@@ -1,5 +1,4 @@
 import {
-  checkResults,
   compareStep,
   loadAnchors,
   plannedRows,
@@ -67,30 +66,6 @@ describe("plannedRows", () => {
   });
 });
 
-describe("checkResults", () => {
-  it("accepts known keys", () => {
-    expect(checkResults(bike, [{ key: "s1", status: "done", activeSeconds: 900 }]).ok).toBe(true);
-  });
-  it("refuses unknown and repeated keys, unknown fields and ranges, with paths", () => {
-    const r = checkResults(bike, [
-      { key: "s9", status: "done" },
-      { key: "s1", status: "done" },
-      { key: "s1", status: "skipped" },
-    ]);
-    expect(r).toEqual({ ok: false, errors: [{ path: "0.key", message: 'no step "s9" in this workout' }, { path: "2.key", message: 'step "s1" is given twice' }] });
-    expect(checkResults(bike, [{ key: "s1", status: "done", watts: 200 }]).ok).toBe(false);
-    expect(checkResults(bike, [{ key: "s1", status: "done", rpe: 11 }]).ok).toBe(false);
-    expect(checkResults(bike, []).ok).toBe(false);
-  });
-  it("refuses more than 64 KB", () => {
-    const note = "x".repeat(280);
-    const many = Array.from({ length: 300 }, (_, i) => ({ key: `s1`, status: "done" as const, notes: `${i}${note}`.slice(0, 280) }));
-    const r = checkResults(bike, many);
-    expect(r.ok).toBe(false);
-    expect(!r.ok && r.errors.some((e) => e.message.includes("64 KB"))).toBe(true);
-  });
-});
-
 describe("compareStep", () => {
   const rows = plannedRows(bike, anchors);
   it("bands a step by time with C5's colours", () => {
@@ -123,7 +98,6 @@ describe("results from a run, as planned, and totals", () => {
       { key: "s3#2", status: "not_done" },
     ]);
     expect(r).toHaveLength(8);
-    expect(checkResults(bike, r).ok).toBe(true);
   });
 
   it("as planned: planned time and distance, rounded", () => {

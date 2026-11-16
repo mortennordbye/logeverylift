@@ -53,8 +53,8 @@ function toDateStr(d: Date): string {
 async function enduranceToday(userId: string, today: string): Promise<EnduranceTodayRow[]> {
   const [sessions, { units }] = await Promise.all([sessionCompliance(userId, today, today), getUserSettings(userId)]);
   return sessions
-    // A workout of its own, or a program with structured steps (docs/plans/one-program-model.md).
-    .filter((s) => (s.workout ? s.sport : s.programWorkouts.length) && s.status === "planned")
+    // A program with structured steps (docs/plans/one-program-model.md).
+    .filter((s) => s.programWorkouts.length && s.status === "planned")
     .map((s) => {
       const a = answerSession(s);
       const sport = s.sport ?? s.programWorkouts[0].sport;

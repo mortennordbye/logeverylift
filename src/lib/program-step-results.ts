@@ -8,9 +8,8 @@
  * (a brick in one program is the ride, then the run). With more than one,
  * each play key carries the exercise's place: "e2:s1#3".
  *
- * The save takes the same input as the structured workout path
- * (src/lib/step-results.ts) and gives the same view back, so the player, the
- * results form and MCP log_step_results work on both until that path goes.
+ * The save takes the input and gives the view that src/lib/step-results.ts
+ * exports, so the player, the results form and MCP log_step_results share it.
  *
  * Plain server code: callers resolve the user and check the endurance switch.
  */
@@ -37,22 +36,22 @@ import { and, asc, desc, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
 
 export { programPlay, type ProgramPlay } from "@/lib/utils/program-steps";
 
-/** The planned session's structured exercises, or null when it runs none (or has a workout of its own). */
+/** The planned session's structured exercises, or null when it runs none. */
 export async function plannedProgramWorkouts(
   userId: string,
   plannedSessionId: number,
 ): Promise<{ planned: { id: number; date: string; programId: number }; all: ProgramWorkout[] } | null> {
   const [row] = await db
-    .select({ id: plannedSessions.id, date: plannedSessions.date, programId: plannedSessions.programId, workout: plannedSessions.workout, deletedAt: plannedSessions.deletedAt })
+    .select({ id: plannedSessions.id, date: plannedSessions.date, programId: plannedSessions.programId, deletedAt: plannedSessions.deletedAt })
     .from(plannedSessions)
     .where(and(eq(plannedSessions.id, plannedSessionId), eq(plannedSessions.userId, userId)));
-  if (!row?.date || row.programId == null || row.workout != null || row.deletedAt != null) return null;
+  if (!row?.date || row.programId == null || row.deletedAt != null) return null;
   const all = (await programWorkouts(db, [row.programId])).get(row.programId) ?? [];
   if (!all.length) return null;
   return { planned: { id: row.id, date: row.date, programId: row.programId }, all };
 }
 
-/** True when the planned session runs a program with steps (and no workout of its own). */
+/** True when the planned session runs a program with steps. */
 export async function isProgramStepSession(userId: string, plannedSessionId: number): Promise<boolean> {
   return (await plannedProgramWorkouts(userId, plannedSessionId)) != null;
 }
