@@ -146,7 +146,7 @@ test("endurance, weekday cycle with a session today and one to confirm", async (
   ]);
 
   await page.goto("/");
-  await expect(page.getByTestId("endurance-today")).toBeVisible();
   await expect(page.getByTestId("did-you-do-it")).toBeVisible();
-  expect(await order(page)).toEqual(["home-title", "today-card", "endurance-today", "did-you-do-it", "week-strip"]);
+  // Today's one session starts from the Today card, so Endurance today has nothing else to list (home merge).
+  expect(await order(page)).toEqual(["home-title", "today-card", "did-you-do-it", "week-strip"]);
 });

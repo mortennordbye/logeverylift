@@ -1,5 +1,5 @@
 import { and, asc, eq, isNull } from "drizzle-orm";
-import { athleteThresholds, exercises, plannedSessions, programExercises, programSets, programs, trainingCycles, users, workoutSessions, workoutSets } from "../src/db/schema";
+import { athleteThresholds, exercises, plannedSessions, programExercises, programSets, programs, trainingCycleSlots, trainingCycles, users, workoutSessions, workoutSets } from "../src/db/schema";
 import { workoutToRows } from "../src/lib/utils/program-steps";
 import type { Workout } from "../src/lib/utils/workout-steps";
 import { e2eUser } from "./fixtures/env";
@@ -113,4 +113,22 @@ test("a program with steps: the workout screen starts the player, and each step 
   await page.goto("/week");
   const week = page.getByTestId("week-session").filter({ hasText: "Steps ride" });
   await expect(week).toContainText("done 00:1");
+});
+
+test("home: Start Today's Workout asks guided or by hand on a day with steps", async ({ page }, testInfo) => {
+  const { plannedId, programId } = await setup(testInfo.parallelIndex);
+  // Today's slot runs the program, so the Today card starts it.
+  const db = testDb();
+  const [ps] = await db.select().from(plannedSessions).where(eq(plannedSessions.id, plannedId));
+  const dow = ((new Date(`${today()}T12:00:00`).getDay() + 6) % 7) + 1;
+  await db.insert(trainingCycleSlots).values({ trainingCycleId: ps.cycleId, daySlot: 1, dayOfWeek: dow, programId });
+  await db.update(plannedSessions).set({ slotId: null }).where(eq(plannedSessions.id, plannedId));
+
+  await page.goto("/");
+  await page.getByTestId("today-card").getByRole("button", { name: /Start Today's Workout/ }).click();
+  const sheet = page.getByTestId("start-choice");
+  await expect(sheet.getByRole("link", { name: /^Log by hand/ })).toHaveAttribute("href", `/programs/${programId}/workout`);
+  await sheet.getByRole("link", { name: /^Guided/ }).click();
+  await expect(page).toHaveURL(new RegExp(`/planned/${plannedId}/play`));
+  await expect(page.getByTestId("player-ready")).toBeVisible();
 });

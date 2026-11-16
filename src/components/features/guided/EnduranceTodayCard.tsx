@@ -16,6 +16,8 @@ export type EnduranceTodayRow = {
   /** "45 min · 30 km", already in the user's units. */
   amount: string | null;
   done: boolean;
+  /** The program the session runs. */
+  programId?: number | null;
 };
 
 export function EnduranceTodayCard({ rows }: { rows: EnduranceTodayRow[] }) {

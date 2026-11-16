@@ -98,9 +98,9 @@ test("a guided ride from home: steps change on time, pause, skip, lap, results s
   // Playwright's clock: time still flows, and runFor jumps ahead with no sleep.
   await page.clock.install();
   await page.goto("/");
-  const row = page.getByTestId("endurance-today-row");
-  await expect(row).toContainText("Quick ride");
-  await row.getByRole("link", { name: "Start guided" }).click();
+  // Today's session starts from the Today card, which asks how (docs/plans/one-program-model.md, home merge).
+  await page.getByTestId("today-card").getByRole("button", { name: /Start Today's Workout/ }).click();
+  await page.getByTestId("start-choice").getByRole("link", { name: /^Guided/ }).click();
 
   await expect(page.getByTestId("player-ready")).toBeVisible();
   await page.getByRole("button", { name: "Start", exact: true }).click();
@@ -152,7 +152,8 @@ test("a guided ride from home: steps change on time, pause, skip, lap, results s
 test("a swim opens the pool view with the target per 100 m and the send-off clock", async ({ page }, testInfo) => {
   const { plannedId } = await setup(testInfo.parallelIndex, swim);
   await page.goto("/");
-  await page.getByTestId("endurance-today-row").getByRole("link", { name: "Pool view" }).click();
+  await page.getByTestId("today-card").getByRole("button", { name: /Start Today's Workout/ }).click();
+  await page.getByTestId("start-choice").getByRole("link", { name: /^Pool view/ }).click();
 
   await expect(page.getByTestId("pool-view")).toBeVisible();
   await expect(page.getByTestId("pool-block-count")).toHaveText("Block 1 of 2");

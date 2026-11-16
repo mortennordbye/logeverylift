@@ -163,6 +163,9 @@ test("E3: Endurance today below Week still starts the guided player", async ({ p
   // A structured session is a program with steps (docs/plans/one-program-model.md).
   const programId = await insertStepProgram(db, userId, workout);
   const [row] = await db.insert(plannedSessions).values({ userId, cycleId: cycle.id, date: dayStr(0), label: "Tempo", programId }).returning({ id: plannedSessions.id });
+  // A second session the same day: the Today card lists both, so Endurance today keeps its rows (home merge).
+  const easy = await insertStepProgram(db, userId, { v: 1, sport: "run", name: "Easy", steps: [{ type: "work", end: { type: "time", seconds: 1200 } }] });
+  await db.insert(plannedSessions).values({ userId, cycleId: cycle.id, date: dayStr(0), position: 2, label: "Easy", programId: easy });
 
   await page.goto("/");
   await expect(page.getByTestId("endurance-today")).toBeVisible();
@@ -182,7 +185,7 @@ test("E3: Endurance today below Week still starts the guided player", async ({ p
       .filter((id) => id === "week-strip" || id === "endurance-today"),
   );
   expect(order).toEqual(["week-strip", "endurance-today"]);
-  const go = page.getByTestId("endurance-today").getByRole("link", { name: "Start guided" });
+  const go = page.getByTestId("endurance-today-row").filter({ hasText: "Tempo" }).getByRole("link", { name: "Start guided" });
   await expect(go).toHaveAttribute("href", `/planned/${row.id}/play`);
   await go.click();
   await expect(page).toHaveURL(new RegExp(`/planned/${row.id}/play`));

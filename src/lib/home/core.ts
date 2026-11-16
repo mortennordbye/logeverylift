@@ -62,7 +62,7 @@ async function enduranceToday(userId: string, today: string): Promise<EnduranceT
         s.planned.durationSeconds ? `${Math.round(s.planned.durationSeconds / 60)} min` : null,
         s.planned.distanceMeters ? distanceLabel(s.planned.distanceMeters, sport, units) : null,
       ].filter(Boolean);
-      return { id: s.id, name: a.name, sport, summary: a.summary, amount: parts.length ? parts.join(" · ") : null, done: s.state === "done" };
+      return { id: s.id, name: a.name, sport, summary: a.summary, amount: parts.length ? parts.join(" · ") : null, done: s.state === "done", programId: s.programId };
     });
 }
 
@@ -172,7 +172,13 @@ export async function loadHomeCore(session: Session, settings: UserSettings, tod
     }),
   ]);
   const checkin = checkinResult.success ? checkinResult.data : null;
-  const endurance = enduranceRead.home;
+  // Today's single program with steps starts from the Today card, which asks
+  // guided or by hand; Endurance today then lists only the other sessions
+  // (docs/plans/one-program-model.md, home merge).
+  const todayStepRow =
+    todayProgram && (info?.todaySessions.length ?? 0) <= 1 ? (enduranceRead.home?.today.find((r) => r.programId === todayProgram.id) ?? null) : null;
+  const todayGuided = todayStepRow && !todayStepRow.done ? { href: `/planned/${todayStepRow.id}/${todayStepRow.sport === "swim" ? "pool" : "play"}`, kind: todayStepRow.sport === "swim" ? ("pool" as const) : ("guided" as const) } : null;
+  const endurance = enduranceRead.home && todayStepRow ? { ...enduranceRead.home, today: enduranceRead.home.today.filter((r) => r.id !== todayStepRow.id) } : enduranceRead.home;
 
   const stats = statsResult.success
     ? statsResult.data
@@ -243,6 +249,7 @@ export async function loadHomeCore(session: Session, settings: UserSettings, tod
     info,
     todayProgram,
     todayPlan,
+    todayGuided,
     stats,
     completedDates,
     todaySessions,
