@@ -196,6 +196,8 @@ type Props = {
   initialEditing?: boolean;
   /** Endurance step rows: kind, round and target per set id (docs/plans/one-program-model.md, 3). */
   stepLabels?: Record<number, StepLabel> | null;
+  /** Shown under the set list (the program editor's "Edit as steps" link). */
+  footer?: React.ReactNode;
 };
 
 export function WorkoutSetsClient({
@@ -227,6 +229,7 @@ export function WorkoutSetsClient({
   weightStack: initialWeightStack = null,
   initialEditing = false,
   stepLabels = null,
+  footer,
 }: Props) {
   const router = useRouter();
   const [isEditing, setIsEditing] = useState(initialEditing);
@@ -959,6 +962,7 @@ export function WorkoutSetsClient({
             Generate warm-ups
           </button>
         )}
+        {footer}
       </div>
 
 

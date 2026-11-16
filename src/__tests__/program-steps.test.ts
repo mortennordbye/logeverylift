@@ -174,3 +174,23 @@ describe("one step list: a program reads like the same workout", () => {
     expect(isHardSession([{ discipline: "run", sessionRole: "work", targetHeartRateZone: null }])).toBe(true);
   });
 });
+
+describe("plainSetsToWorkout", () => {
+  it("turns plain run sets into steps, with zones as HR targets", async () => {
+    const { plainSetsToWorkout } = await import("@/lib/utils/program-steps");
+    const w = plainSetsToWorkout(
+      [
+        { setNumber: 2, distanceMeters: 1000, durationSeconds: null, targetHeartRateZone: 4, sessionRole: "work" },
+        { setNumber: 1, distanceMeters: null, durationSeconds: 600, targetHeartRateZone: 1, sessionRole: null },
+        { setNumber: 3, distanceMeters: null, durationSeconds: null, targetHeartRateZone: null, sessionRole: null },
+      ],
+      { sport: "run", name: "Run" },
+    );
+    expect(w.steps).toEqual([
+      { type: "recovery", end: { type: "time", seconds: 600 }, target: { metric: "hr", anchor: "lthr", zone: 1 } },
+      { type: "work", end: { type: "distance", meters: 1000 }, target: { metric: "hr", anchor: "lthr", zone: 4 } },
+      { type: "work", end: { type: "lap" } },
+    ]);
+    expect(parseWorkout(w).ok).toBe(true);
+  });
+});

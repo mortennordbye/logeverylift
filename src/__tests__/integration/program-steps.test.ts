@@ -386,3 +386,48 @@ describe("logging a structured program session (step 3)", () => {
     });
   });
 });
+
+describe("saving steps from the editor (step 4)", () => {
+  it("keeps set ids and a weekly-sync anchor outside blocks, drops it inside, and refuses another sport", async () => {
+    const { saveExerciseSteps } = await import("@/lib/actions/program-steps");
+    const user = (await createUser({ enduranceEnabled: true })).id;
+    asUser(user);
+    const run = await createExercise({ name: `Run ${Math.random()}`, category: "cardio", discipline: "run" });
+    const { slots } = await createProgram(user, [
+      {
+        exerciseId: run.id,
+        sets: [
+          { targetReps: null, weightKg: null, distanceMeters: 8000, peakDistanceMeters: 16000, sessionRole: null },
+          { targetReps: null, weightKg: null, distanceMeters: 1000, peakDistanceMeters: 1000, sessionRole: "work", targetHeartRateZone: 4 },
+        ],
+      },
+    ]);
+    const pe = slots[0].programExerciseId;
+    const tree: Workout = {
+      v: 1,
+      sport: "run",
+      name: "Long",
+      steps: [
+        { type: "work", end: { type: "distance", meters: 8000 } },
+        { type: "repeat", count: 2, steps: [{ type: "work", end: { type: "distance", meters: 1000 } }] },
+      ],
+    };
+    const r = await saveExerciseSteps({ programExerciseId: pe, workout: tree });
+    expect(r.success, !r.success ? r.error : "").toBe(true);
+    const rows = await liveSets(pe);
+    expect(rows.map((x) => x.id).slice(0, 2)).toEqual(slots[0].setIds);
+    expect(rows.map((x) => [x.stepKind, x.blockId, x.peakDistanceMeters, x.targetHeartRateZone])).toEqual([
+      ["work", null, 16000, null],
+      ["work", 1, null, null],
+      ["work", 1, null, null],
+    ]);
+
+    const bike = await saveExerciseSteps({ programExerciseId: pe, workout: { ...tree, sport: "bike" } });
+    expect(bike.success).toBe(false);
+
+    const lift = await createExercise();
+    const { slots: liftSlots } = await createProgram(user, [{ exerciseId: lift.id, sets: [{}] }]);
+    const refused = await saveExerciseSteps({ programExerciseId: liftSlots[0].programExerciseId, workout: tree });
+    expect(refused.success).toBe(false);
+  });
+});
