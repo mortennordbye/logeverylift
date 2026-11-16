@@ -366,8 +366,8 @@ describe("logging a structured program session (step 3)", () => {
       expect(saved.workoutSessionId).toBe(logged.id);
       const [step2] = await db.select().from(workoutSets).where(and(eq(workoutSets.sessionId, logged.id), eq(workoutSets.programSetId, slot.setIds[1])));
       expect(step2).toMatchObject({ stepStatus: "done", isCompleted: true, distanceMeters: 1000, durationSeconds: 245 });
-      const [other] = await db.select().from(workoutSessions).where(eq(workoutSessions.id, empty.id));
-      expect(other.isCompleted).toBe(false);
+      // The empty one opened beside it goes, so the day holds one session.
+      expect(await db.select().from(workoutSessions).where(eq(workoutSessions.id, empty.id))).toEqual([]);
     });
   });
 

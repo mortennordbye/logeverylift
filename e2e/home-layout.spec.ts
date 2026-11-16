@@ -1,3 +1,4 @@
+import { insertStepProgram } from "./fixtures/step-program";
 import { and, eq, isNull } from "drizzle-orm";
 import type { Page } from "@playwright/test";
 import { plannedSessions, programs, trainingCycleSlots, trainingCycles, users, workoutSessions } from "../src/db/schema";
@@ -159,7 +160,9 @@ test("E3: Endurance today below Week still starts the guided player", async ({ p
     .values({ userId, name: "Run block", durationWeeks: 4, status: "active", startDate: dayStr(0), sessionsGeneratedAt: new Date() })
     .returning();
   const workout = { v: 1, sport: "run", name: "Tempo", steps: [{ type: "work", end: { type: "time", seconds: 600 } }] };
-  const [row] = await db.insert(plannedSessions).values({ userId, cycleId: cycle.id, date: dayStr(0), label: "Tempo", workout }).returning({ id: plannedSessions.id });
+  // A structured session is a program with steps (docs/plans/one-program-model.md).
+  const programId = await insertStepProgram(db, userId, workout);
+  const [row] = await db.insert(plannedSessions).values({ userId, cycleId: cycle.id, date: dayStr(0), label: "Tempo", programId }).returning({ id: plannedSessions.id });
 
   await page.goto("/");
   await expect(page.getByTestId("endurance-today")).toBeVisible();

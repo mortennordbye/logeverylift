@@ -32,7 +32,7 @@ import { compareStep, plannedRows, resultTotals, stepResultsSchema, workoutPlann
 import { localDateStr } from "@/lib/utils/user-date";
 import type { ThresholdValues, WorkoutStep } from "@/lib/utils/workout-steps";
 import { rebuildPRsFrom } from "@/lib/workout-records";
-import { and, asc, desc, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, ne, or, sql } from "drizzle-orm";
 
 export { programPlay, type ProgramPlay } from "@/lib/utils/program-steps";
 
@@ -228,6 +228,20 @@ export async function saveProgramStepResults(userId: string, input: SaveStepResu
           ...(input.notes && { notes: input.notes }),
         })
         .where(eq(workoutSessions.id, open.id));
+      // Other empty workouts of this program left open today (a fresh sign-in
+      // on the workout page can open a second one) go, so the day holds one session.
+      await tx
+        .delete(workoutSessions)
+        .where(
+          and(
+            eq(workoutSessions.userId, userId),
+            eq(workoutSessions.programId, planned.programId),
+            eq(workoutSessions.isCompleted, false),
+            eq(workoutSessions.date, open.date),
+            ne(workoutSessions.id, open.id),
+            sql`NOT EXISTS (SELECT 1 FROM workout_sets ws WHERE ws.session_id = ${workoutSessions.id})`,
+          ),
+        );
       // As completeWorkoutSession: a logged day replaces its auto row.
       await tx
         .delete(workoutSessions)
