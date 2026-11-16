@@ -178,10 +178,9 @@ export async function saveProgramStepResults(userId: string, input: SaveStepResu
   if (linked) {
     await db.transaction(async (tx) => {
       await upsertSets(tx, linked.id, sets);
-      await tx
-        .update(workoutSessions)
-        .set({ ...(input.clientKey && { clientKey: input.clientKey }), ...(input.pausedSeconds !== undefined && { pausedSeconds: input.pausedSeconds }) })
-        .where(eq(workoutSessions.id, linked.id));
+      // A later save (a hand edit of the results) may bring neither: the run's own details stay.
+      const details = { ...(input.clientKey && { clientKey: input.clientKey }), ...(input.pausedSeconds !== undefined && { pausedSeconds: input.pausedSeconds }) };
+      if (Object.keys(details).length) await tx.update(workoutSessions).set(details).where(eq(workoutSessions.id, linked.id));
       for (const exerciseId of [...new Set(sets.map((s) => s.exerciseId))].sort((a, b) => a - b)) await rebuildPRsFrom(tx, userId, exerciseId, linked.start);
     });
     return { workoutSessionId: linked.id, resultId: linked.id, created: "attached" };
