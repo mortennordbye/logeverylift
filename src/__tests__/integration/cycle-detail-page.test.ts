@@ -83,8 +83,6 @@ describe("cycle detail page", () => {
       ["2026-12-03", run],
     ]);
     expect(week.sessions[0]).toMatchObject({ status: "missed", exercises: "Squat", key: false, answer: null });
-    // A lifter gets no workouts library (D18).
-    expect(week.library).toBeUndefined();
   });
 
   it("a skipped session carries its skip reason, on a weekday block and a rotation", async () => {

@@ -1,21 +1,19 @@
 "use server";
 
 /**
- * Structured workouts, "Did you do it?" and sick periods from the app
+ * "Did you do it?" and sick periods from the app
  * (docs/plans/workouts-and-compliance.md, section 7). Endurance features
- * only (D18). Session changes (use a workout, link a brick, missed, move to
- * the suggested day) go through updatePlannedSession in planned-sessions.ts.
+ * only (D18). Session changes (link a brick, missed, move to the suggested
+ * day) go through updatePlannedSession in planned-sessions.ts.
  */
 
-import { restoreDeletedAthleteRow } from "@/lib/athlete-profile";
 import { enduranceEnabledFor } from "@/lib/endurance";
 import { addIllness, deleteIllness, updateIllness } from "@/lib/illness";
 import { DuplicateSession } from "@/lib/logged-sessions";
 import { PlanConflictError, PlanNotFoundError, PlanStateError, type PlanWriteContext } from "@/lib/plan-revisions";
 import { confirmDone } from "@/lib/session-answers";
 import { requireSession } from "@/lib/utils/session";
-import { confirmDoneSchema, illnessOpSchema, workoutOpSchema } from "@/lib/validators/planned-sessions";
-import { deleteWorkout, duplicateWorkout, updateWorkout } from "@/lib/workouts";
+import { confirmDoneSchema, illnessOpSchema } from "@/lib/validators/planned-sessions";
 import type { ActionResult } from "@/types/workout";
 import { revalidatePath } from "next/cache";
 
@@ -73,30 +71,5 @@ export async function manageIllness(data: unknown): Promise<ActionResult<{ id: n
     if (msg) return { success: false, error: msg };
     console.error("[manageIllness] failed", { op: parsed.data.op });
     return { success: false, error: "Failed to save the sick period" };
-  }
-}
-
-/** Duplicate, rename, delete or restore a library workout. The step editor waits for C6. */
-export async function manageWorkout(data: unknown): Promise<ActionResult<{ id: number }>> {
-  const auth = await requireSession();
-  const parsed = workoutOpSchema.safeParse(data);
-  if (!parsed.success) return { success: false, error: "Invalid input", fieldErrors: parsed.error.flatten().fieldErrors };
-  if (!(await enduranceEnabledFor(auth.user.id))) return { success: false, error: ENDURANCE_OFF };
-  const ctx = ctxFor(auth.user.id);
-  try {
-    const d = parsed.data;
-    let id = d.id;
-    if (d.op === "duplicate") id = (await duplicateWorkout(ctx, d.id)).id;
-    else if (d.op === "rename") await updateWorkout(ctx, d.id, { name: d.name });
-    else if (d.op === "delete") await deleteWorkout(ctx, d.id);
-    else if (!(await restoreDeletedAthleteRow(ctx, "workout", d.id))) return { success: false, error: "Nothing to restore" };
-    revalidatePath("/more/workouts");
-    revalidatePath("/more/calendar");
-    return { success: true, data: { id } };
-  } catch (e) {
-    const msg = known(e);
-    if (msg) return { success: false, error: msg };
-    console.error("[manageWorkout] failed", { op: parsed.data.op });
-    return { success: false, error: "Failed to change the workout" };
   }
 }

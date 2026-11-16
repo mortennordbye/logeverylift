@@ -35,7 +35,6 @@ import { addDaysStr } from "@/lib/utils/planned-sessions";
 import { mondayOf } from "@/lib/utils/session-compliance";
 import { PHASE_TYPE_LABELS, lengthFromDays, lengthLabel, runLengthDays, shortDay } from "@/lib/utils/seasons";
 import { requireSession } from "@/lib/utils/session";
-import { listWorkouts } from "@/lib/workouts";
 import type { ProgramWithExercises } from "@/types/workout";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -111,9 +110,9 @@ export default async function CycleDetailPage({ params }: { params: Promise<{ id
 
   // Endurance users see key sessions, bricks and "Did you do it?"; lifters get none of them (D18).
   const showEndurance = endurance && weekday && blockStart != null && lastDay != null && cycle.status !== "completed";
-  const [programsMap, [compliance, library], completedAt] = await Promise.all([
+  const [programsMap, compliance, completedAt] = await Promise.all([
     getProgramsWithExercises([...programIds]),
-    showEndurance ? Promise.all([sessionCompliance(userId, blockStart, lastDay, { cycleId: cycle.id }), listWorkouts(userId)]) : [[], []],
+    showEndurance ? sessionCompliance(userId, blockStart, lastDay, { cycleId: cycle.id }) : [],
     // A block another start ended early says the day it ended (J8-09).
     cycle.status === "completed" ? cycleCompletedAt(userId, cycle.id) : null,
   ]);
@@ -130,7 +129,7 @@ export default async function CycleDetailPage({ params }: { params: Promise<{ id
       id: p.id!,
       date: p.date,
       position: p.position,
-      name: p.label ?? c?.workout?.name ?? p.programName ?? "Session",
+      name: p.label ?? p.programName ?? "Session",
       label: p.label,
       notes: p.notes,
       summary: c?.workoutSummary ?? null,
@@ -281,7 +280,6 @@ export default async function CycleDetailPage({ params }: { params: Promise<{ id
             today={today}
             phaseLine={phaseLine}
             programs={programs}
-            library={showEndurance ? library.map((w) => ({ id: w.id, name: w.name, sport: w.sport, summary: w.summary })) : undefined}
             programsMap={programsMap}
             templateHref={templateHref}
             dayLabels={labels}

@@ -4,7 +4,7 @@ import { useToast } from "@/contexts/toast-context";
 import { authClient } from "@/lib/auth-client";
 import { DEMO_USER_EMAIL } from "@/lib/constants/demo";
 import { shareApp } from "@/lib/utils/share";
-import { Activity, BarChart2, CalendarDays, ChevronRight, ClipboardList, Clock, Droplets, FileText, Library, LogOut, MapPin, MessageSquare, Settings, Share2, Shield, Sparkles, UserCircle, Users } from "lucide-react";
+import { Activity, BarChart2, CalendarDays, ChevronRight, Clock, Droplets, FileText, Library, LogOut, MapPin, MessageSquare, Settings, Share2, Shield, Sparkles, UserCircle, Users } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -113,15 +113,7 @@ const garminItem: MoreItem = {
   description: "HRV, sleep, activities and more",
 };
 
-// At the end of Training, with the endurance switch on (docs/plans/workouts-and-compliance.md, 7).
-const workoutsItem: MoreItem = {
-  label: "Workouts",
-  href: "/more/workouts",
-  icon: ClipboardList,
-  description: "Your swim, bike and run workouts",
-};
-
-// After Workouts, with the endurance switch on (docs/plans/nutrition-and-race-day.md, 6).
+// At the end of Training, with the endurance switch on (docs/plans/nutrition-and-race-day.md, 6).
 const nutritionItem: MoreItem = {
   label: "Nutrition",
   href: "/more/nutrition",
@@ -219,7 +211,7 @@ export function MoreClient({
             items = [...items.slice(0, at), garminItem, ...items.slice(at)];
           }
           if (showAthlete && group.title === "Training") {
-            items = [...items, workoutsItem, nutritionItem];
+            items = [...items, nutritionItem];
           }
           return (
             <section key={group.title} className="pt-6">

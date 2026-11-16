@@ -61,7 +61,6 @@ const LABELS: [string, string][] = [
   ["/more/assistants", "Connection"],
   ["/more/admin", "Admin"],
   ["/more/nutrition", "Nutrition"],
-  ["/more/workouts", "Workouts"],
   ["/more/feedback", "Feedback"],
   ["/more/coach-memory", "Memory"],
   ["/more/ai-setup", "Your plan"],

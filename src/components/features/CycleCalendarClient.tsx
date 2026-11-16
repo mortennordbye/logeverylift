@@ -4,10 +4,7 @@ import { BottomSheet } from "@/components/ui/BottomSheet";
 import type { AnswerSession } from "@/components/features/answer-session";
 import { PlannedSessionActions } from "@/components/features/PlannedSessionActions";
 import { AnswerButtons, AnswerSheets, BandLabel } from "@/components/features/SessionAnswers";
-import type { LibraryRow } from "@/components/features/WorkoutsLibraryClient";
-import { updatePlannedSession } from "@/lib/actions/planned-sessions";
 import type { ComplianceBand, SessionState } from "@/lib/utils/session-compliance";
-import { callAction } from "@/lib/utils/stale-bundle";
 import type { PlannedView } from "@/lib/planned-sessions";
 import { buildRunSetSummary, buildSetSummary } from "@/lib/utils/format";
 import { useUserSettings } from "@/contexts/user-settings-context";
@@ -17,7 +14,6 @@ import { dateLabel } from "@/lib/utils/date-label";
 import type { ProgramWithExercises, TrainingCycleWithSlots } from "@/types/workout";
 import { ChevronLeftIcon, ChevronRight, ChevronRightIcon } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 // Full Tailwind class strings — must not be generated dynamically
@@ -47,8 +43,6 @@ type Props = {
   planned?: PlannedView[];
   /** By planned session id; only with the endurance switch on. */
   compliance?: Record<number, CalendarCompliance>;
-  /** The workouts library; only with the endurance switch on. */
-  library?: LibraryRow[];
   /**
    * Heavy leg work 1-2 days before a key bike or run, by planned session id
    * (D3, docs/plans/limits-strength-readiness.md, 4); only with the endurance
@@ -190,12 +184,8 @@ function formatSheetDate(dateStr: string): string {
   return `${WEEKDAY_NAMES[date.getDay()]}, ${MONTH_NAMES[m - 1]} ${d}, ${y}`;
 }
 
-export function CycleCalendarClient({ cycles, completedDates, programsMap, planned = [], compliance, library, heavyLegs }: Props) {
-  const router = useRouter();
+export function CycleCalendarClient({ cycles, completedDates, programsMap, planned = [], compliance, heavyLegs }: Props) {
   const [answering, setAnswering] = useState<AnswerSession | null>(null);
-  const [picking, setPicking] = useState<CalendarCompliance | null>(null);
-  const [pickError, setPickError] = useState<string | null>(null);
-  const [pickPending, setPickPending] = useState(false);
   const plannedByDate = new Map<string, PlannedView[]>();
   for (const p of planned) plannedByDate.set(p.date, [...(plannedByDate.get(p.date) ?? []), p]);
   // Today in the user's zone, the same day the server's cycle views use.
@@ -232,20 +222,6 @@ export function CycleCalendarClient({ cycles, completedDates, programsMap, plann
   const sheetCompleted = selectedDate ? completedSet.has(selectedDate) : false;
   const sheetProgram = sheetInfo?.programId ? programsMap[sheetInfo.programId] : null;
   const sheetColors = sheetInfo?.cycleIndex != null ? colorMap.get(sheetInfo.cycleIndex) : null;
-
-  async function pickWorkout(sessionId: number, workoutId: number) {
-    if (pickPending) return;
-    setPickPending(true);
-    setPickError(null);
-    const r = await callAction(updatePlannedSession({ op: "set_workout", id: sessionId, workoutId }));
-    setPickPending(false);
-    if (!r.success) {
-      setPickError(r.error);
-      return;
-    }
-    setPicking(null);
-    router.refresh();
-  }
 
   return (
     <div className="flex-1 overflow-hidden px-4 pb-2 flex flex-col">
@@ -453,19 +429,6 @@ export function CycleCalendarClient({ cycles, completedDates, programsMap, plann
                                 onAnswered={() => {}}
                               />
                             )}
-                            {c.state === "planned" && library && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setSelectedDate(null);
-                                  setPickError(null);
-                                  setPicking(c);
-                                }}
-                                className="min-h-[44px] rounded-xl border border-border px-4 text-sm font-medium active:opacity-70"
-                              >
-                                Use a workout
-                              </button>
-                            )}
                           </div>
                         )}
                         {p.id != null && sheetInfo.lastDay && (
@@ -536,34 +499,6 @@ export function CycleCalendarClient({ cycles, completedDates, programsMap, plann
       </BottomSheet>
 
       {compliance && <AnswerSheets session={answering} today={todayStr} onClose={() => setAnswering(null)} onAnswered={() => {}} />}
-
-      {/* "Use a workout": copy a library workout onto the session */}
-      <BottomSheet open={picking !== null} onClose={() => setPicking(null)} blur>
-        {picking && library && (
-          <div className="bg-background rounded-t-2xl px-4 pt-5 pb-8 space-y-2 max-h-[85dvh] overflow-y-auto" data-testid="workout-picker">
-            <h2 className="text-lg font-semibold">Use a workout</h2>
-            <p className="text-sm text-muted-foreground">For {picking.name} on {formatSheetDate(picking.date)}</p>
-            {library.length === 0 && <p className="text-sm text-muted-foreground">No workouts yet. Ask your assistant to create workouts.</p>}
-            {library.map((w) => (
-              <button
-                key={w.id}
-                type="button"
-                disabled={pickPending}
-                onClick={() => pickWorkout(picking.id, w.id)}
-                className="w-full rounded-xl bg-card px-4 py-3 min-h-[44px] text-left active:opacity-60 disabled:opacity-50"
-              >
-                <span className="block text-sm font-medium">{w.name}</span>
-                <span className="block text-xs text-muted-foreground">{w.summary}</span>
-              </button>
-            ))}
-            {pickError && (
-              <p role="alert" className="text-sm text-destructive">
-                {pickError}
-              </p>
-            )}
-          </div>
-        )}
-      </BottomSheet>
     </div>
   );
 }

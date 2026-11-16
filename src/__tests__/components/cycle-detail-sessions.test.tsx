@@ -302,35 +302,18 @@ describe("weekday week", () => {
     expect(refresh).not.toHaveBeenCalled();
   });
 
-  it("offers Use a workout only with the library (endurance) and plans a skipped session again", async () => {
-    const { unmount } = renderWeek();
-    fireEvent.click(screen.getByRole("button", { name: /^Thu 19 Nov: Bike tempo/ }));
-    expect(within(screen.getByTestId("session-sheet")).queryByRole("button", { name: "Use a workout" })).toBeNull();
-    unmount();
-
+  it("plans a skipped session again", async () => {
     renderWeek({
-      library: [{ id: 40, name: "Tempo 2x20", sport: "bike", summary: "60 min" }],
       sessions: [...sessions.slice(0, 2), { ...sessions[2], status: "skipped" }],
     });
     fireEvent.click(screen.getByRole("button", { name: /^Thu 19 Nov: Bike tempo/ }));
     const sheet = screen.getByTestId("session-sheet");
-    expect(within(sheet).queryByRole("button", { name: "Use a workout" })).toBeNull();
     await act(async () => {
       fireEvent.click(within(sheet).getByRole("button", { name: "Plan again" }));
     });
     expect(updatePlannedSession).toHaveBeenCalledWith({ op: "unskip", id: 3 });
   });
 
-  it("uses a library workout for one day (endurance)", async () => {
-    renderWeek({ library: [{ id: 40, name: "Tempo 2x20", sport: "bike", summary: "60 min" }] });
-    fireEvent.click(screen.getByRole("button", { name: /^Thu 19 Nov: Bike tempo/ }));
-    const sheet = screen.getByTestId("session-sheet");
-    fireEvent.click(within(sheet).getByRole("button", { name: "Use a workout" }));
-    await act(async () => {
-      fireEvent.click(within(sheet).getByRole("button", { name: /Tempo 2x20/ }));
-    });
-    expect(updatePlannedSession).toHaveBeenCalledWith({ op: "set_workout", id: 3, workoutId: 40 });
-  });
 });
 
 describe("Did you do it? from a past row", () => {
