@@ -39,6 +39,8 @@ import type { PlanWriteSession, Tx } from "@/lib/plan-revisions";
 import { userToday } from "@/lib/user-settings";
 import { addDays, toDateStr } from "@/lib/utils/cycle-position";
 import { cycleLoad, scaledDistance, scaledDuration } from "@/lib/utils/periodization";
+import type { ThresholdValues } from "@/lib/utils/workout-steps";
+import { programWorkouts, type ProgramWorkout } from "@/lib/program-workouts";
 import {
   LIMIT_RULES,
   LONG_RUN_WINDOW_DAYS,
@@ -368,25 +370,35 @@ export async function programRuns(
       distanceMeters: programSets.distanceMeters,
       peakDuration: programSets.peakDurationSeconds,
       peakDistance: programSets.peakDistanceMeters,
+      stepKind: programSets.stepKind,
     })
     .from(programs)
     .innerJoin(programExercises, eq(programExercises.programId, programs.id))
     .innerJoin(programSets, eq(programSets.programExerciseId, programExercises.id))
     .innerJoin(exercises, eq(exercises.id, programExercises.exerciseId))
     .where(and(inArray(programs.id, programIds), livePrograms, liveProgramExercises, liveProgramSets));
+  // A structured run counts as its step tree's estimate, as a workout's did
+  // (docs/plans/one-program-model.md, 2); its rows are not summed again.
+  const stepped = rows.some((r) => r.stepKind != null) ? await programWorkouts(ex, programIds) : new Map<number, ProgramWorkout[]>();
+  const { estimateWorkout } = await import("@/lib/utils/workout-steps");
   for (const id of programIds) {
-    const sets = rows.filter((r) => r.programId === id);
-    const label = sets[0]?.name ? `"${sets[0].name}"` : `Program ${id}`;
-    out.set(id, {
-      label: `Run in ${label}`,
-      run: plannedRun(
-        sets.map((s) => ({
-          discipline: s.discipline,
-          durationSeconds: share != null && s.peakDuration != null ? scaledDuration(s.peakDuration, share) : s.durationSeconds,
-          distanceMeters: share != null && s.peakDistance != null ? scaledDistance(s.peakDistance, share) : s.distanceMeters,
-        })),
-      ),
-    });
+    const sets = rows.filter((r) => r.programId === id && r.stepKind == null);
+    const name = rows.find((r) => r.programId === id)?.name;
+    const label = name ? `"${name}"` : `Program ${id}`;
+    const run = plannedRun(
+      sets.map((s) => ({
+        discipline: s.discipline,
+        durationSeconds: share != null && s.peakDuration != null ? scaledDuration(s.peakDuration, share) : s.durationSeconds,
+        distanceMeters: share != null && s.peakDistance != null ? scaledDistance(s.peakDistance, share) : s.distanceMeters,
+      })),
+    );
+    for (const p of stepped.get(id) ?? []) {
+      if (p.sport !== "run") continue;
+      const est = estimateWorkout(p.workout);
+      run.durationS += est.durationSeconds;
+      run.distanceM += est.distanceMeters;
+    }
+    out.set(id, { label: `Run in ${label}`, run });
   }
   return out;
 }
@@ -475,6 +487,9 @@ export async function cycleWeekSessions(ex: Executor, cycleId: number): Promise<
           discipline: exercises.discipline,
           sessionRole: programSets.sessionRole,
           targetHeartRateZone: programSets.targetHeartRateZone,
+          stepKind: programSets.stepKind,
+          blockId: programSets.blockId,
+          targets: programSets.targets,
         })
         .from(programs)
         .innerJoin(programExercises, eq(programExercises.programId, programs.id))
@@ -490,13 +505,13 @@ export async function cycleWeekSessions(ex: Executor, cycleId: number): Promise<
       hard: s.programId == null ? hardWorkout!(s.workout) : isHardSession(
         sets
           .filter((x) => x.programId === s.programId)
-          .map((x) => ({ discipline: x.discipline, sessionRole: x.sessionRole === "work" ? "work" : null, targetHeartRateZone: x.targetHeartRateZone })),
+          .map((x) => ({ discipline: x.discipline, sessionRole: x.sessionRole === "work" ? "work" : null, targetHeartRateZone: x.targetHeartRateZone, stepKind: x.stepKind, blockId: x.blockId, targets: x.targets })),
       ),
     }));
 }
 
 /** Whether each program is a hard session (an interval endurance set), by id. */
-export async function hardPrograms(ex: Executor, programIds: number[]): Promise<Map<number, boolean>> {
+export async function hardPrograms(ex: Executor, programIds: number[], thresholds: ThresholdValues = {}): Promise<Map<number, boolean>> {
   const ids = [...new Set(programIds)];
   const sets = ids.length
     ? await ex
@@ -505,6 +520,9 @@ export async function hardPrograms(ex: Executor, programIds: number[]): Promise<
           discipline: exercises.discipline,
           sessionRole: programSets.sessionRole,
           targetHeartRateZone: programSets.targetHeartRateZone,
+          stepKind: programSets.stepKind,
+          blockId: programSets.blockId,
+          targets: programSets.targets,
         })
         .from(programs)
         .innerJoin(programExercises, eq(programExercises.programId, programs.id))
@@ -518,7 +536,8 @@ export async function hardPrograms(ex: Executor, programIds: number[]): Promise<
       isHardSession(
         sets
           .filter((x) => x.programId === id)
-          .map((x) => ({ discipline: x.discipline, sessionRole: x.sessionRole === "work" ? "work" : null, targetHeartRateZone: x.targetHeartRateZone })),
+          .map((x) => ({ discipline: x.discipline, sessionRole: x.sessionRole === "work" ? "work" : null, targetHeartRateZone: x.targetHeartRateZone, stepKind: x.stepKind, blockId: x.blockId, targets: x.targets })),
+        thresholds,
       ),
     ]),
   );
@@ -640,6 +659,10 @@ async function placeRows(ex: Executor, userId: string, rows: PlaceRow[], fixedSh
           repRangeMax: programSets.repRangeMax,
           sessionRole: programSets.sessionRole,
           targetHeartRateZone: programSets.targetHeartRateZone,
+          stepKind: programSets.stepKind,
+          blockId: programSets.blockId,
+          targets: programSets.targets,
+          endsOnLap: programSets.endsOnLap,
           durationSeconds: programSets.durationSeconds,
           distanceMeters: programSets.distanceMeters,
           peakDuration: programSets.peakDurationSeconds,
@@ -704,7 +727,8 @@ async function placeRows(ex: Executor, userId: string, rows: PlaceRow[], fixedSh
       label: r.label ?? mine[0]?.name ?? "Session",
       sport,
       hard: isHardSession(
-        mine.map((s) => ({ discipline: s.discipline, sessionRole: s.sessionRole === "work" ? "work" : null, targetHeartRateZone: s.targetHeartRateZone })),
+        mine.map((s) => ({ discipline: s.discipline, sessionRole: s.sessionRole === "work" ? "work" : null, targetHeartRateZone: s.targetHeartRateZone, stepKind: s.stepKind, blockId: s.blockId, targets: s.targets })),
+        thresholds,
       ),
       // A distance-only run or swim gets its time from the threshold speed (programSteps),
       // so a long run planned by distance can read as key (review nit).

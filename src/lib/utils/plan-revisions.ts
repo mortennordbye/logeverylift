@@ -668,7 +668,11 @@ export function syncOwnedSetFields(set: Row): string[] {
   if (peakDistance) out.push("distanceMeters");
   if (peakDuration) out.push("durationSeconds");
   if (set.sessionRole === "work" && (peakDistance || peakDuration)) {
-    out.push("targetHeartRateZone", "restTimeSeconds");
+    // On a step with a zone target the sync writes the target instead of the
+    // old zone field (docs/plans/one-program-model.md, decision 4).
+    const targets = set.stepKind != null && Array.isArray(set.targets) ? (set.targets as { zone?: number }[]) : null;
+    if (targets?.length) out.push(...(targets[0].zone !== undefined ? ["targets"] : []), "restTimeSeconds");
+    else out.push("targetHeartRateZone", "restTimeSeconds");
   }
   return out;
 }

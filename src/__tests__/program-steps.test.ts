@@ -134,3 +134,43 @@ describe("program_sets columns", () => {
     expect(Object.keys(getTableColumns(programSets)).sort()).toEqual([...before, ...STEP_FIELD_KEYS].sort());
   });
 });
+
+describe("one step list: a program reads like the same workout", () => {
+  it("gives the same planned load, time and hard flag as the tree", async () => {
+    const { programSteps, isHardSession } = await import("@/lib/utils/training-limits");
+    const { plannedLoad, DEFAULT_IF } = await import("@/lib/utils/training-load");
+    const { workoutPlannedLoad, loadAnchors } = await import("@/lib/utils/step-results");
+    const thresholds = { run_threshold_pace: 4.2, ftp: 260, swim_css: 1.4 };
+    const bike: Workout = {
+      v: 1,
+      sport: "bike",
+      name: "Sweet spot",
+      steps: [
+        { type: "warmup", end: { type: "time", seconds: 900 }, target: { metric: "power", anchor: "ftp", low: 55, high: 70 } },
+        { type: "repeat", count: 3, steps: [{ type: "work", end: { type: "time", seconds: 600 }, target: { metric: "power", anchor: "ftp", low: 88, high: 93 }, target2: { metric: "hr", anchor: "lthr", low: 80, high: 95 } }, { type: "recovery", end: { type: "time", seconds: 300 }, target: { metric: "power", anchor: "ftp", zone: 1 } }] },
+        { type: "cooldown", end: { type: "time", seconds: 600 } },
+      ],
+    };
+    const steady: Workout = { v: 1, sport: "run", name: "Easy", steps: [{ type: "work", end: { type: "time", seconds: 3600 }, target: { metric: "hr", anchor: "lthr", zone: 2 } }] };
+    const tempo: Workout = { v: 1, sport: "run", name: "Tempo", steps: [{ type: "work", end: { type: "distance", meters: 8000 }, target: { metric: "pace", anchor: "threshold_pace", low: 95, high: 100 } }] };
+    const swimSet: Workout = { v: 1, sport: "swim", name: "CSS", poolLengthM: 25, steps: [{ type: "repeat", count: 8, steps: [{ type: "work", end: { type: "distance", meters: 100 }, target: { metric: "pace", anchor: "css", offsetLow: 1, offsetHigh: 3 } }, { type: "rest", end: { type: "time", seconds: 15 } }] }] };
+
+    for (const w of [intervals, bike, steady, tempo, swimSet]) {
+      const sets = workoutToRows(w).map((r) => ({ ...r, discipline: w.sport, sessionRole: null, targetHeartRateZone: null }));
+      const steps = programSteps(sets, loadAnchors(thresholds), DEFAULT_IF);
+      expect(plannedLoad(w.sport, steps, loadAnchors(thresholds)), w.name).toEqual(workoutPlannedLoad(w, thresholds));
+      const est = estimateWorkout(w, thresholds);
+      const seconds = steps.every((s) => s.seconds != null) ? steps.reduce((a, s) => a + s.seconds!, 0) : null;
+      if (!est.durationComplete) expect(seconds, w.name).toBeNull();
+      // Each step is rounded to whole seconds; the tree rounds its total once.
+      else expect(Math.abs(seconds! - est.durationSeconds), w.name).toBeLessThanOrEqual(steps.length);
+      expect(isHardSession(sets, thresholds), w.name).toBe(isHardWorkout(w, thresholds));
+    }
+  });
+
+  it("a steady work step is not hard, though the old rule made every work set hard", async () => {
+    const { isHardSession } = await import("@/lib/utils/training-limits");
+    expect(isHardSession([{ discipline: "run", sessionRole: "work", targetHeartRateZone: null, stepKind: "work", blockId: null, targets: [{ metric: "hr", anchor: "lthr", zone: 2 }] }])).toBe(false);
+    expect(isHardSession([{ discipline: "run", sessionRole: "work", targetHeartRateZone: null }])).toBe(true);
+  });
+});

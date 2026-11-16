@@ -66,6 +66,7 @@ export default async function WeekPage({ searchParams }: { searchParams: Promise
       t.plannedS += s.planned.durationSeconds ?? 0;
       t.plannedM += s.planned.distanceMeters ?? 0;
       if (s.workout) t.plannedLoad += workoutPlannedLoad(s.workout, anchors).load;
+      for (const w of s.programWorkouts) t.plannedLoad += workoutPlannedLoad(w, anchors).load;
     }
   }
   for (const l of loads) {

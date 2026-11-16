@@ -105,7 +105,9 @@ the old path is removed.
 1. **Data.** Columns, migration, validators, whole-exercise check, every copy path.
    Check: no strength test changes; a test fails on a column missing from a copy path; an
    integration test writes and reads a block, a target and a lap step.
-2. **One step list.** Extend `programSteps`; all readers in section 2 use it.
+2. **One step list.** Extend `programSteps`; the planned readers in section 2 use it (estimate,
+   planned load, hard flag, limits, long-run cap, compliance, weekly sync). The readers of logged
+   steps (PRs, volume, swim moving time) move to step 3, where logged steps are written.
    Check: the same session written as a workout and as program rows gives the same estimate,
    load and hard flag.
 3. **Screens.** Session detail, player, pool view, results on program sessions; totals, blocks

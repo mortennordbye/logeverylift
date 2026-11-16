@@ -451,12 +451,16 @@ export type WorkoutEstimate = {
   distanceComplete: boolean;
 };
 
-/** Mid speed of a pace target, when it resolves. */
-function targetSpeed(s: WorkoutStep, sport: WorkoutSport, thresholds: ThresholdValues): number | null {
-  if (!s.target || s.target.metric !== "pace") return null;
-  const r = resolveTarget(s.target, sport, thresholds);
+/** Mid speed (m/s) of a pace target, when it resolves; null for any other target. */
+export function paceTargetSpeed(t: WorkoutTarget | undefined, sport: WorkoutSport, thresholds: ThresholdValues): number | null {
+  if (!t || t.metric !== "pace") return null;
+  const r = resolveTarget(t, sport, thresholds);
   if (r.low === null || r.high === null) return r.low ?? r.high;
   return (r.low + r.high) / 2;
+}
+
+function targetSpeed(s: WorkoutStep, sport: WorkoutSport, thresholds: ThresholdValues): number | null {
+  return paceTargetSpeed(s.target, sport, thresholds);
 }
 
 /** Total time and distance, from the steps and, where a pace target resolves, its speed. */
@@ -536,7 +540,7 @@ export function describeWorkout(w: Workout, units: Units = DEFAULT_UNITS): strin
 // ── Hard workout (next to isHardSession in src/lib/utils/training-limits.ts) ─
 
 /** Whether one target's low end is in zone 4 or above. Pace bounds are inference: the research table has no pace zones. */
-function hardTarget(t: WorkoutTarget, sport: WorkoutSport, thresholds: ThresholdValues): boolean {
+export function hardTarget(t: WorkoutTarget, sport: WorkoutSport, thresholds: ThresholdValues): boolean {
   if (t.zone !== undefined) return t.zone >= 4;
   // The slow end, as for percent targets: a larger offset is slower (review 11).
   if (t.offsetHigh !== undefined) return t.offsetHigh <= HARD_FROM.cssOffset;

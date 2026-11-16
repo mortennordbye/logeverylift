@@ -13,7 +13,7 @@ import { addDaysStr, dowOf, mondayOf } from "@/lib/utils/planned-sessions";
 import { effectivePriorities } from "@/lib/utils/session-compliance";
 import { shortDay } from "@/lib/utils/seasons";
 import { STRENGTH_GOAL_LABEL, strengthDefault, type StrengthPhase } from "@/lib/utils/strength-goal";
-import type { Workout } from "@/lib/utils/workout-steps";
+import { hardTarget, paceTargetSpeed, type ThresholdValues, type Workout, type WorkoutTarget } from "@/lib/utils/workout-steps";
 
 export const LIMIT_RULES = [
   "long_run_cap",
@@ -162,13 +162,30 @@ export type IntensitySet = {
   discipline: "swim" | "bike" | "run" | null;
   sessionRole: "work" | null;
   targetHeartRateZone: number | null;
+  // Endurance steps (docs/plans/one-program-model.md, 2). Absent on callers
+  // that read only the older fields.
+  stepKind?: string | null;
+  blockId?: number | null;
+  targets?: unknown;
 };
 
-/** A session is hard when an endurance set in it is an interval rep or targets zone 4-5. */
-export function isHardSession(sets: IntensitySet[]): boolean {
-  return sets.some(
-    (s) => s.discipline != null && (s.sessionRole === "work" || (s.targetHeartRateZone != null && s.targetHeartRateZone >= 4)),
-  );
+/**
+ * A session is hard when an endurance set in it is an interval rep or targets
+ * zone 4-5. A step (a set with a step kind) follows isHardWorkout instead: a
+ * work step inside a repeat block, or a work step whose main target is zone 4
+ * or above. Its sessionRole only says the weekly sync owns it.
+ */
+export function isHardSession(sets: IntensitySet[], thresholds: ThresholdValues = {}): boolean {
+  return sets.some((s) => {
+    if (s.discipline == null) return false;
+    if (s.stepKind != null) {
+      if (s.stepKind !== "work") return false;
+      if (s.blockId != null) return true;
+      const main = Array.isArray(s.targets) ? (s.targets[0] as WorkoutTarget | undefined) : undefined;
+      return main !== undefined && hardTarget(main, s.discipline, thresholds);
+    }
+    return s.sessionRole === "work" || (s.targetHeartRateZone != null && s.targetHeartRateZone >= 4);
+  });
 }
 
 /** One planned session in a weekday cycle's week; a program on two days is two sessions. */
@@ -780,16 +797,47 @@ export type LoadSet = {
   targetHeartRateZone: number | null;
   durationSeconds: number | null;
   distanceMeters: number | null;
+  // Endurance steps (docs/plans/one-program-model.md, 2).
+  stepKind?: "warmup" | "work" | "recovery" | "cooldown" | "rest" | null;
+  targets?: unknown;
+  endsOnLap?: boolean;
 };
+
+/**
+ * A step row as a planned step: its own kind and main target. A distance step
+ * gets its time from its pace target only, as estimateWorkout does, so a
+ * program and the same steps as a workout give the same load; a lap step has
+ * no time.
+ */
+function stepOf(
+  s: LoadSet,
+  sport: "swim" | "bike" | "run",
+  anchors: { runThresholdSpeed?: number | null; swimCss?: number | null },
+): { type: "warmup" | "work" | "recovery" | "cooldown" | "rest"; seconds: number | null; target?: WorkoutTarget } {
+  const type = s.stepKind!;
+  const target = Array.isArray(s.targets) ? (s.targets[0] as WorkoutTarget | undefined) : undefined;
+  let seconds = !s.endsOnLap && s.durationSeconds && s.durationSeconds > 0 ? s.durationSeconds : null;
+  if (seconds == null && !s.endsOnLap && s.distanceMeters && s.distanceMeters > 0) {
+    const thresholds: ThresholdValues = {
+      ...(anchors.runThresholdSpeed ? { run_threshold_pace: anchors.runThresholdSpeed } : {}),
+      ...(anchors.swimCss ? { swim_css: anchors.swimCss } : {}),
+    };
+    const speed = paceTargetSpeed(target, sport, thresholds);
+    // Whole seconds, as estimateWorkout rounds each step.
+    if (speed && speed > 0) seconds = Math.round(s.distanceMeters / speed);
+  }
+  return { type, seconds, ...(target ? { target } : {}) };
+}
 
 export function programSteps(
   sets: LoadSet[],
   anchors: { runThresholdSpeed?: number | null; swimCss?: number | null },
-  defaultIf: Record<"warmup" | "work" | "recovery", number>,
-): { type: "warmup" | "work" | "recovery"; seconds: number | null }[] {
+  defaultIf: Record<"warmup" | "work" | "recovery" | "cooldown" | "rest", number>,
+): { type: "warmup" | "work" | "recovery" | "cooldown" | "rest"; seconds: number | null; target?: WorkoutTarget }[] {
   return sets
     .filter((s) => s.discipline != null)
     .map((s) => {
+      if (s.stepKind != null) return stepOf(s, s.discipline!, anchors);
       const type = s.sessionRole === "work" || (s.targetHeartRateZone ?? 0) >= 4 ? "work" : s.targetHeartRateZone === 1 ? "recovery" : "warmup";
       let seconds = s.durationSeconds && s.durationSeconds > 0 ? s.durationSeconds : null;
       if (seconds == null && s.distanceMeters && s.distanceMeters > 0) {

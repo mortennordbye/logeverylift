@@ -311,6 +311,8 @@ export async function syncPeriodizedTargets(
         peakDistance: programSets.peakDistanceMeters,
         peakDuration: programSets.peakDurationSeconds,
         sessionRole: programSets.sessionRole,
+        stepKind: programSets.stepKind,
+        targets: programSets.targets,
         programId: programExercises.programId,
       })
       .from(programSets)
@@ -334,14 +336,23 @@ export async function syncPeriodizedTargets(
             durationSeconds?: number;
             targetHeartRateZone?: number;
             restTimeSeconds?: number;
+            targets?: unknown;
           } = {};
           if (ps.peakDistance != null) update.distanceMeters = scaledDistance(ps.peakDistance, effective);
           if (ps.peakDuration != null) update.durationSeconds = scaledDuration(ps.peakDuration, effective);
           // Phase-aware: the quality session's hard reps swap zone/recovery by phase.
           // A transition phase leaves them alone (owner decision 2).
           if (ps.sessionRole === "work" && phase !== "transition") {
-            update.targetHeartRateZone = recipe.zone;
             update.restTimeSeconds = recipe.restSeconds;
+            // A step's own target wins over the old zone field (decision 3):
+            // a zone target takes the phase's zone, a percent or pace target
+            // was set on purpose and stays (docs/plans/one-program-model.md, decision 4).
+            const targets = ps.stepKind != null && Array.isArray(ps.targets) ? (ps.targets as { zone?: number }[]) : null;
+            if (targets?.length) {
+              if (targets[0].zone !== undefined) update.targets = [{ ...targets[0], zone: recipe.zone }, ...targets.slice(1)];
+            } else {
+              update.targetHeartRateZone = recipe.zone;
+            }
           }
           await tx.update(programSets).set(update).where(eq(programSets.id, ps.id));
       }

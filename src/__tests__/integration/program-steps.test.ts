@@ -204,3 +204,54 @@ describe("copy paths keep the steps", () => {
     expect((await liveSets(slot.id)).map(pick)).toEqual((await liveSets(pe.id)).map(pick));
   });
 });
+
+describe("a structured program session in compliance (step 2)", () => {
+  it("plans it from its steps: time, distance, hard flag and summary", async () => {
+    const { trainingCycles, trainingCycleSlots } = await import("@/db/schema");
+    const { getActiveCycleForUser } = await import("@/lib/actions/training-cycles");
+    const { sessionCompliance } = await import("@/lib/session-compliance");
+    const { workoutToRows } = await import("@/lib/utils/program-steps");
+    const { estimateWorkout } = await import("@/lib/utils/workout-steps");
+    const { vi } = await import("vitest");
+
+    const user = (await createUser({ timeZone: "UTC", enduranceEnabled: true })).id;
+    asUser(user);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-02T08:00:00Z"));
+    try {
+      const run = await createExercise({ name: `Run ${Math.random()}`, category: "cardio", discipline: "run" });
+      const timed: Workout = {
+        v: 1,
+        sport: "run",
+        name: "Threshold",
+        steps: [
+          { type: "warmup", end: { type: "time", seconds: 600 } },
+          { type: "repeat", count: 4, steps: [{ type: "work", end: { type: "time", seconds: 240 }, target: { metric: "hr", anchor: "lthr", zone: 4 } }, { type: "recovery", end: { type: "time", seconds: 120 } }] },
+        ],
+      };
+      const steady: Workout = { v: 1, sport: "run", name: "Easy", steps: [{ type: "work", end: { type: "time", seconds: 2700 }, target: { metric: "hr", anchor: "lthr", zone: 2 } }] };
+      const asSets = (w: Workout) => workoutToRows(w).map((r) => ({ ...r, targetReps: null, weightKg: null, restTimeSeconds: 0 }));
+      const hardP = await createProgram(user, [{ exerciseId: run.id, sets: asSets(timed) }]);
+      const easyP = await createProgram(user, [{ exerciseId: run.id, sets: asSets(steady) }]);
+
+      const [c] = await db.insert(trainingCycles).values({ userId: user, name: "Block", durationWeeks: 2, status: "active", startDate: "2026-11-02" }).returning();
+      await db.insert(trainingCycleSlots).values([
+        { trainingCycleId: c.id, daySlot: 1, dayOfWeek: 2, programId: hardP.program.id },
+        { trainingCycleId: c.id, daySlot: 1, dayOfWeek: 4, programId: easyP.program.id },
+      ]);
+      await getActiveCycleForUser();
+      const week = await sessionCompliance(user, "2026-11-02", "2026-11-08", { cycleId: c.id });
+      const hardS = week.find((s) => s.programId === hardP.program.id)!;
+      const easyS = week.find((s) => s.programId === easyP.program.id)!;
+
+      expect(hardS.planned.durationSeconds).toBe(estimateWorkout(timed).durationSeconds);
+      expect(hardS.hard).toBe(true);
+      expect(hardS.programWorkouts).toHaveLength(1);
+      expect(hardS.workoutSummary).toMatch(/^10 min warm-up · 4 × \(4 min Z4 HR, 2 min easy\)/);
+      expect(easyS.planned.durationSeconds).toBe(2700);
+      expect(easyS.hard).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
