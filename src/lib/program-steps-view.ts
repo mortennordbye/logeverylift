@@ -18,7 +18,7 @@ import { toDateStr } from "@/lib/utils/cycle-position";
 import { formatSessionLength, loadText } from "@/lib/utils/format";
 import { workoutPlannedLoad } from "@/lib/utils/step-results";
 import { describeWorkout, estimateWorkout, resolveTarget, type WorkoutTarget } from "@/lib/utils/workout-steps";
-import { and, asc, eq, isNotNull } from "drizzle-orm";
+import { and, asc, eq, isNotNull, sql } from "drizzle-orm";
 
 export type ProgramGuided = { totals: string; href: string | null };
 
@@ -43,10 +43,12 @@ export async function programStepsView(userId: string, programId: number): Promi
     .filter(Boolean)
     .join(" · ");
 
+  // Not once it is done: a completed workout from the app is linked to it.
+  const notDone = sql`NOT EXISTS (SELECT 1 FROM workout_sessions ws WHERE ws.planned_session_id = ${plannedSessions.id} AND ws.is_completed AND ws.source IN ('app', 'assistant'))`;
   const [planned] = await db
     .select({ id: plannedSessions.id })
     .from(plannedSessions)
-    .where(and(eq(plannedSessions.userId, userId), eq(plannedSessions.programId, programId), eq(plannedSessions.date, toDateStr(today)), eq(plannedSessions.status, "planned"), livePlannedSessions))
+    .where(and(eq(plannedSessions.userId, userId), eq(plannedSessions.programId, programId), eq(plannedSessions.date, toDateStr(today)), eq(plannedSessions.status, "planned"), livePlannedSessions, notDone))
     .orderBy(asc(plannedSessions.position))
     .limit(1);
   const swimOnly = all.every((p) => p.sport === "swim");

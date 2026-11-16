@@ -825,6 +825,13 @@ export function WorkoutSetsClient({
             >
               <Plus className="w-4 h-4 text-primary" />
             </Link>
+          ) : stepLabels ? (
+            // Steps are edited as a whole in the step editor: one set of a
+            // repeat block cannot be deleted or moved alone
+            // (docs/plans/one-program-model.md, step 4).
+            <Link href={`/programs/${programId}/exercises/${programExerciseId}`} className="text-primary text-sm font-medium min-h-11 inline-flex items-center" data-testid="edit-steps">
+              Edit
+            </Link>
           ) : (
             <button
               onClick={() => setIsEditing(true)}

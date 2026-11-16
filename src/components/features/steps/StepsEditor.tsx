@@ -445,7 +445,7 @@ function StepSheet({
   const set = (patch: Partial<WorkoutStep>) => setS((x) => ({ ...x, ...patch }));
   const target = s.target ? resolveTarget(s.target, sport, thresholds, units) : null;
   const one = parseWorkout({ v: 1, sport, name: "Step", steps: inBlock ? [{ type: "repeat", count: 2, steps: [s] }] : [s] });
-  const problem = one.ok ? null : one.errors[0].message;
+  const problem = one.ok ? null : plainProblem(one.errors[0]);
 
   return (
     <PlanSheetPanel
@@ -585,6 +585,18 @@ function StepSheet({
       )}
     </PlanSheetPanel>
   );
+}
+
+/** The schema's words for one problem, as the sheet says them. */
+function plainProblem(e: { path: string; message: string }): string {
+  if (e.path.endsWith("end.meters")) return "The distance is too short";
+  if (e.path.endsWith("end.seconds")) return "The time must be at least 5 seconds";
+  if (/must be at most (high|offsetHigh)/.test(e.message)) return "The target's From must be at most its To";
+  if (e.path.includes("cadence")) return "Give the cadence as a range from low to high";
+  if (e.path.includes("sendOffSeconds")) return e.message.startsWith("Too") ? "The send-off must be 20 to 600 seconds" : `The send-off is ${e.message}`;
+  if (e.path.includes("target") && /^must be /.test(e.message)) return `The target ${e.message}`;
+  if (/^Too (small|big)/.test(e.message)) return "A number is out of range";
+  return e.message;
 }
 
 function TargetFields({ target, onChange }: { target: WorkoutTarget; onChange: (t: WorkoutTarget) => void }) {

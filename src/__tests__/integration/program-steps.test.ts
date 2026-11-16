@@ -349,6 +349,39 @@ describe("logging a structured program session (step 3)", () => {
     });
   });
 
+  it("a guided save joins the open workout that holds the hand-logged steps and never undoes them", async () => {
+    await withClock(async (user) => {
+      const { saveStepResults } = await import("@/lib/step-results");
+      const { logWorkoutSet } = await import("@/lib/actions/workout-sets");
+      const { createSession } = await import("./factories");
+      const { workoutSessions, workoutSets } = await import("@/db/schema");
+      const { run, program, slot, plannedSessionId } = await plannedRun(user);
+      const logged = await createSession(user, program.id, { date: "2026-11-02", startTime: new Date("2026-11-02T17:00:00Z") });
+      const r = await logWorkoutSet({ sessionId: logged.id, exerciseId: run.id, setNumber: 2, programSetId: slot.setIds[1], actualReps: 0, weightKg: 0, distanceMeters: 1000, durationSeconds: 245, restTimeSeconds: 0, isCompleted: true, isFailed: false, wasEasy: false, rpe: 8 });
+      expect(r.success).toBe(true);
+      // A second, empty open workout of the same program, opened later (a fresh sign-in on the workout page).
+      const empty = await createSession(user, program.id, { date: "2026-11-02", startTime: new Date("2026-11-02T17:30:00Z") });
+
+      const saved = await saveStepResults(user, { plannedSessionId, steps: [{ key: "s1", status: "done", activeSeconds: 600 }, { key: "s3#1", status: "skipped" }] }, "player");
+      expect(saved.workoutSessionId).toBe(logged.id);
+      const [step2] = await db.select().from(workoutSets).where(and(eq(workoutSets.sessionId, logged.id), eq(workoutSets.programSetId, slot.setIds[1])));
+      expect(step2).toMatchObject({ stepStatus: "done", isCompleted: true, distanceMeters: 1000, durationSeconds: 245 });
+      const [other] = await db.select().from(workoutSessions).where(eq(workoutSessions.id, empty.id));
+      expect(other.isCompleted).toBe(false);
+    });
+  });
+
+  it("the workout screen stops offering Start guided once today's session is done", async () => {
+    await withClock(async (user) => {
+      const { saveStepResults } = await import("@/lib/step-results");
+      const { programStepsView } = await import("@/lib/program-steps-view");
+      const { program, plannedSessionId } = await plannedRun(user);
+      expect((await programStepsView(user, program.id))?.guided.href).toBe(`/planned/${plannedSessionId}/play`);
+      await saveStepResults(user, { plannedSessionId, steps: [{ key: "s1", status: "done", activeSeconds: 600 }] }, "player");
+      expect((await programStepsView(user, program.id))?.guided.href).toBeNull();
+    });
+  });
+
   it("records one distance PR for the session's steps together", async () => {
     await withClock(async (user) => {
       const { saveStepResults } = await import("@/lib/step-results");

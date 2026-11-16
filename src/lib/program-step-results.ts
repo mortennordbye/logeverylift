@@ -33,7 +33,7 @@ import { compareStep, plannedRows, resultTotals, stepResultsSchema, workoutPlann
 import { localDateStr } from "@/lib/utils/user-date";
 import type { ThresholdValues, WorkoutStep } from "@/lib/utils/workout-steps";
 import { rebuildPRsFrom } from "@/lib/workout-records";
-import { and, asc, desc, eq, inArray, isNotNull, or } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
 
 export { programPlay, type ProgramPlay } from "@/lib/utils/program-steps";
 
@@ -110,7 +110,12 @@ async function upsertSets(tx: Tx, sessionId: number, sets: StepSet[]) {
     };
     const { sessionId: _session, ...update } = values;
     void _session;
-    await tx.insert(workoutSets).values(values).onConflictDoUpdate({ target: [workoutSets.sessionId, workoutSets.programSetId], set: update });
+    // A step already logged as done (by hand, during the workout) stays done:
+    // a run that skipped it never undoes it.
+    await tx
+      .insert(workoutSets)
+      .values(values)
+      .onConflictDoUpdate({ target: [workoutSets.sessionId, workoutSets.programSetId], set: update, setWhere: sql`${workoutSets.isCompleted} = false OR excluded.is_completed = true` });
   }
 }
 
@@ -200,7 +205,9 @@ export async function saveProgramStepResults(userId: string, input: SaveStepResu
         eq(workoutSessions.date, today),
       ),
     )
-    .orderBy(desc(workoutSessions.startTime))
+    // The one that already holds logged sets first: a fresh sign-in on the
+    // workout page can leave a newer, empty one beside it.
+    .orderBy(desc(sql`EXISTS (SELECT 1 FROM workout_sets ws WHERE ws.session_id = ${workoutSessions.id})`), desc(workoutSessions.startTime))
     .limit(1);
   if (open) {
     await db.transaction(async (tx) => {
