@@ -199,19 +199,20 @@ async function restoreWithWarnings<T extends object>(
 }
 
 /** Object types of the endurance add-on: listed and restored only with the switch on (D18). */
-const ENDURANCE_TYPES = new Set<string>(["athlete", "injury", "workout", "illness", "race_plan"]);
+const ENDURANCE_TYPES = new Set<string>(["athlete", "injury", "illness", "race_plan"]);
 
 export function registerRevisionTools(server: McpServer, userId: string, clientId?: string) {
   server.registerTool(
     "list_revisions",
     {
       description: [
-        "List the change history of one program, training cycle, season, dated session (planned_session), coach memory entry, the athlete profile (athlete), a threshold value, an injury, a library workout (workout), a sick period (illness) or a race-day plan (race_plan) (objectType and objectId; the last five need endurance features on), newest first: who changed it (user, assistant, progression engine, weekly sync, Garmin suggestion), when, the reason and what changed.",
+        "List the change history of one program, training cycle, season, dated session (planned_session), coach memory entry, the athlete profile (athlete), a threshold value, an injury, a sick period (illness) or a race-day plan (race_plan) (objectType and objectId; the last four need endurance features on), newest first: who changed it (user, assistant, progression engine, weekly sync, Garmin suggestion), when, the reason and what changed.",
         "Without objectType, list your own (assistant) change sets instead: each groups the writes of one review.",
         "Use the revision id or the change-set id with restore_revision.",
       ].join(" "),
       inputSchema: {
-        objectType: z.enum(PLAN_OBJECT_TYPES).optional(),
+        // Library workouts are gone (docs/plans/one-program-model.md).
+        objectType: z.enum(PLAN_OBJECT_TYPES).exclude(["workout"]).optional(),
         objectId: z.number().int().positive().optional(),
       },
       annotations: { readOnlyHint: true, openWorldHint: false },
@@ -248,7 +249,7 @@ export function registerRevisionTools(server: McpServer, userId: string, clientI
     "restore_revision",
     {
       description: [
-        "Restore a program, training cycle, season (its fields and races; phases stay where they are), dated session (a logged or past one, or one on a day that has passed, is refused), coach memory entry, the athlete profile, a threshold value, an injury, a library workout or a sick period to an earlier revision (revisionId), or undo a whole change set (changeSetId). The athlete profile, injuries, workouts and sick periods need endurance features on.",
+        "Restore a program, training cycle, season (its fields and races; phases stay where they are), dated session (a logged or past one, or one on a day that has passed, is refused), coach memory entry, the athlete profile, a threshold value, an injury or a sick period to an earlier revision (revisionId), or undo a whole change set (changeSetId). The athlete profile, injuries and sick periods need endurance features on.",
         "A restore keeps all ids and never changes logged workouts. Weekly targets owned by the sync, and weights or reps the progression engine set since, keep their current values; the weekly sync runs again. A restore is itself a revision and can be restored.",
         "Requires a reason. Refused while the user has a workout in progress on the program.",
         "A restore of one revision runs the training limits as warnings only: it is never refused for them, and the result lists any limit the restored plan breaks.",

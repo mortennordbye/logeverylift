@@ -27,7 +27,8 @@ const HREF: Record<ChangeSetCard["objects"][number]["type"], (id: number) => str
   injury: () => "/more/account/body-and-health",
   season: (id) => `/seasons/${id}/history`,
   planned_session: () => "/more/calendar",
-  workout: () => "/more/workouts",
+  // Library workouts are gone (docs/plans/one-program-model.md); the feed lists none of their revisions.
+  workout: () => "/more",
   illness: () => "/more/account/body-and-health",
   race_plan: () => "/more/nutrition",
 };
