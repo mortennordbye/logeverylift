@@ -1,3 +1,6 @@
+import { userToday } from "@/lib/user-settings";
+import { toDateStr } from "@/lib/utils/cycle-position";
+import { DayOnlyButton } from "@/components/features/steps/DayOnlyButton";
 import { SavedRunLink } from "@/components/features/guided/SavedRunLink";
 import { STEP_WORD } from "@/components/features/guided/types";
 import { enduranceEnabledFor } from "@/lib/endurance";
@@ -28,6 +31,7 @@ export default async function PlannedSessionPage({ params }: { params: Promise<{
   if (!v) notFound();
   const { session, workout, units, estimate } = v;
   const done = session.state === "done";
+  const today = toDateStr(await userToday(user.id));
   const swim = workout.sport === "swim";
 
   return (
@@ -85,6 +89,7 @@ export default async function PlannedSessionPage({ params }: { params: Promise<{
             Pool view
           </Link>
         )}
+        {!done && session.programId != null && !session.workout && session.date >= today && <DayOnlyButton plannedSessionId={id} />}
         <Link href={`/planned/${id}/results`} className="min-h-12 rounded-2xl border border-border px-4 py-3 text-center text-base font-medium active:opacity-70">
           {v.results ? "Step results" : done ? "Add step results" : "Log results by hand"}
         </Link>

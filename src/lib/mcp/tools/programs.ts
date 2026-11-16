@@ -18,7 +18,7 @@ import {
   registerRevisionTools,
 } from "@/lib/mcp/revisions";
 import { LIMITS_TEXT, limitRefusal, limitSummary, overrideArgs, overrideFrom } from "@/lib/mcp/limits";
-import { liveProgramExercises, liveProgramSets, livePrograms } from "@/lib/plan-live";
+import { liveProgramExercises, liveProgramSets, livePrograms, listedPrograms } from "@/lib/plan-live";
 import { deletePrograms, planWrite, softDeleteSlot, versionKey, type Tx } from "@/lib/plan-revisions";
 import { matchSets } from "@/lib/utils/plan-revisions";
 import { periodizationShare } from "@/lib/periodization-sync";
@@ -212,7 +212,7 @@ export function registerProgramTools(server: McpServer, userId: string, clientId
         const rows = await db
           .select()
           .from(programs)
-          .where(and(eq(programs.userId, userId), livePrograms))
+          .where(and(eq(programs.userId, userId), listedPrograms))
           .orderBy(asc(programs.name));
         return ok(rows);
       } catch (e) {

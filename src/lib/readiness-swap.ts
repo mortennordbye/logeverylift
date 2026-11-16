@@ -87,7 +87,8 @@ export async function applyReadinessSwap(
   const done = await applySessionOp(
     { ...ctx, reason: ctx.reason ?? `Readiness: ${swap.flag.text}; hard session made easy` },
     {
-      op: "set_workout",
+      // The easy session is a one-day program of steps (docs/plans/one-program-model.md, decision 2).
+      op: "day_steps",
       id: sessionId,
       workout: swap.workout,
       expectedVersion,

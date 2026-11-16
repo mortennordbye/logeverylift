@@ -47,6 +47,11 @@ export const programs = pgTable("programs", {
     () => trainingCycles.id,
     { onDelete: "cascade" },
   ),
+  // A one-day copy (docs/plans/one-program-model.md, decision 2): the program
+  // a single dated session runs after a change to that day only, or after a
+  // readiness swap. Hidden from program lists; removed with the session's
+  // change back. No FK: planned_sessions references programs already.
+  forPlannedSessionId: integer("for_planned_session_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   // Soft delete (docs/plans/revisions.md, 2.1): a deleted program keeps its
   // row, so logged sessions keep their link and a restore brings back the same

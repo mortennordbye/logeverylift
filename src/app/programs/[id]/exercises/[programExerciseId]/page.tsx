@@ -63,6 +63,7 @@ export default async function ProgramExerciseDetailPage({ params, searchParams }
         exerciseName={pe.exercise.name}
         initial={initial}
         converted={plain}
+        dayOnly={program.forPlannedSessionId != null}
         unsaved={plain || pe.programSets.length === 0}
         thresholds={thresholds}
         units={units}

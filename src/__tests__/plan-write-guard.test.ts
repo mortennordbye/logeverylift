@@ -73,7 +73,7 @@ describe("plan writes go through the revision layer", () => {
 
 describe("plan reads hide soft-deleted rows", () => {
   const MARKERS: Record<string, RegExp> = {
-    programs: /livePrograms|programs\.deletedAt|plan-read: includes deleted/,
+    programs: /livePrograms|listedPrograms|programs\.deletedAt|plan-read: includes deleted/,
     programExercises: /liveProgramExercises|programExercises\.deletedAt|plan-read: includes deleted/,
     programSets: /liveProgramSets|programSets\.deletedAt|plan-read: includes deleted/,
     trainingCycles: /liveCycles|trainingCycles\.deletedAt|plan-read: includes deleted/,

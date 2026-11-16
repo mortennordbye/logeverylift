@@ -7,6 +7,7 @@
  * Plain server code, not Server Actions: callers resolve the user first.
  */
 
+import { copyProgramForDay, dayProgramFromWorkout, dropDayCopy } from "@/lib/program-day-copy";
 import { db } from "@/db";
 import {
   dismissedMakeups,
@@ -763,6 +764,10 @@ export type SessionOp =
       /** Apply only if the session still runs this program or workout, read under its row lock (the readiness swap: app writers keep the version). */
       ifStill?: { programId: number | null; workout: unknown; message: string } }
   | { op: "clear_workout"; id: number; programId: number; expectedVersion?: number }
+  // One-day programs (docs/plans/one-program-model.md, decision 2): this day runs its own copy of its program,
+  // or a program made from steps (the readiness swap's easy session).
+  | { op: "own_day"; id: number; expectedVersion?: number }
+  | { op: "day_steps"; id: number; workout: Workout; expectedVersion?: number; priority?: null; ifStill?: { programId: number | null; workout: unknown; message: string } }
   | { op: "update_from_library"; id: number; expectedVersion?: number }
   | { op: "set_priority"; id: number; priority: SessionPriority | null; expectedVersion?: number }
   | { op: "link_brick"; id: number; brickParentId: number; expectedVersion?: number }
@@ -794,7 +799,7 @@ export async function resolveWorkoutInput(ex: Executor, userId: string, input: {
   return { workout: parsed.workout, workoutId: null };
 }
 
-const ENDURANCE_OPS = new Set(["set_workout", "clear_workout", "update_from_library", "set_priority", "link_brick", "unlink_brick", "miss", "unmiss", "pick"]);
+const ENDURANCE_OPS = new Set(["own_day", "day_steps", "set_workout", "clear_workout", "update_from_library", "set_priority", "link_brick", "unlink_brick", "miss", "unmiss", "pick"]);
 
 async function ownedProgram(ex: Executor, userId: string, programId: number) {
   const [p] = await ex.select({ userId: programs.userId }).from(programs).where(and(eq(programs.id, programId), livePrograms));
@@ -1024,6 +1029,24 @@ async function sessionOpBody(w: PlanWriteSession, ctx: PlanWriteContext, input: 
       set = { workout: wk.workout, workoutId: wk.workoutId, programId: null, ...(input.op === "set_workout" && input.priority === null && { priority: null }) };
       break;
     }
+    case "own_day": {
+      if (row.date != null && row.date < today) throw new SessionInputError("A past session cannot be changed; move it to a coming day first.");
+      if (row.programId == null) throw new SessionInputError("This session runs no program.");
+      const copy = await copyProgramForDay(w, ctx.userId, row.id, row.programId);
+      if (copy === row.programId) return row;
+      set = { programId: copy };
+      break;
+    }
+    case "day_steps": {
+      if (row.date != null && row.date < today) throw new SessionInputError("A past session cannot be changed; move it to a coming day first.");
+      if (input.ifStill) {
+        const same = row.programId === input.ifStill.programId && JSON.stringify(row.workout ?? null) === JSON.stringify(input.ifStill.workout ?? null);
+        if (!same) throw new SessionInputError(input.ifStill.message);
+      }
+      const programId = await dayProgramFromWorkout(w, ctx.userId, row.id, input.workout);
+      set = { programId, workout: null, workoutId: null, ...(input.priority === null && { priority: null }) };
+      break;
+    }
     case "clear_workout":
       if (row.date != null && row.date < today) throw new SessionInputError("A past session cannot be changed; move it to a coming day first.");
       await ownedProgram(tx, ctx.userId, input.programId);
@@ -1150,6 +1173,7 @@ async function sessionOpBody(w: PlanWriteSession, ctx: PlanWriteContext, input: 
       if (row.templateDate !== row.date && (await dayCount(tx, row.cycleId, row.templateDate, row.id)) >= MAX_SLOTS_PER_DAY) {
         throw new SessionInputError(FULL_DAY);
       }
+      await dropDayCopy(w, row.id, row.programId);
       set = {
         date: row.templateDate,
         position: slot.daySlot,
@@ -1166,9 +1190,12 @@ async function sessionOpBody(w: PlanWriteSession, ctx: PlanWriteContext, input: 
     case "remove":
       if (row.templateDate != null) throw new SessionInputError("A session from the template cannot be removed; skip it instead.");
       await w.touch({ type: "planned_session", id: row.id }, { action: "delete" });
+      await dropDayCopy(w, row.id, row.programId);
       await tx.update(plannedSessions).set({ deletedAt: now, updatedAt: now }).where(eq(plannedSessions.id, row.id));
       return { ...row, deletedAt: now };
   }
+  // A day that stops running its one-day copy drops it.
+  if (set.programId !== undefined && set.programId !== row.programId) await dropDayCopy(w, row.id, row.programId);
   await tx.update(plannedSessions).set({ ...set, touchedAt: now, updatedAt: now }).where(eq(plannedSessions.id, row.id));
   // A brick moves as one: its later sessions follow the first to the new day.
   if (input.op === "move" && set.date != null && set.date !== row.date) {

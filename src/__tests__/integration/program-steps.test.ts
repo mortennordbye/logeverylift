@@ -464,3 +464,52 @@ describe("saving steps from the editor (step 4)", () => {
     expect(refused.success).toBe(false);
   });
 });
+
+describe("one-day programs (step 5)", () => {
+  it("copies an endurance program for one day, hides the copy, and drops it when the day goes back", async () => {
+    const { applySessionOp } = await import("@/lib/planned-sessions");
+    const { getPrograms } = await import("@/lib/actions/programs");
+    const { programs, plannedSessions } = await import("@/db/schema");
+    const { vi } = await import("vitest");
+    const user = (await createUser({ timeZone: "UTC", enduranceEnabled: true })).id;
+    asUser(user);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-02T06:00:00Z"));
+    try {
+      const { trainingCycles, trainingCycleSlots } = await import("@/db/schema");
+      const { getActiveCycleForUser } = await import("@/lib/actions/training-cycles");
+      const { workoutToRows } = await import("@/lib/utils/program-steps");
+      const run = await createExercise({ name: `Run ${Math.random()}`, category: "cardio", discipline: "run" });
+      const lift = await createExercise();
+      const w: Workout = { v: 1, sport: "run", name: "Easy", steps: [{ type: "work", end: { type: "time", seconds: 1800 } }] };
+      const runP = await createProgram(user, [{ exerciseId: run.id, sets: workoutToRows(w).map((r) => ({ ...r, targetReps: null, weightKg: null, restTimeSeconds: 0 })) }]);
+      const mixed = await createProgram(user, [{ exerciseId: lift.id, sets: [{}] }, { exerciseId: run.id, sets: [{ targetReps: null, weightKg: null, durationSeconds: 600 }] }]);
+      const [c] = await db.insert(trainingCycles).values({ userId: user, name: "Block", durationWeeks: 1, status: "active", startDate: "2026-11-02" }).returning();
+      await db.insert(trainingCycleSlots).values([
+        { trainingCycleId: c.id, daySlot: 1, dayOfWeek: 1, programId: runP.program.id },
+        { trainingCycleId: c.id, daySlot: 1, dayOfWeek: 2, programId: mixed.program.id },
+      ]);
+      await getActiveCycleForUser();
+      const rows = await db.select().from(plannedSessions).where(eq(plannedSessions.cycleId, c.id)).orderBy(asc(plannedSessions.date));
+      const ctx = { userId: user, writer: "user" as const };
+
+      const { row } = await applySessionOp(ctx, { op: "own_day", id: rows[0].id });
+      expect(row.programId).not.toBe(runP.program.id);
+      const [copy] = await db.select().from(programs).where(eq(programs.id, row.programId!));
+      expect(copy.forPlannedSessionId).toBe(rows[0].id);
+      const listed = await getPrograms();
+      expect(listed.success && listed.data.map((p) => p.id)).not.toContain(copy.id);
+      // A second time keeps the same copy.
+      expect((await applySessionOp(ctx, { op: "own_day", id: rows[0].id })).row.programId).toBe(copy.id);
+
+      await expect(applySessionOp(ctx, { op: "own_day", id: rows[1].id })).rejects.toThrow(/strength day changes the program itself/);
+
+      await applySessionOp(ctx, { op: "reset", id: rows[0].id });
+      const [gone] = await db.select().from(programs).where(eq(programs.id, copy.id));
+      expect(gone.deletedAt).not.toBeNull();
+      expect((await db.select().from(plannedSessions).where(eq(plannedSessions.id, rows[0].id)))[0].programId).toBe(runP.program.id);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

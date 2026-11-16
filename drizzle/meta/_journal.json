@@ -666,6 +666,13 @@
       "when": 1794809078052,
       "tag": "0094_one_program_steps",
       "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "7",
+      "when": 1794818293960,
+      "tag": "0095_one_day_programs",
+      "breakpoints": true
     }
   ]
 }

@@ -9,7 +9,7 @@
 import { db } from "@/db";
 import { exercises, programExercises, programSets, programs, workoutSessions, workoutSets } from "@/db/schema";
 import { periodizationShare } from "@/lib/periodization-sync";
-import { liveProgramExercises, liveProgramSets, livePrograms } from "@/lib/plan-live";
+import { liveProgramExercises, liveProgramSets, livePrograms, listedPrograms } from "@/lib/plan-live";
 import {
   OpenWorkoutError,
   PlanNotFoundError,
@@ -116,7 +116,7 @@ export async function getPrograms(): Promise<ActionResult<Program[]>> {
     const rows = await db
       .select()
       .from(programs)
-      .where(and(eq(programs.userId, auth.user.id), livePrograms))
+      .where(and(eq(programs.userId, auth.user.id), listedPrograms))
       .orderBy(asc(programs.name));
     return { success: true, data: rows };
   } catch (err) {
@@ -1424,7 +1424,7 @@ export async function exportAllPrograms(): Promise<ActionResult<ExportedPrograms
 
   try {
     const userPrograms = await db.query.programs.findMany({
-      where: and(eq(programs.userId, userId), livePrograms),
+      where: and(eq(programs.userId, userId), listedPrograms),
       with: {
         programExercises: {
           where: liveProgramExercises,

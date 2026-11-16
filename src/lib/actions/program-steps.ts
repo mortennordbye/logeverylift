@@ -57,3 +57,36 @@ export async function saveExerciseSteps(data: unknown): Promise<ActionResult<{ p
     return { success: false, error: "Failed to save the steps" };
   }
 }
+
+const editDayOnlySchema = z.object({ plannedSessionId: z.number().int().positive() });
+
+/**
+ * Change one dated session's steps for that day only (docs/plans/one-program-model.md,
+ * decision 2): the session gets its own copy of its program, and the answer
+ * names the copy's first exercise for the step editor.
+ */
+export async function editDayOnly(data: unknown): Promise<ActionResult<{ programId: number; programExerciseId: number }>> {
+  const auth = await requireSession();
+  const parsed = editDayOnlySchema.safeParse(data);
+  if (!parsed.success) return { success: false, error: "Invalid input" };
+  if (!(await enduranceEnabledFor(auth.user.id))) return { success: false, error: "Endurance features are not on for this account" };
+  try {
+    const { applySessionOp } = await import("@/lib/planned-sessions");
+    const { row } = await applySessionOp({ userId: auth.user.id, writer: "user" }, { op: "own_day", id: parsed.data.plannedSessionId });
+    const [first] = await db
+      .select({ id: programExercises.id })
+      .from(programExercises)
+      .where(and(eq(programExercises.programId, row.programId!), liveProgramExercises))
+      .orderBy(programExercises.orderIndex, programExercises.id)
+      .limit(1);
+    revalidatePath(`/planned/${parsed.data.plannedSessionId}`);
+    revalidatePath("/week");
+    return { success: true, data: { programId: row.programId!, programExerciseId: first.id } };
+  } catch (e) {
+    const { appErrorMessage } = await import("@/lib/step-results");
+    const msg = appErrorMessage(e) ?? (e instanceof Error && e.name === "SessionInputError" ? e.message : null);
+    if (msg) return { success: false, error: msg };
+    console.error("[editDayOnly] failed", { plannedSessionId: parsed.data.plannedSessionId });
+    return { success: false, error: "Failed to make a copy for this day" };
+  }
+}

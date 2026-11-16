@@ -135,6 +135,7 @@ export function StepsEditor({
   exerciseName,
   initial,
   converted,
+  dayOnly = false,
   unsaved = converted,
   thresholds,
   units,
@@ -145,6 +146,8 @@ export function StepsEditor({
   initial: Workout;
   /** The exercise held plain sets: this tree is their conversion and is not saved yet. */
   converted: boolean;
+  /** A one-day copy of a program (docs/plans/one-program-model.md, decision 2). */
+  dayOnly?: boolean;
   /** Nothing is stored yet (converted plain sets, or a new exercise): Save is on from the start. */
   unsaved?: boolean;
   thresholds: ThresholdValues;
@@ -239,6 +242,11 @@ export function StepsEditor({
               </button>
             ))}
           </div>
+        )}
+        {dayOnly && (
+          <p className="mt-3 rounded-xl bg-primary/10 px-3 py-2 text-sm" data-testid="steps-day-only">
+            These steps are for one day only. The program and its other days stay as they are.
+          </p>
         )}
         {converted && (
           <p className="mt-3 rounded-xl bg-amber-500/10 px-3 py-2 text-sm" data-testid="steps-converted">
