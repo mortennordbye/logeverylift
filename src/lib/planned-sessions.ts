@@ -17,7 +17,6 @@ import {
   trainingCycles,
   users,
   workoutSessions,
-  workouts,
 } from "@/db/schema";
 import { localDateStr } from "@/lib/utils/user-date";
 import { liveCycles, livePlannedSessions, livePrograms } from "@/lib/plan-live";
@@ -42,7 +41,7 @@ import {
 } from "@/lib/utils/planned-sessions";
 import { insertAutoSessions } from "@/lib/auto-sessions";
 import type { SessionPriority } from "@/db/schema/workouts";
-import { parseWorkout, type Workout } from "@/lib/utils/workout-steps";
+import type { Workout } from "@/lib/utils/workout-steps";
 import type { MissedSlot, TodaySession, TrainingCycleSlotWithProgram } from "@/types/workout";
 import { and, asc, eq, gt, gte, inArray, isNotNull, isNull, lte, ne, or, sql } from "drizzle-orm";
 
@@ -72,15 +71,12 @@ export function cycleBlock(c: {
 
 async function templateSlots(ex: Executor, cycleId: number): Promise<TemplateSlot[]> {
   const rows = await ex
-    .select({ slot: trainingCycleSlots, programDeletedAt: programs.deletedAt, libraryWorkout: workouts.workout, workoutDeletedAt: workouts.deletedAt })
+    .select({ slot: trainingCycleSlots, programDeletedAt: programs.deletedAt })
     .from(trainingCycleSlots)
     // plan-read: includes deleted (a deleted program reads as a rest day, as liveSlotProgram does)
     .leftJoin(programs, eq(programs.id, trainingCycleSlots.programId))
-    // A deleted library workout reads as a rest day too.
-    .leftJoin(workouts, eq(workouts.id, trainingCycleSlots.workoutId))
     .where(eq(trainingCycleSlots.trainingCycleId, cycleId));
-  return rows.map(({ slot, programDeletedAt, libraryWorkout, workoutDeletedAt }) => ({
-    ...(slot.workoutId != null && libraryWorkout != null && !workoutDeletedAt && slot.programId == null && { workout: libraryWorkout, workoutId: slot.workoutId }),
+  return rows.map(({ slot, programDeletedAt }) => ({
     priority: slot.priority,
     brickWithNext: slot.brickWithNext,
     id: slot.id,
@@ -178,8 +174,6 @@ export async function regenerateCycleSessions(
     done: done.has(r.id) || (r.date != null && r.date < today && r.status === "skipped"),
     linked: linked.has(r.id),
     skipped: r.status === "skipped",
-    workout: r.workout,
-    workoutId: r.workoutId,
     priority: r.priority,
   }));
   const slots = await templateSlots(tx, cycleId);
@@ -306,7 +300,7 @@ export function cycleTemplateKey(snap: { cycle: Record<string, unknown>; slots: 
   const c = snap.cycle;
   const slots = [...snap.slots]
     .sort((a, b) => Number(a.id) - Number(b.id))
-    .map((s) => [s.id, s.dayOfWeek, s.daySlot ?? 1, s.orderIndex, s.programId, s.label, s.notes, s.autoComplete, s.workoutId ?? null, s.priority ?? null, s.brickWithNext ?? false]);
+    .map((s) => [s.id, s.dayOfWeek, s.daySlot ?? 1, s.orderIndex, s.programId, s.label, s.notes, s.autoComplete, s.priority ?? null, s.brickWithNext ?? false]);
   return JSON.stringify([c.status, c.startDate, c.scheduledStartDate, c.durationWeeks, c.durationDays ?? null, c.scheduleType, slots]);
 }
 
@@ -637,8 +631,6 @@ type SlotValues = {
   programId?: number | null;
   notes?: string | null;
   autoComplete?: boolean;
-  /** A library workout instead of a program; weekday cycles only (docs/plans/workouts-and-compliance.md, 4.3). */
-  workoutId?: number | null;
   priority?: "key" | "support" | "optional" | null;
   brickWithNext?: boolean;
 };
@@ -670,21 +662,12 @@ export async function upsertSlotInTx(
           .from(trainingCycleSlots)
           .where(and(eq(trainingCycleSlots.trainingCycleId, cycleId), eq(trainingCycleSlots.orderIndex, key.orderIndex ?? -1)));
   const existing = key.dayOfWeek != null ? daySlots.find((s) => s.daySlot === daySlot) : daySlots[0];
-  if (key.dayOfWeek == null && values.workoutId != null) throw new SessionInputError("Workouts go on a weekday cycle only.");
-  // A slot runs a program or a workout, never both: setting one clears the other.
-  if (values.workoutId != null) values = { ...values, programId: null };
-  else if (values.programId != null) values = { ...values, workoutId: null };
   if (key.dayOfWeek != null) {
-    // A workout slot is a session, not a rest day, for the day's rules.
-    const content = (s: { programId: number | null; workoutId?: number | null }) => s.programId ?? (s.workoutId != null ? -1 : null);
-    const programId = content({
-      programId: values.programId !== undefined ? values.programId : (existing?.programId ?? null),
-      workoutId: values.workoutId !== undefined ? values.workoutId : (existing?.workoutId ?? null),
-    });
+    const programId = values.programId !== undefined ? values.programId : (existing?.programId ?? null);
     const problem = daySlotProblem({
       daySlot,
       programId,
-      others: daySlots.filter((s) => s.id !== existing?.id).map((s) => ({ daySlot: s.daySlot, programId: content(s) })),
+      others: daySlots.filter((s) => s.id !== existing?.id).map((s) => ({ daySlot: s.daySlot, programId: s.programId })),
     });
     if (problem) throw new SessionInputError(problem);
   }
@@ -749,26 +732,27 @@ export type SessionOp =
       op: "add";
       cycleId: number;
       date: string;
-      /** A program, or a workout (JSON or a library id) with the endurance switch on. */
-      programId?: number;
-      workout?: unknown;
-      workoutId?: number;
+      programId: number;
       priority?: SessionPriority | null;
       brickParentId?: number;
       position?: number;
       label?: string | null;
       notes?: string | null;
     }
-  // Structured workouts and answers (docs/plans/workouts-and-compliance.md, 5 and 6).
-  | { op: "set_workout"; id: number; workout?: unknown; workoutId?: number; expectedVersion?: number; /** null clears a stored priority in the same write (the readiness swap). */ priority?: null;
-      /** Apply only if the session still runs this program or workout, read under its row lock (the readiness swap: app writers keep the version). */
-      ifStill?: { programId: number | null; workout: unknown; message: string } }
-  | { op: "clear_workout"; id: number; programId: number; expectedVersion?: number }
+  // Endurance ops and answers (docs/plans/workouts-and-compliance.md, 5 and 6).
   // One-day programs (docs/plans/one-program-model.md, decision 2): this day runs its own copy of its program,
   // or a program made from steps (the readiness swap's easy session).
   | { op: "own_day"; id: number; expectedVersion?: number }
-  | { op: "day_steps"; id: number; workout: Workout; expectedVersion?: number; priority?: null; ifStill?: { programId: number | null; workout: unknown; message: string } }
-  | { op: "update_from_library"; id: number; expectedVersion?: number }
+  | {
+      op: "day_steps";
+      id: number;
+      workout: Workout;
+      expectedVersion?: number;
+      /** null clears a stored priority in the same write (the readiness swap). */
+      priority?: null;
+      /** Apply only if the session still runs this program, read under its row lock (the readiness swap: app writers keep the version). */
+      ifStill?: { programId: number | null; message: string };
+    }
   | { op: "set_priority"; id: number; priority: SessionPriority | null; expectedVersion?: number }
   | { op: "link_brick"; id: number; brickParentId: number; expectedVersion?: number }
   | { op: "unlink_brick"; id: number; expectedVersion?: number }
@@ -778,28 +762,7 @@ export type SessionOp =
 
 export class SessionInputError extends PlanStateError {}
 
-/** The workout JSON broke the schema check (D3: never overridable). Each problem has its path. */
-export class WorkoutSchemaError extends SessionInputError {
-  constructor(readonly errors: { path: string; message: string }[]) {
-    super(`The workout is not valid: ${errors.map((e) => (e.path ? `${e.path}: ${e.message}` : e.message)).join("; ")}`);
-  }
-}
-
-/** A workout from JSON or the user's library, through the schema check. */
-export async function resolveWorkoutInput(ex: Executor, userId: string, input: { workout?: unknown; workoutId?: number }): Promise<{ workout: Workout; workoutId: number | null }> {
-  if (input.workoutId != null) {
-    const [lib] = await ex.select().from(workouts).where(and(eq(workouts.id, input.workoutId), eq(workouts.userId, userId), isNull(workouts.deletedAt)));
-    if (!lib) throw new SessionInputError("Workout not found");
-    const parsed = parseWorkout(lib.workout);
-    if (!parsed.ok) throw new WorkoutSchemaError(parsed.errors);
-    return { workout: parsed.workout, workoutId: lib.id };
-  }
-  const parsed = parseWorkout(input.workout);
-  if (!parsed.ok) throw new WorkoutSchemaError(parsed.errors);
-  return { workout: parsed.workout, workoutId: null };
-}
-
-const ENDURANCE_OPS = new Set(["own_day", "day_steps", "set_workout", "clear_workout", "update_from_library", "set_priority", "link_brick", "unlink_brick", "miss", "unmiss", "pick"]);
+const ENDURANCE_OPS = new Set(["own_day", "day_steps", "set_priority", "link_brick", "unlink_brick", "miss", "unmiss", "pick"]);
 
 async function ownedProgram(ex: Executor, userId: string, programId: number) {
   const [p] = await ex.select({ userId: programs.userId }).from(programs).where(and(eq(programs.id, programId), livePrograms));
@@ -914,8 +877,8 @@ export async function applySessionOp(
     const scope = await sessionScope(w.tx, ctx.userId, input);
     const { result, check, unusedOverrides } = await withLimits(w, limits.lc, scope, limits.override, async () => {
       const row = await sessionOpBody(w, ctx, input, today);
-      // An added workout session's run counts in the facts after the write (review 2).
-      if (input.op === "add" && row.workout != null && scope.sessionWeeks) scope.sessionWeeks.sessionIds = [row.id];
+      // An added session's run of steps counts in the facts after the write (review 2).
+      if (input.op === "add" && scope.sessionWeeks) scope.sessionWeeks.sessionIds = [row.id];
       return row;
     }, limits.mode);
     return { row: result, limits: { check, unusedOverrides } };
@@ -929,7 +892,7 @@ async function sessionScope(tx: Tx, userId: string, input: SessionOp): Promise<L
   const programIds: number[] = [];
   if (input.op === "add") {
     mondays.add(mondayOf(input.date));
-    if (input.programId != null) programIds.push(input.programId);
+    programIds.push(input.programId);
   } else {
     const [row] = await tx
       .select({ date: plannedSessions.date, templateDate: plannedSessions.templateDate })
@@ -940,9 +903,8 @@ async function sessionScope(tx: Tx, userId: string, input: SessionOp): Promise<L
     // A reset puts the session back on its template day (review 20).
     if (input.op === "reset" && row?.templateDate) mondays.add(mondayOf(row.templateDate));
     if (input.op === "change" && input.programId != null) programIds.push(input.programId);
-    if (input.op === "clear_workout") programIds.push(input.programId);
   }
-  // A workout session's run counts for the long-run cap (docs/plans/workouts-and-compliance.md, 8).
+  // A session's run of steps counts for the long-run cap (docs/plans/workouts-and-compliance.md, 8).
   const sessionIds = input.op === "add" ? undefined : [input.id];
   return { programIds, cycleIds: [], sessionWeeks: { userId, mondays: [...mondays].sort(), sessionIds } };
 }
@@ -950,7 +912,7 @@ async function sessionScope(tx: Tx, userId: string, input: SessionOp): Promise<L
 async function sessionOpBody(w: PlanWriteSession, ctx: PlanWriteContext, input: SessionOp, today: string): Promise<PlannedRow> {
   const tx = w.tx;
   const now = new Date();
-  if (ENDURANCE_OPS.has(input.op) || (input.op === "add" && input.programId == null)) {
+  if (ENDURANCE_OPS.has(input.op)) {
     const { enduranceEnabledFor } = await import("@/lib/endurance");
     if (!(await enduranceEnabledFor(ctx.userId))) throw new SessionInputError("Endurance features are not on for this account");
   }
@@ -964,11 +926,7 @@ async function sessionOpBody(w: PlanWriteSession, ctx: PlanWriteContext, input: 
     const block = cycleBlock(cycle);
     if (!block) throw new SessionInputError("This cycle has no dates yet: start or schedule it first.");
     checkDate(input.date, today, block);
-    if ((input.programId == null) === (input.workout == null && input.workoutId == null)) {
-      throw new SessionInputError("Send a programId, or a workout or workoutId: one of them.");
-    }
-    if (input.programId != null) await ownedProgram(tx, ctx.userId, input.programId);
-    const wk = input.programId == null ? await resolveWorkoutInput(tx, ctx.userId, input) : null;
+    await ownedProgram(tx, ctx.userId, input.programId);
     if (input.brickParentId != null) await checkBrickParent(tx, ctx.userId, { cycleId: cycle.id, date: input.date }, input.brickParentId);
     // Two adds to one day at once must not both pass the cap (review 25).
     await lockCycleRows(tx, [cycle.id]);
@@ -980,9 +938,7 @@ async function sessionOpBody(w: PlanWriteSession, ctx: PlanWriteContext, input: 
         cycleId: cycle.id,
         date: input.date,
         position: input.position ?? (await dayCount(tx, cycle.id, input.date)) + 1,
-        programId: input.programId ?? null,
-        workout: wk?.workout ?? null,
-        workoutId: wk?.workoutId ?? null,
+        programId: input.programId,
         priority: input.priority ?? null,
         brickParentId: input.brickParentId ?? null,
         label: input.label ?? null,
@@ -1016,19 +972,6 @@ async function sessionOpBody(w: PlanWriteSession, ctx: PlanWriteContext, input: 
     case "skip":
       set = { status: "skipped", skipReason: input.reason ?? null, statusOn: today };
       break;
-    case "set_workout":
-    case "update_from_library": {
-      if (row.date != null && row.date < today) throw new SessionInputError("A past session cannot be changed; move it to a coming day first.");
-      if (input.op === "set_workout" && input.ifStill) {
-        const same = row.programId === input.ifStill.programId && JSON.stringify(row.workout ?? null) === JSON.stringify(input.ifStill.workout ?? null);
-        if (!same) throw new SessionInputError(input.ifStill.message);
-      }
-      const source = input.op === "set_workout" ? input : { workoutId: row.workoutId ?? undefined };
-      if (input.op === "update_from_library" && row.workoutId == null) throw new SessionInputError("This session's workout is not from the library.");
-      const wk = await resolveWorkoutInput(tx, ctx.userId, source);
-      set = { workout: wk.workout, workoutId: wk.workoutId, programId: null, ...(input.op === "set_workout" && input.priority === null && { priority: null }) };
-      break;
-    }
     case "own_day": {
       if (row.date != null && row.date < today) throw new SessionInputError("A past session cannot be changed; move it to a coming day first.");
       if (row.programId == null) throw new SessionInputError("This session runs no program.");
@@ -1040,18 +983,12 @@ async function sessionOpBody(w: PlanWriteSession, ctx: PlanWriteContext, input: 
     case "day_steps": {
       if (row.date != null && row.date < today) throw new SessionInputError("A past session cannot be changed; move it to a coming day first.");
       if (input.ifStill) {
-        const same = row.programId === input.ifStill.programId && JSON.stringify(row.workout ?? null) === JSON.stringify(input.ifStill.workout ?? null);
-        if (!same) throw new SessionInputError(input.ifStill.message);
+        if (row.programId !== input.ifStill.programId) throw new SessionInputError(input.ifStill.message);
       }
       const programId = await dayProgramFromWorkout(w, ctx.userId, row.id, input.workout);
-      set = { programId, workout: null, workoutId: null, ...(input.priority === null && { priority: null }) };
+      set = { programId, ...(input.priority === null && { priority: null }) };
       break;
     }
-    case "clear_workout":
-      if (row.date != null && row.date < today) throw new SessionInputError("A past session cannot be changed; move it to a coming day first.");
-      await ownedProgram(tx, ctx.userId, input.programId);
-      set = { workout: null, workoutId: null, programId: input.programId };
-      break;
     case "set_priority":
       if (row.date != null && row.date < today) throw new SessionInputError("A past session cannot be changed.");
       set = { priority: input.priority };

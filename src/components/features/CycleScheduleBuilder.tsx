@@ -61,9 +61,9 @@ function slotName(slot: Slot): string {
   return slot.label ?? slot.program?.name ?? (isRest(slot) ? "Rest" : "Workout");
 }
 
-/** A slot with no program and no workout: a rest day. */
+/** A slot with no program: a rest day. */
 function isRest(slot: Slot): boolean {
-  return slot.programId == null && slot.workoutId == null;
+  return slot.programId == null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

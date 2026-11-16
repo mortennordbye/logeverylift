@@ -102,18 +102,18 @@ export function sessionSub(s: Pick<DetailSession, "status" | "summary" | "exerci
   return [sessionState(s), s.summary ?? s.exercises ?? ""].filter(Boolean).join(" · ");
 }
 
-type DaySlotLike = { dayOfWeek?: number | null; programId?: number | null; workoutId?: number | null; label?: string | null; notes?: string | null };
+type DaySlotLike = { dayOfWeek?: number | null; programId?: number | null; label?: string | null; notes?: string | null };
 
 /**
- * The labels of weekdays (1 = Monday) whose slots hold no program and no
- * workout but carry a name of their own, such as "Mobility". A plain "Rest"
+ * The labels of weekdays (1 = Monday) whose slots hold no program but carry
+ * a name of their own, such as "Mobility". A plain "Rest"
  * label is left out: those days read Rest anyway.
  */
 export function dayLabels(slots: DaySlotLike[]): Record<number, string> {
   const out: Record<number, string> = {};
   for (const day of [1, 2, 3, 4, 5, 6, 7]) {
     const mine = slots.filter((s) => s.dayOfWeek === day);
-    if (mine.length === 0 || mine.some((s) => s.programId != null || s.workoutId != null)) continue;
+    if (mine.length === 0 || mine.some((s) => s.programId != null)) continue;
     const names = mine.map((s) => s.label?.trim()).filter((l): l is string => !!l && l.toLowerCase() !== "rest");
     if (names.length) out[day] = names.join(" · ");
   }
