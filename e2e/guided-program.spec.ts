@@ -76,8 +76,9 @@ test("a program with steps: the workout screen starts the player, and each step 
   const { userId, plannedId, programId } = await setup(testInfo.parallelIndex);
 
   await page.goto(`/programs/${programId}/workout`);
-  const entry = page.getByTestId("guided-entry");
-  await expect(entry).toContainText("load about");
+  const entry = page.getByTestId("guided-entry").first();
+  // The cool-down ends on the lap button, so the load counts what it can.
+  await expect(entry).toContainText("load at least");
   await page.clock.install();
   await entry.getByRole("link", { name: "Start guided" }).click();
   await expect(page).toHaveURL(new RegExp(`/planned/${plannedId}/play`));
