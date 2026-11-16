@@ -11,6 +11,7 @@ import { LEGAL_PATHS } from "@/lib/constants/legal";
 
 /** The Plan form routes: each pins its primary button where the tab bar sits. */
 const PLAN_FORM = /^\/(cycles\/new|cycles\/\d+\/edit|seasons\/new|seasons\/\d+\/edit|seasons\/\d+\/phases\/new|seasons\/\d+\/phases\/\d+\/week)$/;
+const GUIDED = /^\/planned\/\d+\/(play|pool)$/;
 
 const staticNavItems = [
   {
@@ -71,7 +72,8 @@ export function BottomNav() {
   // page marks it seen in its streamed part, which can land after this effect.
   // Plan form screens with a pinned bottom bar (cycle setup, Edit details, the
   // season forms and Add phase) show no tab bar.
-  const hideNav = PLAN_FORM.test(pathname) || pathname === "/login" || pathname === "/signup" || pathname === "/welcome" || LEGAL_PATHS.includes(pathname);
+  // The guided player and the pool view fill the screen, and their own buttons sit where the bar would.
+  const hideNav = PLAN_FORM.test(pathname) || GUIDED.test(pathname) || pathname === "/login" || pathname === "/signup" || pathname === "/welcome" || LEGAL_PATHS.includes(pathname);
   const badgeScope = pathname === "/more" ? "more" : pathname.startsWith("/more/friends") ? "friends" : "other";
   useEffect(() => {
     if (hideNav || badgeScope === "friends") return;

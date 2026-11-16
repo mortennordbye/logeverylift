@@ -39,7 +39,7 @@ export async function readinessSwapFor(userId: string): Promise<ReadinessSwap | 
   const rows = all.filter((s) => !inProgress.has(s.id)).sort((a, b) => a.position - b.position);
   const sessions = rows.map((s) => ({
     id: s.id,
-    label: s.label ?? s.programName ?? s.workout?.name ?? "Session",
+    label: s.label ?? s.programName ?? "Session",
     sport: s.sport,
     hard: s.hard,
     plannedDurationS: s.planned.durationSeconds ?? null,
@@ -60,7 +60,7 @@ export const STALE_SWAP = "Readiness changed: there is no swap to make for this 
  * Make the session easy, as the suggestion says. The user's tap writes as
  * `apply` (T2, a wearable suggestion) with the limits as warnings (T4); the
  * assistant writes as `assistant` with the limits checked like any session
- * change. A revision of the session holds the program or workout before.
+ * change. A revision of the session holds the program before.
  */
 export async function applyReadinessSwap(
   ctx: PlanWriteContext,
@@ -76,7 +76,7 @@ export async function applyReadinessSwap(
   // stored key priority goes with the hard content, so the easy session is
   // not read as key (heavy legs); a brick keeps its link.
   const [row] = await db
-    .select({ priority: plannedSessions.priority, programId: plannedSessions.programId, workout: plannedSessions.workout })
+    .select({ priority: plannedSessions.priority, programId: plannedSessions.programId })
     .from(plannedSessions)
     .where(and(eq(plannedSessions.id, sessionId), eq(plannedSessions.userId, ctx.userId), livePlannedSessions));
   if (!row) throw new PlanStateError(STALE_SWAP);
@@ -87,14 +87,15 @@ export async function applyReadinessSwap(
   const done = await applySessionOp(
     { ...ctx, reason: ctx.reason ?? `Readiness: ${swap.flag.text}; hard session made easy` },
     {
-      op: "set_workout",
+      // The easy session is a one-day program of steps (docs/plans/one-program-model.md, decision 2).
+      op: "day_steps",
       id: sessionId,
       workout: swap.workout,
       expectedVersion,
       ...(row.priority === "key" && { priority: null }),
       // Two taps (two devices) read the same suggestion; the app's writes keep the
       // version, so the second is refused by what the session runs now (review item 7).
-      ifStill: { programId: row.programId, workout: row.workout, message: STALE_SWAP },
+      ifStill: { programId: row.programId, message: STALE_SWAP },
     },
     { lc, override, mode: ctx.writer === "assistant" ? "check" : "warn" },
   );

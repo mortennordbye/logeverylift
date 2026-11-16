@@ -19,14 +19,21 @@ export type PlanRow = {
   durationSeconds: number | null;
   distanceMeters: number | null;
   restTimeSeconds: number | null;
+  /** Endurance steps (docs/plans/one-program-model.md); absent or null on a strength set. */
+  stepKind?: string | null;
+  blockId?: number | null;
+  blockRound?: number | null;
+  endsOnLap?: boolean | null;
 };
 
 export type TodayPlan = {
   exerciseCount: number;
   /** Working sets, warm-ups left out. */
   setCount: number;
-  /** Rounded to 5 minutes, at least 5. */
-  minutes: number;
+  /** Every set is an endurance step, so the count reads as steps. */
+  stepsOnly?: boolean;
+  /** Rounded to 5 minutes, at least 5. Null when a step has no planned time (a distance or lap step). */
+  minutes: number | null;
   /** The first `shown` exercises: name and "4 × 6–8 · 80 kg". */
   exercises: { name: string; sets: string }[];
   /** The names after those. */
@@ -44,6 +51,36 @@ function target(s: PlanRow): string | null {
   return null;
 }
 
+const STEP_WORD: Record<string, string> = { warmup: "warm-up", work: "", recovery: "easy", cooldown: "cool-down", rest: "rest" };
+
+/** One step's end: "1 km", "2 min", "to lap". */
+function stepEnd(s: PlanRow): string {
+  if (s.endsOnLap) return "to lap";
+  return target(s) ?? "–";
+}
+
+/** "2 km warm-up · 4 × (1 km, 2 min easy) · 1.5 km cool-down": each block once, with its rounds. */
+function stepsLine(sets: PlanRow[]): string {
+  const parts: string[] = [];
+  const step = (s: PlanRow) => [stepEnd(s), STEP_WORD[s.stepKind ?? ""] ?? ""].filter(Boolean).join(" ");
+  for (let i = 0; i < sets.length; ) {
+    const s = sets[i];
+    if (s.blockId == null) {
+      parts.push(step(s));
+      i++;
+      continue;
+    }
+    let j = i;
+    while (j < sets.length && sets[j].blockId === s.blockId) j++;
+    const block = sets.slice(i, j);
+    const first = block.filter((b) => b.blockRound === 1);
+    const rounds = Math.max(...block.map((b) => b.blockRound ?? 1));
+    parts.push(`${rounds} × ${first.length === 1 ? step(first[0]) : `(${first.map(step).join(", ")})`}`);
+    i = j;
+  }
+  return parts.join(" · ");
+}
+
 /** Rows in program order (exercise order, then set number). Null when the program has no exercises. */
 export function todayPlanFrom(rows: PlanRow[], shown = 3): TodayPlan | null {
   const byExercise = new Map<number, { name: string; sets: PlanRow[] }>();
@@ -57,11 +94,15 @@ export function todayPlanFrom(rows: PlanRow[], shown = 3): TodayPlan | null {
 
   const working = (e: { sets: PlanRow[] }) => e.sets.filter((s) => s.setType === "working");
   const minutes = estimateSessionMinutes(list.map((e) => ({ sets: e.sets.map((s) => ({ durSec: s.durationSeconds, rest: s.restTimeSeconds ?? 0 })) })));
+  // A step that ends on distance or the lap button has no time here.
+  const untimedStep = rows.some((r) => r.stepKind != null && (r.endsOnLap || r.durationSeconds == null));
   return {
     exerciseCount: list.length,
     setCount: list.reduce((n, e) => n + working(e).length, 0),
-    minutes: Math.max(5, Math.round(minutes / 5) * 5),
+    minutes: untimedStep ? null : Math.max(5, Math.round(minutes / 5) * 5),
+    ...(rows.every((r) => r.stepKind != null) && { stepsOnly: true }),
     exercises: list.slice(0, shown).map((e) => {
+      if (e.sets.some((s) => s.stepKind != null)) return { name: e.name, sets: stepsLine(e.sets) };
       const w = working(e);
       const first = w[0];
       const parts = [first ? `${w.length} × ${target(first) ?? "–"}` : "No working sets"];

@@ -10,6 +10,7 @@ import { addDaysStr, shortDay } from "@/lib/utils/seasons";
 import { mondayOf } from "@/lib/utils/session-compliance";
 import { requireSession } from "@/lib/utils/session";
 import { workoutPlannedLoad } from "@/lib/utils/step-results";
+import { estimateWorkout } from "@/lib/utils/workout-steps";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -28,7 +29,11 @@ const STATE_TEXT: Record<string, string> = {
 const BAND_TEXT: Record<string, string> = { green: "on plan", yellow: "partly", orange: "far off plan", red: "missed", done: "done", illness: "sick" };
 const RAMP_TEXT = { normal: "normal", fast: "fast", warning: "too fast" } as const;
 
-const time = (s: number) => (s >= 3600 ? `${Math.floor(s / 3600)} h ${Math.round((s % 3600) / 60)} min` : `${Math.round(s / 60)} min`);
+const time = (s: number) => {
+  if (s < 3600) return `${Math.round(s / 60)} min`;
+  const m = Math.round((s % 3600) / 60);
+  return m ? `${Math.floor(s / 3600)} h ${m} min` : `${Math.floor(s / 3600)} h`;
+};
 
 /**
  * The week view (docs/plans/endurance-app.md, 4.2): Monday to Sunday with each
@@ -56,6 +61,19 @@ export default async function WeekPage({ searchParams }: { searchParams: Promise
   >;
   let strengthCount = 0;
   for (const s of sessions) {
+    if (!s.sport && s.programWorkouts.length) {
+      // A brick in one program: each leg counts in its own sport (docs/plans/one-program-model.md).
+      for (const p of s.programWorkouts) {
+        const t = totals[p.sport];
+        t.count++;
+        if (s.status === "skipped") continue;
+        const est = estimateWorkout(p.workout, anchors);
+        if (est.durationComplete) t.plannedS += est.durationSeconds;
+        if (est.distanceComplete) t.plannedM += est.distanceMeters;
+        t.plannedLoad += workoutPlannedLoad(p.workout, anchors).load;
+      }
+      continue;
+    }
     if (!s.sport) {
       strengthCount++;
       continue;
@@ -65,7 +83,7 @@ export default async function WeekPage({ searchParams }: { searchParams: Promise
     if (s.status !== "skipped") {
       t.plannedS += s.planned.durationSeconds ?? 0;
       t.plannedM += s.planned.distanceMeters ?? 0;
-      if (s.workout) t.plannedLoad += workoutPlannedLoad(s.workout, anchors).load;
+      for (const p of s.programWorkouts) t.plannedLoad += workoutPlannedLoad(p.workout, anchors).load;
     }
   }
   for (const l of loads) {
@@ -199,7 +217,7 @@ export default async function WeekPage({ searchParams }: { searchParams: Promise
                     );
                     return (
                       <li key={s.id}>
-                        {s.workout ? (
+                        {s.programWorkouts.length ? (
                           <Link href={`/planned/${s.id}`} className="flex items-start justify-between gap-2 rounded-xl bg-muted px-3 py-2 min-h-11 active:opacity-70" data-testid="week-session">
                             {body}
                           </Link>

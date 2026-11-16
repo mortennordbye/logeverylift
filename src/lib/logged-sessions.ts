@@ -25,6 +25,14 @@ export type LoggedSet = {
   rpe?: number;
   notes?: string;
   setType?: "working" | "warmup";
+  /**
+   * Program and step fields of a logged endurance step
+   * (docs/plans/one-program-model.md, 1.2): its program set, status and plan.
+   */
+  step?: Pick<
+    typeof workoutSets.$inferInsert,
+    "programExerciseId" | "programSetId" | "isCompleted" | "stepStatus" | "extendedSeconds" | "measuredValue" | "avgHr" | "plannedStep"
+  >;
 };
 
 export type LoggedSessionInput = {
@@ -37,6 +45,9 @@ export type LoggedSessionInput = {
   notes?: string | null;
   source: "app" | "assistant";
   sets: LoggedSet[];
+  /** A guided run's paused time and save key (docs/plans/one-program-model.md, 1.2). */
+  pausedSeconds?: number | null;
+  clientKey?: string | null;
 };
 
 /** The new log repeats a session the user already has. */
@@ -113,6 +124,8 @@ export async function writeLoggedSession(userId: string, input: LoggedSessionInp
         notes: input.notes ?? null,
         isCompleted: true,
         source: input.source,
+        ...(input.pausedSeconds != null && { pausedSeconds: input.pausedSeconds }),
+        ...(input.clientKey != null && { clientKey: input.clientKey }),
       })
       .returning();
     // Dated by when they happened: the records replay orders and dates
@@ -133,6 +146,7 @@ export async function writeLoggedSession(userId: string, input: LoggedSessionInp
         restTimeSeconds: 0,
         notes: s.notes ?? null,
         createdAt: new Date(start.getTime() + i * 1000),
+        ...(s.step ?? {}),
       })),
     );
     // As completeWorkoutSession: a logged day replaces its auto row.

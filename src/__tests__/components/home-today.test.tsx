@@ -163,3 +163,25 @@ describe("the insight as the hero's tip", () => {
     expect(screen.getByTestId("today-tip").textContent).toBe("Holding the same weights");
   });
 });
+
+describe("Start on a day with steps (docs/plans/one-program-model.md, home merge)", () => {
+  it("asks guided or by hand for a step program, and starts at once on any other day", () => {
+    const steps = { ...STATES["one program, not done"], guided: { href: "/planned/7/play", kind: "guided" as const } };
+    const first = render(<>{todayWidget.View({ data: steps, size: "l" })}</>);
+    fireEvent.click(screen.getByRole("button", { name: /Start Today's Workout/ }));
+    const sheet = screen.getByTestId("start-choice");
+    expect(within(sheet).getByRole("link", { name: /^Guided/ }).getAttribute("href")).toBe("/planned/7/play");
+    expect(within(sheet).getByRole("link", { name: /^Log by hand/ }).getAttribute("href")).toMatch(/\/programs\/\d+\/workout$/);
+    first.unmount();
+
+    const swim = { ...STATES["one program, not done"], guided: { href: "/planned/8/pool", kind: "pool" as const } };
+    const second = render(<>{todayWidget.View({ data: swim, size: "m" })}</>);
+    fireEvent.click(screen.getByRole("button", { name: /Start Today's Workout/ }));
+    expect(within(screen.getByTestId("start-choice")).getByRole("link", { name: /^Pool view/ }).getAttribute("href")).toBe("/planned/8/pool");
+    second.unmount();
+
+    render(<>{todayWidget.View({ data: STATES["one program, not done"], size: "l" })}</>);
+    expect(screen.getByRole("link", { name: /Start Today's Workout/ }).getAttribute("href")).toMatch(/\/programs\/\d+\/workout$/);
+    expect(screen.queryByRole("button", { name: /Start Today's Workout/ })).toBeNull();
+  });
+});

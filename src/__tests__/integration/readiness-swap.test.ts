@@ -116,6 +116,18 @@ describe("the suggestion", () => {
   });
 });
 
+/** The one-day program a swap made: its name, its session and its steps (kind, seconds). */
+async function easyProgram(programId: number | null) {
+  const { programs, programExercises, programSets } = await import("@/db/schema");
+  const [p] = await db.select().from(programs).where(eq(programs.id, programId!));
+  const sets = await db
+    .select({ kind: programSets.stepKind, seconds: programSets.durationSeconds })
+    .from(programSets)
+    .innerJoin(programExercises, eq(programExercises.id, programSets.programExerciseId))
+    .where(eq(programExercises.programId, programId!));
+  return { name: p.name, forPlannedSessionId: p.forPlannedSessionId, steps: sets.map((x) => [x.kind, x.seconds]) };
+}
+
 describe("makeSessionEasy (Server Action)", () => {
   it("makes today's hard session easy as writer apply, with a revision; the suggestion is then gone", async () => {
     await readings(me, true);
@@ -123,8 +135,9 @@ describe("makeSessionEasy (Server Action)", () => {
     const r = await makeSessionEasy({ plannedSessionId: session.id });
     expect(r).toEqual({ success: true, data: { id: session.id } });
     const row = await sessionRow(session.id);
-    expect(row.programId).toBeNull();
-    expect(row.workout).toMatchObject({ sport: "bike", name: "Easy bike (readiness)", steps: [{ end: { type: "time", seconds: 50 * MIN } }] });
+    // The easy session is a one-day program of steps (docs/plans/one-program-model.md, decision 2).
+    expect(row.workout).toBeNull();
+    expect(await easyProgram(row.programId)).toEqual({ name: "Easy bike (readiness)", forPlannedSessionId: session.id, steps: [["work", 50 * MIN]] });
     const [rev] = await db
       .select()
       .from(planRevisions)
@@ -163,7 +176,7 @@ describe("apply_readiness_swap over MCP", () => {
     const r = await call("manage_planned_session", { operation: "apply_readiness_swap", id: session.id, expectedVersion: session.version, reason: "Athlete agreed to go easy" });
     expect(r.isError, r.raw).toBe(false);
     expect(r.data.limits.checked).toContain("hard_after_low_readiness");
-    expect((await sessionRow(session.id)).workout).toMatchObject({ name: "Easy bike (readiness)" });
+    expect(await easyProgram((await sessionRow(session.id)).programId)).toMatchObject({ name: "Easy bike (readiness)", forPlannedSessionId: session.id });
     const again = await call("manage_planned_session", { operation: "apply_readiness_swap", id: session.id, expectedVersion: r.data.version, reason: "Again" });
     expect(again).toMatchObject({ isError: true, raw: "Error: Readiness changed: there is no swap to make for this session now." });
   });

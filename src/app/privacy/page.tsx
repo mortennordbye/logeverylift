@@ -38,13 +38,15 @@ export default function PrivacyPage() {
           as a version you can restore, with who made it (you, an assistant you connected, or the app) and the reason given.
         </li>
         <li>
-          <strong>Structured workouts and planned versus done, if endurance features are on:</strong> your library of
-          swim, bike and run workouts (steps, repeats and targets), and for each dated session the workout it runs, its
-          priority, whether it is part of a brick, whether you did it or missed it, an optional reason for a miss in
-          your own words, and the Garmin activity you or your assistant picked for it. From this the app works out how
-          much of each session you did and how many weeks you followed your plan. Each change is kept as a version you
-          can restore. After a session, the result of each step (time, distance, an average you type in, effort and a
-          note), from the guided player or typed in by you or your assistant. From your logged sessions and thresholds
+          <strong>Structured sessions and planned versus done, if endurance features are on:</strong> the steps of
+          your swim, bike and run programs (repeats, targets as a share of your thresholds, cadence, stroke and
+          equipment), and for each dated session its priority, whether it is part of a brick, whether you did it or
+          missed it, an optional reason for a miss in your own words, and the Garmin activity you or your assistant
+          picked for it. A session you change for one day only gets its own copy of the program. From this the app works
+          out how much of each session you did and how many weeks you followed your plan. Each change is kept as a
+          version you can restore. After a session, the result of each step is kept with your logged sets (its status,
+          time, distance, extra time, an average you type in, effort, a note, and a copy of the step as planned with the
+          thresholds used), from the guided player or typed in by you or your assistant. From your logged sessions and thresholds
           the app also works out a training load and your fitness, fatigue and form; these are calculated when shown,
           not stored.
         </li>
@@ -215,9 +217,9 @@ export default function PrivacyPage() {
       <p>
         <strong>AI assistants you connect yourself</strong> (MCP) get the access you choose when you connect them:
         read only, or read and change. They can read your profile, body weight, time zone, display units, how your home screen is arranged, whether endurance features are
-        on, programs, cycles and their dated sessions with planned versus done, structured workouts with step results and training load, seasons and their races, coach memory, thresholds, the athlete profile with injuries and sick periods, fuel logs, fuel products, sweat tests and race plans, and workout history: sets, weights, heart rate zones, effort, how you felt, your readiness and the
+        on, programs (with their structured steps), cycles and their dated sessions with planned versus done, step results and training load, seasons and their races, coach memory, thresholds, the athlete profile with injuries and sick periods, fuel logs, fuel products, sweat tests and race plans, and workout history: sets, weights, heart rate zones, effort, how you felt, your readiness and the
         notes you write on workouts, sets and exercises. If Garmin is on for your account, they can also read data from it. With read and change
-        access they can also change your profile, body weight, time zone, display units, programs, cycles, dated sessions, structured workouts, seasons and races, see and restore earlier
+        access they can also change your profile, body weight, time zone, display units, programs and their steps, cycles, dated sessions, seasons and races, see and restore earlier
         versions of your programs, cycles and seasons, write coach memory, thresholds, the athlete profile, injuries and sick periods, log fuel, sweat tests and fuel products, change race plans, create custom exercises, log a workout you did and its step results, mark a planned day
         or session as done, and mark a planned session as missed. History shows such a workout as logged by your assistant. That provider&apos;s own privacy
         policy applies to what it does with the data. You can disconnect an assistant at any time in More → AI
@@ -245,8 +247,8 @@ export default function PrivacyPage() {
           or injury can be restored for 90 days, then it is deleted for good.
         </li>
         <li>
-          Structured workouts and sick periods: until you delete them or your account. A deleted workout or sick
-          period can be restored for 90 days, then it is deleted for good.
+          Sick periods: until you delete them or your account. A deleted sick period can be restored for 90 days, then
+          it is deleted for good. A one-day copy of a program goes when its session goes back to the plan or is removed.
         </li>
         <li>
           Fuel logs, fuel products, sweat tests and race plans: until you delete them or your account. Fuel logs on

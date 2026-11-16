@@ -1,0 +1,1 @@
+ALTER TABLE "programs" ADD COLUMN "for_planned_session_id" integer;

@@ -9,32 +9,29 @@ import {
   trainingCycles,
   workoutSessions,
   workoutSets,
-  workouts,
 } from "@/db/schema";
-import { confirmPlannedDone, manageIllness, manageWorkout } from "@/lib/actions/workouts-compliance";
+import { confirmPlannedDone, manageIllness } from "@/lib/actions/workouts-compliance";
 import { restoreDeletedAthleteRow } from "@/lib/athlete-profile";
 import { listIllness } from "@/lib/illness";
 import { homeEndurance } from "@/lib/session-answers";
-import { listWorkouts } from "@/lib/workouts";
 import { updatePlannedSession } from "@/lib/actions/planned-sessions";
 import { getActiveCycleForUser } from "@/lib/actions/training-cycles";
 import { registerAthleteProfileTools } from "@/lib/mcp/tools/athlete-profile";
 import { registerCycleTools } from "@/lib/mcp/tools/cycles";
 import { registerPlannedSessionTools } from "@/lib/mcp/tools/planned-sessions";
 import { registerSessionTools } from "@/lib/mcp/tools/sessions";
-import { registerComplianceTools, registerWorkoutLibraryTools } from "@/lib/mcp/tools/workouts-compliance";
+import { registerComplianceTools, registerEnduranceAnswerTools } from "@/lib/mcp/tools/workouts-compliance";
 import { syncPeriodizedTargets } from "@/lib/periodization-sync";
 import { sessionCompliance } from "@/lib/session-compliance";
 import { and, asc, eq, isNull } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createExercise, createProgram, createUser } from "./factories";
+import { createExercise, createProgram, createStepProgram, createUser } from "./factories";
 import { mcpTools } from "./mcp-call";
 import { asUser } from "./setup";
 
 /**
- * Structured workouts, planned vs done and sick periods
- * (docs/plans/workouts-and-compliance.md): the library and its regeneration,
- * workouts and bricks on dated sessions, the answers, Garmin matching, sick
+ * Planned vs done and sick periods (docs/plans/workouts-and-compliance.md):
+ * programs with steps and bricks on dated sessions, the answers, Garmin matching, sick
  * periods, compliance, the weekly sync's adherence, the MCP tools and the
  * Server Actions. The clock is fixed at Thu 2026-11-05 12:00 UTC; the users'
  * zone is UTC.
@@ -92,7 +89,7 @@ const sessionsOf = (cycleId: number) =>
 
 const runProgram = async (userId = me, seconds = 2700) => (await createProgram(userId, [{ exerciseId: runEx, sets: [{ durationSeconds: seconds, targetReps: null, weightKg: null }] }])).program.id;
 const liftProgram = async (userId = me) => (await createProgram(userId, [{ exerciseId: liftEx, sets: [{}] }])).program.id;
-const lib = (userId = me) => mcpTools((s, u) => registerWorkoutLibraryTools(s, u), userId);
+const answers = (userId = me) => mcpTools((s, u) => registerEnduranceAnswerTools(s, u), userId);
 const planned = (userId = me) => mcpTools(registerPlannedSessionTools, userId);
 
 async function completed(userId: string, date: string, programId: number | null, sets: { exerciseId: number; durationSeconds?: number }[], plannedSessionId: number | null = null) {
@@ -106,94 +103,25 @@ async function completed(userId: string, date: string, programId: number | null,
   return s.id;
 }
 
-describe("the workout library", () => {
-  it("creates a workout, refuses an invalid one with every path, and never takes an override", async () => {
-    const created = await lib()("manage_workout", { operation: "create", workout: intervals, reason: "Build block" });
-    expect(created.isError, created.raw).toBe(false);
-    const [row] = await db.select().from(workouts).where(eq(workouts.id, created.data.workoutId));
-    expect(row).toMatchObject({ name: "5 × 3 min", sport: "run", userId: me });
-    expect((row.workout as { steps: { id: string }[] }).steps[0].id).toBe("s1");
-
-    const bad = await lib()("manage_workout", {
-      operation: "create",
-      workout: { ...easyRun(), steps: [{ type: "work", end: { type: "time", seconds: 600 }, target: { metric: "power", anchor: "ftp", low: 95, high: 90 } }] },
-      reason: "x",
-    });
-    expect(bad.isError).toBe(true);
-    expect(bad.raw).toContain("steps[0].target.anchor");
-    expect(bad.raw).toContain("steps[0].target.low");
-    expect(await db.select().from(workouts).where(eq(workouts.userId, me))).toHaveLength(1);
-
-    const list = await lib()("list_workouts", {});
-    expect(list.data.workouts).toEqual([expect.objectContaining({ id: created.data.workoutId, summary: expect.stringContaining("5 × (3 min Z4 HR") })]);
-    expect((await lib(other)("list_workouts", {})).data.workouts).toEqual([]);
-    const theirs = await lib(other)("manage_workout", { operation: "update", workoutId: created.data.workoutId, name: "Mine", reason: "x", expectedVersion: 1 });
-    expect(theirs.isError).toBe(true);
-  });
-
-  it("a slot with a library workout copies it into each session; a library edit reaches only untouched sessions from this week on", async () => {
-    const w = (await lib()("manage_workout", { operation: "create", workout: easyRun("Tuesday run"), reason: "x" })).data;
-    const cycleId = await cycle(me, [{ dayOfWeek: 2, workoutId: w.workoutId }, { dayOfWeek: 4, workoutId: w.workoutId }], "2026-10-26");
-    const rows = await sessionsOf(cycleId);
-    expect(rows.length).toBeGreaterThan(4);
-    expect(rows.every((r) => r.programId == null && (r.workout as { name: string }).name === "Tuesday run" && r.workoutId === w.workoutId)).toBe(true);
-
-    // Touch one future session with its own workout.
-    const future = rows.find((r) => r.date === "2026-11-12")!;
-    const set = await planned()("manage_planned_session", { operation: "set_workout", id: future.id, workout: easyRun("Own copy"), reason: "x", expectedVersion: future.version });
-    expect(set.isError, set.raw).toBe(false);
-
-    const upd = await lib()("manage_workout", { operation: "update", workoutId: w.workoutId, workout: easyRun("Longer run", 3600), reason: "More time", expectedVersion: w.version });
-    expect(upd.isError, upd.raw).toBe(false);
-    expect(upd.data.sessionsRegenerated).toBeGreaterThan(0);
-    const after = await sessionsOf(cycleId);
-    const name = (d: string) => (after.find((r) => r.date === d)!.workout as { name: string }).name;
-    expect(name("2026-10-27")).toBe("Tuesday run"); // an earlier week never changes
-    expect(name("2026-11-03")).toBe("Longer run"); // this week's untouched past day follows (C2 decision 19)
-    expect(name("2026-11-10")).toBe("Longer run");
-    expect(name("2026-11-12")).toBe("Own copy"); // touched keeps its own
-
-    const del = await lib()("manage_workout", { operation: "delete", workoutId: w.workoutId, reason: "Gone", expectedVersion: upd.data.version });
-    expect(del.isError, del.raw).toBe(false);
-    const left = await sessionsOf(cycleId);
-    expect(left.find((r) => r.date === "2026-11-10")).toBeUndefined(); // untouched future reads the slot as rest
-    expect(left.find((r) => r.date === "2026-11-12")).toBeDefined();
-    expect(left.find((r) => r.date === "2026-10-27")).toBeDefined();
-  });
-
-  it("Server Actions: list, duplicate, rename, delete and restore; refused with the switch off", async () => {
-    const w = (await lib()("manage_workout", { operation: "create", workout: easyRun(), reason: "x" })).data;
-    const dup = await manageWorkout({ op: "duplicate", id: w.workoutId });
-    expect(dup.success).toBe(true);
-    if (!dup.success) return;
-    expect((await manageWorkout({ op: "rename", id: dup.data.id, name: "Copy two" })).success).toBe(true);
-    expect((await manageWorkout({ op: "delete", id: w.workoutId })).success).toBe(true);
-    expect((await listWorkouts(me)).map((x) => x.name)).toEqual(["Copy two"]);
-    expect((await listWorkouts(me, { deleted: true })).map((x) => x.id)).toEqual([w.workoutId]);
-    expect((await manageWorkout({ op: "restore", id: w.workoutId })).success).toBe(true);
-    expect(await listWorkouts(me)).toHaveLength(2);
-    const revs = await db.select().from(planRevisions).where(and(eq(planRevisions.objectType, "workout"), eq(planRevisions.writer, "user")));
-    expect(revs.length).toBeGreaterThanOrEqual(4);
-
-    const lifter = (await createUser({ timeZone: "UTC" })).id;
-    asUser(lifter);
-    expect(await manageWorkout({ op: "delete", id: w.workoutId })).toMatchObject({ success: false, error: "Endurance features are not on for this account" });
-  });
-});
-
-describe("workouts and bricks on dated sessions", () => {
-  it("set_workout copies, clears the program and runs the limits; a brick moves as one", async () => {
+describe("programs with steps and bricks on dated sessions", () => {
+  it("a change to a program with steps runs the limits; a brick moves as one", async () => {
     const run = await runProgram();
     const cycleId = await cycle(me, [{ dayOfWeek: 6, programId: run }]);
     const [sat] = (await sessionsOf(cycleId)).filter((r) => r.date === "2026-11-07");
-    const set = await planned()("manage_planned_session", { operation: "set_workout", id: sat.id, workout: intervals, reason: "Intervals", expectedVersion: sat.version });
+    const steps = (await createStepProgram(me, runEx, intervals)).program.id;
+    const set = await planned()("manage_planned_session", { operation: "change", id: sat.id, programId: steps, reason: "Intervals", expectedVersion: sat.version });
     expect(set.isError, set.raw).toBe(false);
-    expect(set.data.session).toMatchObject({ programId: null, workout: expect.objectContaining({ name: "5 × 3 min" }) });
+    expect(set.data.session).toMatchObject({ programId: steps });
     expect(set.data.limits.checked).toContain("hard_sessions_per_week");
+    const [view] = await sessionCompliance(me, "2026-11-07", "2026-11-07", { cycleId });
+    expect(view).toMatchObject({ sport: "run", hard: true, workoutSummary: expect.stringContaining("5 × (3 min Z4 HR") });
 
-    const ride = await planned()("manage_planned_session", { operation: "add", cycleId, date: "2026-11-08", workout: { v: 1, sport: "bike", name: "Ride", steps: [{ type: "work", end: { type: "time", seconds: 3600 } }] }, reason: "Brick" });
+    const bikeEx = (await createExercise({ name: `Bike ${Math.random()}`, category: "cardio", discipline: "bike" })).id;
+    const rideProgram = (await createStepProgram(me, bikeEx, { v: 1, sport: "bike", name: "Ride", steps: [{ type: "work", end: { type: "time", seconds: 3600 } }] })).program.id;
+    const ride = await planned()("manage_planned_session", { operation: "add", cycleId, date: "2026-11-08", programId: rideProgram, reason: "Brick" });
     expect(ride.isError, ride.raw).toBe(false);
-    const runOff = await planned()("manage_planned_session", { operation: "add", cycleId, date: "2026-11-08", workout: easyRun("Off the bike", 1200), brickParentId: ride.data.session.id, reason: "Brick" });
+    const offBike = (await createStepProgram(me, runEx, easyRun("Off the bike", 1200))).program.id;
+    const runOff = await planned()("manage_planned_session", { operation: "add", cycleId, date: "2026-11-08", programId: offBike, brickParentId: ride.data.session.id, reason: "Brick" });
     expect(runOff.isError, runOff.raw).toBe(false);
 
     const alone = await planned()("manage_planned_session", { operation: "move", id: runOff.data.session.id, date: "2026-11-09", reason: "x", expectedVersion: runOff.data.version });
@@ -202,10 +130,6 @@ describe("workouts and bricks on dated sessions", () => {
     expect(moved.isError, moved.raw).toBe(false);
     const [child] = await db.select().from(plannedSessions).where(eq(plannedSessions.id, runOff.data.session.id));
     expect(child).toMatchObject({ date: "2026-11-09", brickParentId: ride.data.session.id });
-
-    const invalid = await planned()("manage_planned_session", { operation: "set_workout", id: sat.id, workout: { v: 1, sport: "run", name: "x", steps: [] }, reason: "x", expectedVersion: set.data.version, overrideLimits: ["hard_sessions_per_week"], overrideReason: "The athlete asked for it" });
-    expect(invalid.isError).toBe(true);
-    expect(invalid.raw).toContain("The workout is not valid");
   });
 
   it("refuses the endurance operations with the switch off", async () => {
@@ -278,17 +202,17 @@ describe("planned vs done", () => {
     const tue = rows.find((r) => r.date === "2026-11-03")!;
     const wed = rows.find((r) => r.date === "2026-11-04")!;
 
-    const done = await lib()("confirm_planned_session", { plannedSessionId: wed.id, outcome: "done", durationSeconds: 1800, distanceMeters: 5000, rpe: 4, reason: "User told me" });
+    const done = await answers()("confirm_planned_session", { plannedSessionId: wed.id, outcome: "done", durationSeconds: 1800, distanceMeters: 5000, rpe: 4, reason: "User told me" });
     expect(done.isError, done.raw).toBe(false);
     expect(done.data).toMatchObject({ state: "done", band: "green" });
     const [logged] = await db.select().from(workoutSessions).where(eq(workoutSessions.id, done.data.loggedSessionId));
     expect(logged).toMatchObject({ plannedSessionId: wed.id, date: "2026-11-04", source: "assistant", isCompleted: true });
     const [set] = await db.select({ discipline: exercises.discipline, rpe: workoutSets.rpe, d: workoutSets.distanceMeters }).from(workoutSets).innerJoin(exercises, eq(exercises.id, workoutSets.exerciseId)).where(eq(workoutSets.sessionId, logged.id));
     expect(set).toEqual({ discipline: "run", rpe: 4, d: 5000 });
-    const again = await lib()("confirm_planned_session", { plannedSessionId: wed.id, outcome: "done", durationSeconds: 1800, reason: "x" });
+    const again = await answers()("confirm_planned_session", { plannedSessionId: wed.id, outcome: "done", durationSeconds: 1800, reason: "x" });
     expect(again.isError).toBe(true);
 
-    const missed = await lib()("confirm_planned_session", { plannedSessionId: tue.id, outcome: "missed", missedReason: "Work", reason: "User said", expectedVersion: tue.version });
+    const missed = await answers()("confirm_planned_session", { plannedSessionId: tue.id, outcome: "missed", missedReason: "Work", reason: "User said", expectedVersion: tue.version });
     expect(missed.isError, missed.raw).toBe(false);
     expect(missed.data).toMatchObject({ state: "missed", priority: "key", band: "red" });
     // Thu (today) is free with no hard neighbour: Wed was easy, Fri empty.
@@ -298,9 +222,9 @@ describe("planned vs done", () => {
     const tueView = list.data.sessions.find((s: { id: number }) => s.id === tue.id);
     expect(tueView).toMatchObject({ state: "missed", missedReason: "Work", suggestedMoveTo: { date: TODAY } });
 
-    const un = await lib()("confirm_planned_session", { plannedSessionId: tue.id, outcome: "unmiss", reason: "Mistake", expectedVersion: missed.data.version });
+    const un = await answers()("confirm_planned_session", { plannedSessionId: tue.id, outcome: "unmiss", reason: "Mistake", expectedVersion: missed.data.version });
     expect(un.data).toMatchObject({ state: "unconfirmed" });
-    expect((await lib(other)("confirm_planned_session", { plannedSessionId: tue.id, outcome: "missed", reason: "x", expectedVersion: un.data.version })).raw).toBe("Error: Planned session not found");
+    expect((await answers(other)("confirm_planned_session", { plannedSessionId: tue.id, outcome: "missed", reason: "x", expectedVersion: un.data.version })).raw).toBe("Error: Planned session not found");
   });
 
   it("matches a Garmin run of the day for an admin, and a picked activity", async () => {
@@ -319,7 +243,7 @@ describe("planned vs done", () => {
     ]);
     const wed = (await sessionsOf(cycleId)).find((r) => r.date === "2026-11-04")!;
     const lateRun = await act("2026-11-05", "running", 1800);
-    const pick = (garminActivityId: number, expectedVersion: number) => lib(admin)("confirm_planned_session", { plannedSessionId: wed.id, outcome: "done", garminActivityId, reason: "Watch ride", expectedVersion });
+    const pick = (garminActivityId: number, expectedVersion: number) => answers(admin)("confirm_planned_session", { plannedSessionId: wed.id, outcome: "done", garminActivityId, reason: "Watch ride", expectedVersion });
     expect((await pick(odd, wed.version)).isError).toBe(false);
     const [picked] = await sessionCompliance(admin, "2026-11-04", "2026-11-04", { cycleId });
     expect(picked).toMatchObject({ state: "done", matchedBy: "pick", garminActivityId: odd });
@@ -374,7 +298,7 @@ describe("sick periods", () => {
   });
 
   it("over MCP: manage_illness and get_athlete_profile with the return rule", async () => {
-    const add = await lib()("manage_illness", { operation: "add", startedOn: "2026-11-01", endedOn: "2026-11-03", severity: "severe", reason: "User is sick" });
+    const add = await answers()("manage_illness", { operation: "add", startedOn: "2026-11-01", endedOn: "2026-11-03", severity: "severe", reason: "User is sick" });
     expect(add.isError, add.raw).toBe(false);
     expect(add.data.returnInfo).toMatchObject({ phase: "returning", seeDoctor: true });
     const profile = await mcpTools((s, u) => registerAthleteProfileTools(s, u, undefined, { endurance: true }), me)("get_athlete_profile", {});
@@ -400,43 +324,29 @@ describe("compliance, confirm_session and the slot tool", () => {
     expect(r.data).toMatchObject({ completeWeeks: 1, countedWeeks: 2, share: 0.5, thisWeek: { counted: 2, done: 0 } });
   });
 
-  it("confirm_session refuses an endurance session with the switch on; edit_cycle_slot sets a workout slot", async () => {
+  it("confirm_session refuses an endurance session with the switch on; edit_cycle_slot sets a slot with steps and a priority", async () => {
     const run = await runProgram();
     const cycleId = await cycle(me, [{ dayOfWeek: 3, programId: run }]);
     const r = await mcpTools(registerSessionTools, me)("confirm_session", { date: "2026-11-04", programId: run });
     expect(r.isError).toBe(true);
     expect(r.raw).toContain("confirm_planned_session");
 
-    const w = (await lib()("manage_workout", { operation: "create", workout: easyRun("Slot run"), reason: "x" })).data;
+    const steps = (await createStepProgram(me, runEx, easyRun("Slot run"))).program.id;
     const [c] = await db.select({ version: trainingCycles.version }).from(trainingCycles).where(eq(trainingCycles.id, cycleId));
-    const slot = await mcpTools((s, u) => registerCycleTools(s, u), me)("edit_cycle_slot", { operation: "upsert", trainingCycleId: cycleId, dayOfWeek: 5, workoutId: w.workoutId, priority: "key", reason: "Friday run", expectedVersion: c.version });
+    const slot = await mcpTools((s, u) => registerCycleTools(s, u), me)("edit_cycle_slot", { operation: "upsert", trainingCycleId: cycleId, dayOfWeek: 5, programId: steps, priority: "key", reason: "Friday run", expectedVersion: c.version });
     expect(slot.isError, slot.raw).toBe(false);
     const fri = (await sessionsOf(cycleId)).find((x) => x.date === "2026-11-06")!;
-    expect(fri).toMatchObject({ programId: null, workoutId: w.workoutId, priority: "key" });
+    expect(fri).toMatchObject({ programId: steps, priority: "key" });
   });
 });
 
 describe("the remaining session operations", () => {
-  it("over MCP: get_workout resolves a session's targets; clear_workout, update_from_library, set_priority, link and unlink a brick", async () => {
+  it("over MCP: set_priority, link and unlink a brick", async () => {
     const run = await runProgram();
-    const w = (await lib()("manage_workout", { operation: "create", workout: intervals, reason: "x" })).data;
     const cycleId = await cycle(me, [{ dayOfWeek: 6, programId: run }, { dayOfWeek: 7, programId: run }]);
     const [sat, sun] = (await sessionsOf(cycleId)).filter((r) => r.date! >= "2026-11-07");
-    let v = (await planned()("manage_planned_session", { operation: "set_workout", id: sat.id, workoutId: w.workoutId, reason: "x", expectedVersion: sat.version })).data.version;
-    const got = await lib()("get_workout", { plannedSessionId: sat.id });
-    expect(got.isError, got.raw).toBe(false);
-    expect(got.data.missingAnchors).toEqual(["lthr_run"]);
-    expect(got.data.resolvedSteps[1].steps[0].resolved.text).toContain("no lthr_run set");
-
-    await lib()("manage_workout", { operation: "update", workoutId: w.workoutId, name: "5 × 4 min", reason: "x", expectedVersion: w.version });
-    const upd = await planned()("manage_planned_session", { operation: "update_from_library", id: sat.id, reason: "x", expectedVersion: v });
-    expect(upd.data.session.workout.name).toBe("5 × 4 min");
-    v = upd.data.version;
-    const pri = await planned()("manage_planned_session", { operation: "set_priority", id: sat.id, priority: "key", reason: "Key day", expectedVersion: v });
+    const pri = await planned()("manage_planned_session", { operation: "set_priority", id: sat.id, priority: "key", reason: "Key day", expectedVersion: sat.version });
     expect(pri.data.session.priority).toBe("key");
-    v = pri.data.version;
-    const cleared = await planned()("manage_planned_session", { operation: "clear_workout", id: sat.id, programId: run, reason: "Back to the plan", expectedVersion: v });
-    expect(cleared.data.session).toMatchObject({ workout: null, programId: run });
 
     const wrongDay = await planned()("manage_planned_session", { operation: "link_brick", id: sun.id, brickParentId: sat.id, reason: "x", expectedVersion: sun.version });
     expect(wrongDay).toMatchObject({ isError: true, raw: "Error: A brick's sessions are on the same day of the same cycle." });
@@ -447,18 +357,16 @@ describe("the remaining session operations", () => {
     expect(unlinked.data.session.brickParentId).toBeNull();
   });
 
-  it("from the app: use a library workout and link a brick; the database refuses a program and a workout together", async () => {
+  it("from the app: a program with steps for one day is a revision", async () => {
     const run = await runProgram();
-    const w = (await lib()("manage_workout", { operation: "create", workout: easyRun(), reason: "x" })).data;
+    const steps = (await createStepProgram(me, runEx, easyRun())).program.id;
     const cycleId = await cycle(me, [{ dayOfWeek: 6, programId: run }]);
     const [sat] = (await sessionsOf(cycleId)).filter((r) => r.date === "2026-11-07");
-    expect(await updatePlannedSession({ op: "set_workout", id: sat.id, workoutId: w.workoutId })).toMatchObject({ success: true });
-    expect(await updatePlannedSession({ op: "set_workout", id: sat.id, workoutId: 999999 })).toMatchObject({ success: false, error: "Workout not found" });
+    expect(await updatePlannedSession({ op: "change", id: sat.id, programId: steps })).toMatchObject({ success: true });
     const [row] = await db.select().from(plannedSessions).where(eq(plannedSessions.id, sat.id));
-    expect(row).toMatchObject({ programId: null, workoutId: w.workoutId });
+    expect(row).toMatchObject({ programId: steps });
     const [rev] = await db.select().from(planRevisions).where(and(eq(planRevisions.objectType, "planned_session"), eq(planRevisions.objectId, sat.id), eq(planRevisions.writer, "user")));
     expect(rev).toBeDefined();
-    await expect(db.update(plannedSessions).set({ programId: run }).where(eq(plannedSessions.id, sat.id))).rejects.toThrow();
   });
 });
 

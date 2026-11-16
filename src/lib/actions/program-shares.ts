@@ -8,6 +8,7 @@ import {
   copySharedProgramSchema,
   shareProgramSchema,
 } from "@/lib/validators/friends";
+import { stepFieldsOf } from "@/lib/utils/program-steps";
 import { requireSession } from "@/lib/utils/session";
 import type { ActionResult, IncomingShare, OutgoingShare } from "@/types/workout";
 import { and, eq, or } from "drizzle-orm";
@@ -230,6 +231,7 @@ export async function copySharedProgram(
             progressionBackoffPct: pe.progressionBackoffPct,
             progressionBackoffAfter: pe.progressionBackoffAfter,
             progressionReadiness: pe.progressionReadiness,
+            poolLengthM: pe.poolLengthM,
           })
           .returning({ id: programExercises.id });
 
@@ -255,6 +257,9 @@ export async function copySharedProgram(
               // shared autoregulated program has to arrive with its cap or it
               // arrives as a different scheme.
               targetRir: ps.targetRir ?? undefined,
+              // A structured endurance exercise arrives with its steps
+              // (docs/plans/one-program-model.md, 2).
+              ...stepFieldsOf(ps),
             })),
           );
         }

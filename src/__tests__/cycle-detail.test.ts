@@ -109,11 +109,10 @@ describe("rowAction and sessionSub", () => {
 describe("dayLabels", () => {
   it("names a weekday whose only slots are labelled with no program, but not a plain Rest", () => {
     const labels = dayLabels([
-      { dayOfWeek: 1, programId: 3, workoutId: null, label: "Strength" },
-      { dayOfWeek: 5, programId: null, workoutId: null, label: "Mobility, stretching and the long drive home" },
-      { dayOfWeek: 6, programId: null, workoutId: 8, label: "Long ride" },
-      { dayOfWeek: 7, programId: null, workoutId: null, label: "Rest" },
-      { dayOfWeek: 4, programId: null, workoutId: null, label: null },
+      { dayOfWeek: 1, programId: 3, label: "Strength" },
+      { dayOfWeek: 5, programId: null, label: "Mobility, stretching and the long drive home" },
+      { dayOfWeek: 7, programId: null, label: "Rest" },
+      { dayOfWeek: 4, programId: null, label: null },
     ]);
     expect(labels).toEqual({ 5: "Mobility, stretching and the long drive home" });
   });
@@ -122,10 +121,10 @@ describe("dayLabels", () => {
 describe("dayNotes (J5-11)", () => {
   it("gives the notes of the labelled days only", () => {
     const notes = dayNotes([
-      { dayOfWeek: 1, programId: 3, workoutId: null, label: "Strength", notes: "Heavy" },
-      { dayOfWeek: 5, programId: null, workoutId: null, label: "Mobility", notes: " Hips and back " },
-      { dayOfWeek: 6, programId: null, workoutId: null, label: "Walk", notes: null },
-      { dayOfWeek: 7, programId: null, workoutId: null, label: "Rest", notes: "Sleep in" },
+      { dayOfWeek: 1, programId: 3, label: "Strength", notes: "Heavy" },
+      { dayOfWeek: 5, programId: null, label: "Mobility", notes: " Hips and back " },
+      { dayOfWeek: 6, programId: null, label: "Walk", notes: null },
+      { dayOfWeek: 7, programId: null, label: "Rest", notes: "Sleep in" },
     ]);
     expect(notes).toEqual({ 5: "Hips and back" });
   });

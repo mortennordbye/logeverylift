@@ -11,7 +11,7 @@
  */
 
 import { db } from "@/db";
-import { exercises, garminDailyMetrics, workoutSessions, workoutSets, workoutStepResults } from "@/db/schema";
+import { exercises, garminDailyMetrics, workoutSessions, workoutSets } from "@/db/schema";
 import { garminAllowedFor } from "@/lib/garmin/access";
 import { strengthLoad } from "@/lib/garmin/analytics/load";
 import { rampBand, type PmcPoint, type RampBand, type Track } from "@/lib/garmin/analytics/pmc";
@@ -60,6 +60,8 @@ export async function appSessionLoads(userId: string, from: string | null, to: s
       distanceMeters: workoutSets.distanceMeters,
       inclinePercent: workoutSets.inclinePercent,
       rpe: workoutSets.rpe,
+      plannedStep: workoutSets.plannedStep,
+      stepStatus: workoutSets.stepStatus,
     })
     .from(workoutSessions)
     .innerJoin(workoutSets, eq(workoutSets.sessionId, workoutSessions.id))
@@ -68,18 +70,16 @@ export async function appSessionLoads(userId: string, from: string | null, to: s
     .orderBy(asc(workoutSessions.date), asc(workoutSessions.id));
   if (!rows.length) return [];
 
-  const ids = [...new Set(rows.map((r) => r.id))];
   const moving = new Map<number, number>();
-  const results = await db
-    .select({ sessionId: workoutStepResults.workoutSessionId, steps: workoutStepResults.steps, workout: workoutStepResults.workout })
-    .from(workoutStepResults)
-    .where(and(eq(workoutStepResults.userId, userId), inArray(workoutStepResults.workoutSessionId, ids)));
-  for (const r of results) {
-    const restKeys = restStepKeys(r.workout);
-    const steps = ((r.steps as { key: string; status: string; activeSeconds?: number }[]) ?? []).filter((s) => !restKeys.has(s.key.split("#")[0]));
-    // Moving time only when every step that was swum has its time; otherwise the logged time counts (review fix 3).
-    const complete = steps.every((s) => s.status === "skipped" || s.status === "not_done" || s.activeSeconds !== undefined);
-    if (complete) moving.set(r.sessionId, steps.reduce((a, s) => a + (s.activeSeconds ?? 0), 0));
+  // Swim moving time (docs/plans/one-program-model.md, 2): the logged steps that
+  // are not rest steps, when every step that was swum has its time; otherwise the
+  // logged time counts (review fix 3).
+  const byStepSession = new Map<number, typeof rows>();
+  for (const r of rows) if (r.plannedStep != null && r.discipline === "swim") byStepSession.set(r.id, [...(byStepSession.get(r.id) ?? []), r]);
+  for (const [sessionId, list] of byStepSession) {
+    const swum = list.filter((r) => (r.plannedStep as { step?: { type?: string } }).step?.type !== "rest");
+    const complete = swum.every((r) => r.stepStatus === "skipped" || r.stepStatus === "not_done" || r.durationSeconds != null);
+    if (complete) moving.set(sessionId, swum.reduce((a, r) => a + (r.durationSeconds ?? 0), 0));
   }
   const anchors = loadAnchors(await thresholdValues(userId));
 
@@ -119,17 +119,6 @@ export async function appSessionLoads(userId: string, from: string | null, to: s
     }
   }
   return out;
-}
-
-/** Ids of the rest steps of a stored workout (top level and inside repeats). */
-function restStepKeys(workout: unknown): Set<string> {
-  const keys = new Set<string>();
-  const w = workout as { steps?: { id?: string; type: string; steps?: { id?: string; type: string }[] }[] } | null;
-  for (const n of w?.steps ?? []) {
-    if (n.type === "rest" && n.id) keys.add(n.id);
-    for (const s of n.steps ?? []) if (s.type === "rest" && s.id) keys.add(s.id);
-  }
-  return keys;
 }
 
 export type LoadDayView = { date: string; calibrating: boolean; tracks: Record<Track, PmcPoint> };

@@ -11,7 +11,7 @@
 
 import { toPlaySteps, STEP_WORD, type PlayerSession } from "@/components/features/guided/types";
 import { saveStepResultsAction } from "@/lib/actions/step-results";
-import { formatTime } from "@/lib/utils/format";
+import { formatTime, plannedLine } from "@/lib/utils/format";
 import { callAction } from "@/lib/utils/stale-bundle";
 import { compareStep, resultsAsPlanned, resultsFromRun, type PlannedRow, type StepResult } from "@/lib/utils/step-results";
 import { fieldToMeters, fieldUnit, metersToField, type Units } from "@/lib/utils/units";
@@ -133,7 +133,7 @@ export function StepResultsForm({ session, units, existing, fromPlayer }: { sess
       <div className="px-4 pt-2 pb-3">
         <h1 className="text-2xl font-bold tracking-tight">{session.name}</h1>
         <p className="text-sm text-muted-foreground">
-          {fromPlayer || run ? "From the guided run" : "As planned; change what was different"} · {formatTime(total)}
+          {fromPlayer || run ? "From the guided run" : existing ? "Saved. Change what was different" : "As planned. Change what was different"} · {formatTime(total)}
         </p>
         {olderWorkout && !noMatch && <p className="mt-1 rounded-xl bg-amber-500/10 px-3 py-2 text-sm">The workout changed after this run. Steps it no longer has are left out.</p>}
       </div>
@@ -183,7 +183,7 @@ export function StepResultsForm({ session, units, existing, fromPlayer }: { sess
                   </p>
                   <p className="text-sm">{p.text}</p>
                   <p className="text-xs text-muted-foreground">
-                    {p.plannedSeconds !== null ? `planned ${formatTime(p.plannedSeconds)}` : "planned to lap"}
+                    {plannedLine(p, unit)}
                     {r.activeSeconds !== undefined ? ` · done ${formatTime(r.activeSeconds)}` : ""}
                     {c.band ? ` · ${BAND_TEXT[c.band] ?? c.band}` : ""}
                     {c.hit ? ` · ${HIT_TEXT[c.hit]}` : ""}

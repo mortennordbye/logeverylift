@@ -140,7 +140,35 @@ export async function rebuildPRsFrom(tx: Tx, userId: string, exerciseId: number,
     )
     .orderBy(asc(workoutSets.createdAt), asc(workoutSets.id));
 
+  // Endurance steps (docs/plans/one-program-model.md, 2): a session's steps
+  // are one effort, as a run logged as one set is. Their time and distance
+  // are summed and recorded once, at the session's last step.
+  const steps = new Map<number, { lastId: number; distanceMeters: number; durationSeconds: number }>();
   for (const { set } of replay) {
+    if (set.plannedStep == null) continue;
+    const t = steps.get(set.sessionId) ?? { lastId: set.id, distanceMeters: 0, durationSeconds: 0 };
+    t.lastId = set.id;
+    t.distanceMeters += set.distanceMeters ?? 0;
+    t.durationSeconds += set.durationSeconds ?? 0;
+    steps.set(set.sessionId, t);
+  }
+
+  for (const { set } of replay) {
+    if (set.plannedStep != null) {
+      const t = steps.get(set.sessionId)!;
+      if (t.lastId === set.id && t.distanceMeters > 0) {
+        await detectAndRecordEndurancePRs(tx, {
+          userId,
+          exerciseId,
+          sessionId: set.sessionId,
+          setId: set.id,
+          distanceMeters: t.distanceMeters,
+          durationSeconds: t.durationSeconds,
+          at: set.createdAt,
+        });
+      }
+      continue;
+    }
     const weightKg = Number(set.weightKg);
     const at = set.createdAt;
     // The same conditions logWorkoutSet applies when the set is logged.

@@ -6,7 +6,7 @@ import { registerPlannedSessionTools } from "@/lib/mcp/tools/planned-sessions";
 import { registerProgramTools } from "@/lib/mcp/tools/programs";
 import { and, desc, eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createExercise, createProgram, createUser } from "./factories";
+import { createExercise, createProgram, createStepProgram, createUser } from "./factories";
 import { mcpTools } from "./mcp-call";
 import { asUser } from "./setup";
 
@@ -169,7 +169,8 @@ describe("weekly_load_ramp review fixes", () => {
     await mcpTools(registerPlannedSessionTools, me)("list_planned_sessions", { from: TODAY, to: "2026-12-13" });
     const [c] = await db.select().from(trainingCycles).where(eq(trainingCycles.userId, me));
     const tenHours = { v: 1, sport: "bike", name: "Very long ride", steps: [{ type: "work", end: { type: "time", seconds: 36_000 }, target: { metric: "power", anchor: "ftp", low: 60, high: 70 } }] };
-    const r = await mcpTools(registerPlannedSessionTools, me)("manage_planned_session", { operation: "add", cycleId: c.id, date: "2026-12-08", workout: tenHours, position: 2, reason: "Camp" });
+    const camp = (await createStepProgram(me, bike, tenHours)).program.id;
+    const r = await mcpTools(registerPlannedSessionTools, me)("manage_planned_session", { operation: "add", cycleId: c.id, date: "2026-12-08", programId: camp, position: 2, reason: "Camp" });
     expect(r.isError).toBe(true);
     // Fitness holds near 40 on the daily rides; projecting the gap as empty days would decay it to about 24.
     const starts = ctlStarts(JSON.parse(r.raw).brokenLimits.find((b: { rule: string }) => b.rule === "weekly_load_ramp").numbers);

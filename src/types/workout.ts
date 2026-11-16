@@ -102,11 +102,12 @@ export type SessionDetail = WorkoutSession & {
 // Training Cycles
 export type TrainingCycle = typeof trainingCycles.$inferSelect;
 /**
- * A template slot. The structured-workout fields (docs/plans/workouts-and-compliance.md, 4.3)
- * are optional here: screens that build a slot by hand need not know them.
+ * A template slot. The endurance fields (docs/plans/workouts-and-compliance.md, 4.3)
+ * are optional here: screens that build a slot by hand need not know them. The old
+ * library workout (workoutId) is left out: slots run programs only.
  */
 export type TrainingCycleSlot = Omit<typeof trainingCycleSlots.$inferSelect, "workoutId" | "priority" | "brickWithNext"> &
-  Partial<Pick<typeof trainingCycleSlots.$inferSelect, "workoutId" | "priority" | "brickWithNext">>;
+  Partial<Pick<typeof trainingCycleSlots.$inferSelect, "priority" | "brickWithNext">>;
 
 export type TrainingCycleSlotWithProgram = TrainingCycleSlot & {
   program: Program | null;
@@ -564,7 +565,11 @@ export type ExportedProgram = {
         /** Double progression's rep range. Absent on exports that predate it. */
         repMin?: number | null;
         repMax?: number | null;
+        /** Endurance step fields (docs/plans/one-program-model.md). Only on a step. */
+        step?: Record<string, unknown>;
       }>;
+      /** Swim pool length in metres. Only when set. */
+      poolM?: number;
     }>;
   };
 };

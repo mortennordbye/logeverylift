@@ -29,9 +29,8 @@ export const plannedSessionOpSchema = z.discriminatedUnion("op", [
     label: z.string().max(100).nullable().optional(),
     notes: z.string().max(500).nullable().optional(),
   }),
-  // Structured workouts and answers, endurance features only (docs/plans/workouts-and-compliance.md, 7).
-  // The other session operations (bricks, Garmin picks, unmiss, update from library) are MCP only until the app has a control for them.
-  z.object({ op: z.literal("set_workout"), id, workoutId: id }),
+  // Answers, endurance features only (docs/plans/workouts-and-compliance.md, 7).
+  // The other session operations (bricks, Garmin picks, unmiss) are MCP only until the app has a control for them.
   z.object({ op: z.literal("miss"), id, reason: z.string().trim().max(200).nullable().optional() }),
 ]);
 
@@ -69,14 +68,6 @@ export const illnessOpSchema = z.discriminatedUnion("op", [
   }),
   z.object({ op: z.literal("end"), id, endedOn: day }),
   z.object({ op: z.literal("delete"), id }),
-]);
-
-/** One change to a library workout from the app: the step editor waits for C6. */
-export const workoutOpSchema = z.discriminatedUnion("op", [
-  z.object({ op: z.literal("duplicate"), id }),
-  z.object({ op: z.literal("rename"), id, name: z.string().trim().min(1).max(80) }),
-  z.object({ op: z.literal("delete"), id }),
-  z.object({ op: z.literal("restore"), id }),
 ]);
 
 export const plannedRangeSchema = z.object({ from: day, to: day, cycleId: id.optional() });

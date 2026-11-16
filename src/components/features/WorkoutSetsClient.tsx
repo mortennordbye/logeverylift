@@ -1,5 +1,6 @@
 "use client";
 
+import type { StepLabel } from "@/lib/program-steps-view";
 import { WorkoutSetsList } from "@/components/features/WorkoutSetsList";
 import {
   addWarmupSets,
@@ -193,6 +194,10 @@ type Props = {
   /** Stack pattern learned from logged custom weights, shown in the sheet. */
   weightStack?: string | null;
   initialEditing?: boolean;
+  /** Endurance step rows: kind, round and target per set id (docs/plans/one-program-model.md, 3). */
+  stepLabels?: Record<number, StepLabel> | null;
+  /** Shown under the set list (the program editor's "Edit as steps" link). */
+  footer?: React.ReactNode;
 };
 
 export function WorkoutSetsClient({
@@ -223,6 +228,8 @@ export function WorkoutSetsClient({
   equipment = null,
   weightStack: initialWeightStack = null,
   initialEditing = false,
+  stepLabels = null,
+  footer,
 }: Props) {
   const router = useRouter();
   const [isEditing, setIsEditing] = useState(initialEditing);
@@ -818,6 +825,13 @@ export function WorkoutSetsClient({
             >
               <Plus className="w-4 h-4 text-primary" />
             </Link>
+          ) : stepLabels ? (
+            // Steps are edited as a whole in the step editor: one set of a
+            // repeat block cannot be deleted or moved alone
+            // (docs/plans/one-program-model.md, step 4).
+            <Link href={`/programs/${programId}/exercises/${programExerciseId}`} className="text-primary text-sm font-medium min-h-11 inline-flex items-center" data-testid="edit-steps">
+              Edit
+            </Link>
           ) : (
             <button
               onClick={() => setIsEditing(true)}
@@ -934,6 +948,7 @@ export function WorkoutSetsClient({
             isTimed={exerciseIsTimed && !isRunning}
             isRunning={isRunning}
             discipline={exerciseDiscipline}
+            stepLabels={stepLabels}
             exerciseId={exerciseId}
             sessionId={workoutSession?.sessionId ?? undefined}
             onDeleteSet={handleDeleteSet}
@@ -954,6 +969,7 @@ export function WorkoutSetsClient({
             Generate warm-ups
           </button>
         )}
+        {footer}
       </div>
 
 

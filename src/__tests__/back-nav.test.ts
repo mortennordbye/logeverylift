@@ -38,7 +38,6 @@ describe("backLabelFor", () => {
     ["/more/assistants", "Connection"],
     ["/more/admin", "Admin"],
     ["/more/nutrition", "Nutrition"],
-    ["/more/workouts", "Workouts"],
     ["/more/friends/search", "Add friends"],
     ["/more/friends/shared-programs", "Shared programs"],
     ["/more/friends/abc/sessions/4", "Workout"],

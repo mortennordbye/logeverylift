@@ -1,5 +1,6 @@
 "use client";
 
+import type { StepLabel } from "@/lib/program-steps-view";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { LogRunModal } from "@/components/features/LogRunModal";
 import { callAction } from "@/lib/utils/stale-bundle";
@@ -108,6 +109,8 @@ type WorkoutSetsListProps = {
   progressionScope?: ProgressionScope;
   /** Shows the plates per side under each set's weight. */
   isBarbell?: boolean;
+  /** Endurance step rows: kind, round and target per set id (docs/plans/one-program-model.md, 3). */
+  stepLabels?: Record<number, StepLabel> | null;
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -126,6 +129,7 @@ export function WorkoutSetsList({
   isTimed = false,
   isRunning = false,
   discipline = null,
+  stepLabels = null,
   exerciseId,
   sessionId,
   onDeleteSet,
@@ -1014,6 +1018,7 @@ export function WorkoutSetsList({
                     isTimed={isTimed}
                     isRunning={isRunning}
                     discipline={discipline}
+                    stepLabel={stepLabels?.[item.set.id] ?? null}
                     isCompleted={activeCompletedSets.has(item.set.id)}
                     programId={programId}
                     programExerciseId={programExerciseId}
@@ -1656,6 +1661,7 @@ function SortableSetRow({
   isTimed,
   isRunning,
   discipline,
+  stepLabel = null,
   isCompleted,
   programId,
   programExerciseId,
@@ -1687,6 +1693,7 @@ function SortableSetRow({
   isTimed: boolean;
   isRunning: boolean;
   discipline: Discipline | null;
+  stepLabel?: StepLabel | null;
   isCompleted: boolean;
   programId: number;
   programExerciseId: number;
@@ -1862,7 +1869,27 @@ function SortableSetRow({
       )}
 
       <div className="flex-1">
-        {isRunning ? (
+        {stepLabel ? (
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground" data-testid="step-label">
+              {stepLabel.title}
+            </p>
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="text-lg font-medium" data-testid="set-prescription">
+                {set.endsOnLap
+                  ? "Until lap"
+                  : set.distanceMeters
+                    ? formatEnduranceDistance(cfg.inputUnit, set.distanceMeters, units)
+                    : formatTime(set.durationSeconds ?? 0)}
+              </p>
+              {stepLabel.target && (
+                <span className="text-[11px] font-semibold tabular-nums rounded px-1.5 py-0.5 bg-primary/10 text-primary" data-testid="step-target">
+                  {stepLabel.target}
+                </span>
+              )}
+            </div>
+          </div>
+        ) : isRunning ? (
           <div>
             <div className="flex items-center gap-2">
               {set.distanceMeters ? (

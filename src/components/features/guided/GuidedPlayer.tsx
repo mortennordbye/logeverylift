@@ -7,6 +7,7 @@
  * (4.4): each rep counts down to the next send-off.
  */
 
+import { BackLink } from "@/components/ui/BackLink";
 import { STEP_TONE, STEP_WORD, toPlaySteps, type PlayerSession, type PlayerStepView } from "@/components/features/guided/types";
 import { useGuidedPlayer } from "@/components/features/guided/useGuidedPlayer";
 import { formatTime } from "@/lib/utils/format";
@@ -49,6 +50,10 @@ export function GuidedPlayer({ session, initialSoundHint = true }: { session: Pl
     const first = session.steps[0];
     return (
       <div className="flex-1 flex flex-col gap-4 px-6 py-6" data-testid="player-ready">
+        {/* The bottom bar is hidden on the player, so the way back is here. */}
+        <div className="self-start">
+          <BackLink fallback={{ href: `/planned/${session.plannedSessionId}`, label: "Session" }} />
+        </div>
         <h1 className="text-2xl font-bold">{session.name}</h1>
         <p className="text-sm text-muted-foreground">
           {session.steps.length} steps. First: {first?.text}

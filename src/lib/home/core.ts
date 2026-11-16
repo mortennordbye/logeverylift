@@ -49,18 +49,20 @@ function toDateStr(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-/** Today's sessions with a structured workout (docs/plans/endurance-app.md, 4.1). */
+/** Today's sessions with structured steps (docs/plans/endurance-app.md, 4.1). */
 async function enduranceToday(userId: string, today: string): Promise<EnduranceTodayRow[]> {
   const [sessions, { units }] = await Promise.all([sessionCompliance(userId, today, today), getUserSettings(userId)]);
   return sessions
-    .filter((s) => s.workout && s.sport && s.status === "planned")
+    // A program with structured steps (docs/plans/one-program-model.md).
+    .filter((s) => s.programWorkouts.length && s.status === "planned")
     .map((s) => {
       const a = answerSession(s);
+      const sport = s.sport ?? s.programWorkouts[0].sport;
       const parts = [
         s.planned.durationSeconds ? `${Math.round(s.planned.durationSeconds / 60)} min` : null,
-        s.planned.distanceMeters ? distanceLabel(s.planned.distanceMeters, s.sport!, units) : null,
+        s.planned.distanceMeters ? distanceLabel(s.planned.distanceMeters, sport, units) : null,
       ].filter(Boolean);
-      return { id: s.id, name: a.name, sport: s.sport!, summary: a.summary, amount: parts.length ? parts.join(" · ") : null, done: s.state === "done" };
+      return { id: s.id, name: a.name, sport, summary: a.summary, amount: parts.length ? parts.join(" · ") : null, done: s.state === "done", programId: s.programId };
     });
 }
 
@@ -82,6 +84,10 @@ export async function readTodayPlan(userId: string, programId: number) {
       durationSeconds: programSets.durationSeconds,
       distanceMeters: programSets.distanceMeters,
       restTimeSeconds: programSets.restTimeSeconds,
+      stepKind: programSets.stepKind,
+      blockId: programSets.blockId,
+      blockRound: programSets.blockRound,
+      endsOnLap: programSets.endsOnLap,
     })
     .from(programExercises)
     .innerJoin(programs, and(eq(programs.id, programExercises.programId), eq(programs.userId, userId), livePrograms))
@@ -166,7 +172,13 @@ export async function loadHomeCore(session: Session, settings: UserSettings, tod
     }),
   ]);
   const checkin = checkinResult.success ? checkinResult.data : null;
-  const endurance = enduranceRead.home;
+  // Today's single program with steps starts from the Today card, which asks
+  // guided or by hand; Endurance today then lists only the other sessions
+  // (docs/plans/one-program-model.md, home merge).
+  const todayStepRow =
+    todayProgram && (info?.todaySessions.length ?? 0) <= 1 ? (enduranceRead.home?.today.find((r) => r.programId === todayProgram.id) ?? null) : null;
+  const todayGuided = todayStepRow && !todayStepRow.done ? { href: `/planned/${todayStepRow.id}/${todayStepRow.sport === "swim" ? "pool" : "play"}`, kind: todayStepRow.sport === "swim" ? ("pool" as const) : ("guided" as const) } : null;
+  const endurance = enduranceRead.home && todayStepRow ? { ...enduranceRead.home, today: enduranceRead.home.today.filter((r) => r.id !== todayStepRow.id) } : enduranceRead.home;
 
   const stats = statsResult.success
     ? statsResult.data
@@ -237,6 +249,7 @@ export async function loadHomeCore(session: Session, settings: UserSettings, tod
     info,
     todayProgram,
     todayPlan,
+    todayGuided,
     stats,
     completedDates,
     todaySessions,

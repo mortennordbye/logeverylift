@@ -2,7 +2,6 @@
 
 import { PlanSheetPanel, SHEET_CANCEL, SectionLabel } from "@/components/features/PlanSheetPanel";
 import { ACCENT_TINT, LABEL, PRIMARY_BUTTON } from "@/components/features/season-ui";
-import type { LibraryRow } from "@/components/features/WorkoutsLibraryClient";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { updatePlannedSession } from "@/lib/actions/planned-sessions";
 import { dayMonth } from "@/lib/home/labels";
@@ -150,7 +149,7 @@ export function ExerciseList({ exercises }: { exercises: ExerciseLine[] }) {
   );
 }
 
-/** A list of programs or workouts to pick one from, with a way back. */
+/** A list of programs to pick one from, with a way back. */
 export function PickList({
   title,
   items,
@@ -190,8 +189,8 @@ export function PickList({
 /**
  * One dated session of a weekday cycle, from its row on the cycle detail
  * (docs/design/plan-redesign/J5_SessionFuture.dc.html): move it to another
- * day of its week, swap its program, use a workout (endurance only), give it
- * a label and a note, put it back to the template, skip it or plan it again.
+ * day of its week, swap its program, give it a label and a note, put it
+ * back to the template, skip it or plan it again.
  * Today's session also lists its exercises and starts the workout. Every
  * change is one `updatePlannedSession` call, for this day only.
  */
@@ -204,7 +203,6 @@ export function PlannedSessionSheet({
   keyDates,
   phaseLine,
   programs,
-  library,
   exercises,
   onClose,
 }: {
@@ -220,13 +218,11 @@ export function PlannedSessionSheet({
   /** "Phase 1 · General" for a phase of a season. */
   phaseLine: string | null;
   programs: { id: number; name: string }[];
-  /** The workouts library; only with the endurance switch on. */
-  library?: LibraryRow[];
   exercises: ExerciseLine[] | null;
   onClose: () => void;
 }) {
   const router = useRouter();
-  const [view, setView] = useState<"main" | "swap" | "workout" | "label">("main");
+  const [view, setView] = useState<"main" | "swap" | "label">("main");
   const [moving, setMoving] = useState(false);
   // The day picked in the move grid; Move to <day> then moves the session there.
   const [picked, setPicked] = useState<string | null>(null);
@@ -402,14 +398,6 @@ export function PlannedSessionSheet({
                         ›
                       </span>
                     </button>
-                    {library && (
-                      <button type="button" onClick={() => setView("workout")} className={sheetRow}>
-                        Use a workout
-                        <span aria-hidden className="text-muted-foreground">
-                          ›
-                        </span>
-                      </button>
-                    )}
                     <button
                       type="button"
                       onClick={() => {
@@ -453,17 +441,6 @@ export function PlannedSessionSheet({
               onPick={(programId) => run({ op: "change", id: s.id, programId })}
               onBack={() => setView("main")}
               empty="No other programs yet."
-            />
-          )}
-
-          {view === "workout" && library && (
-            <PickList
-              title="Use a workout"
-              items={library.map((w) => ({ id: w.id, name: w.name, sub: w.summary }))}
-              pending={pending}
-              onPick={(workoutId) => run({ op: "set_workout", id: s.id, workoutId })}
-              onBack={() => setView("main")}
-              empty="No workouts yet. Ask your assistant to create workouts."
             />
           )}
 

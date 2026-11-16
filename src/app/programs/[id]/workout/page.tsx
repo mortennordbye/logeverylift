@@ -14,6 +14,7 @@ import {
 import { getLastCompletedSession } from "@/lib/actions/workout-sessions";
 import { getWorkoutInsight } from "@/lib/actions/workout-sets";
 import { formatPeriodizationSummary } from "@/lib/utils/periodization";
+import { programStepsView } from "@/lib/program-steps-view";
 import { requireSession } from "@/lib/utils/session";
 import { notFound, redirect } from "next/navigation";
 
@@ -26,7 +27,7 @@ export default async function WorkoutSessionPage({ params }: Props) {
   const programId = Number(id);
   if (isNaN(programId)) notFound();
 
-  await requireSession();
+  const { user } = await requireSession();
   // Before the reads below, not beside them: they show this week's targets, and
   // the sync is what writes them (PZ-29).
   await syncActiveCyclePeriodization();
@@ -58,6 +59,11 @@ export default async function WorkoutSessionPage({ params }: Props) {
     ? formatPeriodizationSummary(periodization)
     : null;
 
+  // Structured endurance steps (docs/plans/one-program-model.md, 3): a summary
+  // per exercise, the session's totals, and the guided player when today's
+  // planned session runs this program.
+  const steps = await programStepsView(user.id, programId);
+
   const exercises = program.programExercises.map((pe) => ({
     id: pe.id,
     name: pe.exercise.name,
@@ -66,6 +72,7 @@ export default async function WorkoutSessionPage({ params }: Props) {
     isRunning: pe.exercise.name === "Running" || pe.exercise.discipline != null,
     discipline: pe.exercise.discipline,
     sets: pe.programSets,
+    stepSummary: steps?.summaries.get(pe.id) ?? null,
   }));
 
   return (
@@ -76,6 +83,7 @@ export default async function WorkoutSessionPage({ params }: Props) {
       lastSession={lastSessionResult.success ? lastSessionResult.data : null}
       insight={insight}
       periodization={periodizationSummary}
+      guided={steps?.guided ?? null}
     />
   );
 }

@@ -284,7 +284,7 @@ export function CycleSetupSessions({
   const { busy: discardBusy, lock: lockDiscard, unlock: unlockDiscard } = useSubmitLock();
   const [discardError, setDiscardError] = useState("");
   // A rest day alone is no cycle: at least one session must be in it.
-  const hasSession = cycle.slots.some((s) => s.programId != null || s.workoutId != null);
+  const hasSession = cycle.slots.some((s) => s.programId != null);
 
   async function discard() {
     if (!lockDiscard()) return;

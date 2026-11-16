@@ -15,7 +15,9 @@ import {
     boolean,
     decimal,
     integer,
+    jsonb,
     pgTable,
+    real,
     serial,
     text,
     timestamp,
@@ -23,6 +25,10 @@ import {
 import { exerciseTypeEnum, exercises } from "./exercises";
 import { trainingCycles } from "./training-cycles";
 import { users } from "./users";
+
+/** Endurance step kinds (docs/plans/one-program-model.md, 1.1). */
+export const STEP_KIND_VALUES = ["warmup", "work", "recovery", "cooldown", "rest"] as const;
+export type StepKind = (typeof STEP_KIND_VALUES)[number];
 
 // -------------------------------------------------------------------
 // programs
@@ -41,6 +47,11 @@ export const programs = pgTable("programs", {
     () => trainingCycles.id,
     { onDelete: "cascade" },
   ),
+  // A one-day copy (docs/plans/one-program-model.md, decision 2): the program
+  // a single dated session runs after a change to that day only, or after a
+  // readiness swap. Hidden from program lists; removed with the session's
+  // change back. No FK: planned_sessions references programs already.
+  forPlannedSessionId: integer("for_planned_session_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   // Soft delete (docs/plans/revisions.md, 2.1): a deleted program keeps its
   // row, so logged sessions keep their link and a restore brings back the same
@@ -143,6 +154,9 @@ export const programExercises = pgTable("program_exercises", {
   // exercise's default (resolved type = this ?? exercise.exerciseType).
   exerciseType: text("exercise_type", { enum: exerciseTypeEnum }),
   // Soft delete, as on programs.
+  // Swim exercises: the pool length in metres (a 25 yd pool is 22.86). Null
+  // for open water, other sports and strength.
+  poolLengthM: real("pool_length_m"),
   deletedAt: timestamp("deleted_at"),
 });
 
@@ -196,6 +210,31 @@ export const programSets = pgTable("program_sets", {
   // whose zone/rest the active cycle swaps by phase (base→tempo, build→threshold,
   // peak→VO₂). Null = a steady/warmup/cooldown set that only volume-scales.
   sessionRole: text("session_role"),
+  // ── Endurance steps (docs/plans/one-program-model.md, 1.1) ──────────────
+  // All null (endsOnLap false) on a strength set. A set with a stepKind is one
+  // step of a structured endurance session and is read through the step tree
+  // in src/lib/utils/workout-steps.ts. Only an exercise with a discipline may
+  // hold one.
+  stepKind: text("step_kind", { enum: STEP_KIND_VALUES }),
+  // The step ends on the lap button, not on time or distance.
+  endsOnLap: boolean("ends_on_lap").notNull().default(false),
+  // 1-2 targets ({metric, anchor, low/high | zone | offsetLow/offsetHigh}),
+  // checked by the target schema in workout-steps.ts. The first is the main
+  // target; a second is a cap (for example power with an HR cap).
+  targets: jsonb("targets"),
+  cadenceLow: integer("cadence_low"),
+  cadenceHigh: integer("cadence_high"),
+  // Repeat block: rows of one block share blockId inside the exercise and
+  // carry their round (1-based). One row per round, so each round logs as its
+  // own set. A block is contiguous in setNumber order.
+  blockId: integer("block_id"),
+  blockRound: integer("block_round"),
+  // Swim only.
+  stroke: text("stroke"),
+  equipment: text("equipment").array(),
+  sendOffSeconds: integer("send_off_seconds"),
+  // A short cue shown with the step ("high elbow", "build each 25").
+  note: text("note"),
   // Soft delete, as on programs. A logged set keeps pointing at a deleted set.
   deletedAt: timestamp("deleted_at"),
 });

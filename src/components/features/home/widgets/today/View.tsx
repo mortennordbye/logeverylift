@@ -10,6 +10,7 @@ import type { WidgetSize } from "@/lib/home/widgets/types";
 import { ArrowLeftRight, CalendarClock, Check, Play, Sparkles, Zap } from "lucide-react";
 import { dateLabel } from "@/lib/utils/date-label";
 import Link from "next/link";
+import { StartToday } from "./StartToday";
 import { TodayMore } from "./TodayMore";
 
 /**
@@ -31,6 +32,8 @@ export type TodayData = {
   insight: HomeCore["insight"];
   /** Today's single program: counts, minutes and the first exercises. Null on other days. */
   plan: TodayPlan | null;
+  /** Today's program has steps: Start asks guided (or pool view) or by hand. */
+  guided?: HomeCore["todayGuided"];
   /** With no active cycle, the block scheduled to start next. */
   upcoming: { id: number; name: string; startsOn: string; seasonName: string | null } | null;
 };
@@ -56,6 +59,7 @@ export function selectToday(core: HomeCore): TodayData {
     rotationOverdueDays: core.rotationOverdueDays,
     insight: core.insight,
     plan: core.todayPlan,
+    guided: core.todayGuided,
     upcoming: core.upcoming,
   };
 }
@@ -102,7 +106,7 @@ function todayName(d: TodayData): string {
 
 /** L and M with a cycle. L has the cycle header with a segment per week; M starts at the name. */
 function TodayCard({ data, size }: { data: TodayData; size: WidgetSize }) {
-  const { cycle, todayProgram, todaySessions, severalToday, completedToday, todayAutoSession, rotationOverdueDays, insight } = data;
+  const { cycle, todayProgram, todaySessions, severalToday, completedToday, todayAutoSession, rotationOverdueDays, insight, guided } = data;
   if (!cycle) return null;
   const startNow = !severalToday && todayProgram && !completedToday;
   const plan = severalToday ? null : data.plan;
@@ -157,10 +161,7 @@ function TodayCard({ data, size }: { data: TodayData; size: WidgetSize }) {
         <div className="flex flex-col gap-1">
           {size === "m" && startNow ? (
             <div className="flex items-center gap-2.5">
-              <Link href={`/programs/${todayProgram.id}/workout`} prefetch={true} className={START}>
-                <Play className="h-[18px] w-[18px] fill-current" aria-hidden />
-                Start Today&apos;s Workout
-              </Link>
+              <StartToday href={`/programs/${todayProgram.id}/workout`} name={todayProgram.name} guided={guided ?? null} className={START} />
               <Link href="/new-workout" aria-label="Different Program" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white/85 active:opacity-60">
                 <ArrowLeftRight className="h-5 w-5" aria-hidden />
               </Link>
@@ -172,10 +173,7 @@ function TodayCard({ data, size }: { data: TodayData; size: WidgetSize }) {
                   {todayAutoSession ? "Log in app" : "Do Again"}
                 </Link>
               ) : (
-                <Link href={`/programs/${todayProgram.id}/workout`} prefetch={true} className={START}>
-                  <Play className="h-[18px] w-[18px] fill-current" aria-hidden />
-                  Start Today&apos;s Workout
-                </Link>
+                <StartToday href={`/programs/${todayProgram.id}/workout`} name={todayProgram.name} guided={guided ?? null} className={START} />
               )}
               {todayAutoSession && (
                 <div className="flex justify-center [&>button]:min-h-11">
@@ -199,7 +197,7 @@ function TodayCard({ data, size }: { data: TodayData; size: WidgetSize }) {
 }
 
 const planMeta = (p: TodayPlan) =>
-  `${p.exerciseCount} ${p.exerciseCount === 1 ? "exercise" : "exercises"} · ${p.setCount} ${p.setCount === 1 ? "set" : "sets"} · about ${p.minutes} min`;
+  `${p.exerciseCount} ${p.exerciseCount === 1 ? "exercise" : "exercises"} · ${p.setCount} ${p.stepsOnly ? (p.setCount === 1 ? "step" : "steps") : p.setCount === 1 ? "set" : "sets"}${p.minutes != null ? ` · about ${p.minutes} min` : ""}`;
 
 /** L: the first three exercises with their sets, then the names of the rest. */
 function PlanList({ plan }: { plan: TodayPlan }) {

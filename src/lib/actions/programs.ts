@@ -9,7 +9,7 @@
 import { db } from "@/db";
 import { exercises, programExercises, programSets, programs, workoutSessions, workoutSets } from "@/db/schema";
 import { periodizationShare } from "@/lib/periodization-sync";
-import { liveProgramExercises, liveProgramSets, livePrograms } from "@/lib/plan-live";
+import { liveProgramExercises, liveProgramSets, livePrograms, listedPrograms } from "@/lib/plan-live";
 import {
   OpenWorkoutError,
   PlanNotFoundError,
@@ -57,6 +57,8 @@ import type {
   ProgramSet,
   ProgramWithExercises,
 } from "@/types/workout";
+import { assertStepRows } from "@/lib/program-steps-db";
+import { stepFieldsOf } from "@/lib/utils/program-steps";
 import { and, asc, desc, eq, inArray, isNull, or } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -79,7 +81,9 @@ async function writeSlot<T>(
   if (programId == null) return null;
   const { result } = await planWrite({ userId, writer }, async (w) => {
     await w.touch({ type: "program", id: programId });
-    return fn(w.tx, programId);
+    const out = await fn(w.tx, programId);
+    await assertStepRows(w.tx, programExerciseId);
+    return out;
   });
   return { programId, result };
 }
@@ -112,7 +116,7 @@ export async function getPrograms(): Promise<ActionResult<Program[]>> {
     const rows = await db
       .select()
       .from(programs)
-      .where(and(eq(programs.userId, auth.user.id), livePrograms))
+      .where(and(eq(programs.userId, auth.user.id), listedPrograms))
       .orderBy(asc(programs.name));
     return { success: true, data: rows };
   } catch (err) {
@@ -1088,6 +1092,7 @@ export async function updateProgramSet(
         return { kind: "applied", ps } as const;
       }
       const [ps] = await w.tx.update(programSets).set(updates).where(eq(programSets.id, id)).returning();
+      await assertStepRows(w.tx, check.programExerciseId);
       return { kind: "applied", ps } as const;
     });
     if (result.kind === "conflict") {
@@ -1183,9 +1188,14 @@ export async function deleteProgramSet(
     if (!owner) return { success: false, error: "Program not found" };
     // Soft: a set deleted mid-workout keeps the rows logged against it linked,
     // and the program's history can bring it back (docs/plans/revisions.md, 2.3).
-    await writeProgram(auth.user.id, owner.programId, (tx) =>
-      tx.update(programSets).set({ deletedAt: new Date() }).where(eq(programSets.id, validation.data.programSetId)),
-    );
+    await writeProgram(auth.user.id, owner.programId, async (tx) => {
+      const [gone] = await tx
+        .update(programSets)
+        .set({ deletedAt: new Date() })
+        .where(eq(programSets.id, validation.data.programSetId))
+        .returning({ programExerciseId: programSets.programExerciseId });
+      if (gone) await assertStepRows(tx, gone.programExerciseId);
+    });
     revalidatePath(`/programs/${programId}/workout/exercises/${programExerciseId}`);
     revalidatePath(`/programs/${programId}/workout`);
     return { success: true, data: undefined };
@@ -1376,6 +1386,7 @@ export async function exportProgram(
         readiness: pe.progressionReadiness,
         applyToPlan: pe.progressionApplyToPlan ?? false,
         suppressEffortPrompt: pe.progressionSuppressEffortPrompt ?? false,
+        ...(pe.poolLengthM != null && { poolM: pe.poolLengthM }),
         exercise: {
           name: pe.exercise.name,
           category: pe.exercise.category,
@@ -1398,6 +1409,7 @@ export async function exportProgram(
           startDelay: s.startDelaySeconds ?? null,
           repMin: s.repRangeMin ?? null,
           repMax: s.repRangeMax ?? null,
+          ...(s.stepKind != null && { step: stepFieldsOf(s) }),
         })),
       })),
     },
@@ -1412,7 +1424,7 @@ export async function exportAllPrograms(): Promise<ActionResult<ExportedPrograms
 
   try {
     const userPrograms = await db.query.programs.findMany({
-      where: and(eq(programs.userId, userId), livePrograms),
+      where: and(eq(programs.userId, userId), listedPrograms),
       with: {
         programExercises: {
           where: liveProgramExercises,
@@ -1447,6 +1459,7 @@ export async function exportAllPrograms(): Promise<ActionResult<ExportedPrograms
             readiness: pe.progressionReadiness,
             applyToPlan: pe.progressionApplyToPlan ?? false,
             suppressEffortPrompt: pe.progressionSuppressEffortPrompt ?? false,
+            ...(pe.poolLengthM != null && { poolM: pe.poolLengthM }),
             exercise: {
               name: pe.exercise.name,
               category: pe.exercise.category,
@@ -1469,6 +1482,7 @@ export async function exportAllPrograms(): Promise<ActionResult<ExportedPrograms
               startDelay: s.startDelaySeconds ?? null,
               repMin: s.repRangeMin ?? null,
               repMax: s.repRangeMax ?? null,
+              ...(s.stepKind != null && { step: stepFieldsOf(s) }),
             })),
           })),
         })),
@@ -1624,6 +1638,7 @@ export async function importProgram(
               progressionApplyToPlan: slot.applyToPlan ?? false,
               progressionSuppressEffortPrompt: slot.suppressEffortPrompt ?? false,
               exerciseType: overrideType,
+              ...(slot.poolM != null ? { poolLengthM: slot.poolM } : {}),
             })
             .returning({ id: programExercises.id });
 
@@ -1645,8 +1660,10 @@ export async function importProgram(
                 ...(s.repMin != null && s.repMax != null
                   ? { repRangeMin: s.repMin, repRangeMax: s.repMax }
                   : {}),
+                ...(s.step ?? {}),
               })),
             );
+            await assertStepRows(tx, pe.id);
           }
         }
       });

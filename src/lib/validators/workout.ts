@@ -32,6 +32,7 @@ import {
   PROGRESSION_REGRESSES,
   PROGRESSION_SCOPES,
 } from "@/lib/utils/progression";
+import { programStepFieldsSchema } from "@/lib/utils/workout-steps";
 import { z } from "zod";
 
 export const WORKOUT_FEELINGS = ["Tired", "OK", "Good", "Awesome"] as const;
@@ -407,7 +408,7 @@ const programSetFields = z.object({
   // Opt-in prep time before a timed set's countdown (UI presets cap at 30s;
   // anything longer is a rest period, not a start delay).
   startDelaySeconds: z.number().int().min(0).max(60).optional(),
-});
+}).merge(programStepFieldsSchema);
 
 export const addProgramSetSchema = programSetFields.refine(repRangeIsWellFormed, {
   message: REP_RANGE_MESSAGE,
@@ -608,8 +609,12 @@ const importProgramEntrySchema = z.object({
               // imports — the same both-shapes rule the logging payload follows.
               repMin: z.number().int().positive().max(1000).nullable().optional().catch(null),
               repMax: z.number().int().positive().max(1000).nullable().optional().catch(null),
+              // Endurance step fields. No catch: a step that half-imports
+              // would break its exercise, so a bad one fails the import.
+              step: programStepFieldsSchema.optional(),
             }),
           ),
+          poolM: z.number().min(10).max(100).optional().catch(undefined),
         }),
       )
       .max(50),

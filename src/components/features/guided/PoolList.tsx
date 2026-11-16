@@ -41,13 +41,15 @@ export function PoolList({
       <button
         type="button"
         onClick={() => setI((n) => Math.min(blocks.length - 1, n + 1))}
-        className="flex-1 flex flex-col items-center justify-center gap-6 px-6 text-center active:opacity-80"
+        className="flex-1 min-h-0 overflow-y-auto flex flex-col px-6 text-center active:opacity-80"
         aria-label={i < blocks.length - 1 ? "Next block" : "Last block"}
       >
+        {/* m-auto centres a short block; a tall one (a small phone) scrolls above the buttons. */}
+        <span className="m-auto flex flex-col items-center gap-6 py-4">
         <span className="text-lg font-semibold text-muted-foreground" data-testid="pool-block-count">
           Block {i + 1} of {blocks.length}
         </span>
-        <span className="text-5xl font-bold leading-tight" data-testid="pool-block">
+        <span className="text-4xl min-[375px]:text-5xl font-bold leading-tight" data-testid="pool-block">
           {b?.title}
         </span>
         {b?.targets.map((t) => (
@@ -61,6 +63,7 @@ export function PoolList({
             {n}
           </span>
         ))}
+        </span>
       </button>
       <div className="grid grid-cols-2 gap-3 px-4 pb-8">
         <button

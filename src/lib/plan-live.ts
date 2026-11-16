@@ -8,9 +8,11 @@
  */
 
 import { plannedSessions, programExercises, programSets, programs, trainingCycles } from "@/db/schema";
-import { isNull } from "drizzle-orm";
+import { and, isNull } from "drizzle-orm";
 
 export const livePrograms = isNull(programs.deletedAt);
+/** Live programs a list shows: one-day copies of a dated session stay out (docs/plans/one-program-model.md, decision 2). */
+export const listedPrograms = and(isNull(programs.deletedAt), isNull(programs.forPlannedSessionId))!;
 export const liveProgramExercises = isNull(programExercises.deletedAt);
 export const liveProgramSets = isNull(programSets.deletedAt);
 export const liveCycles = isNull(trainingCycles.deletedAt);

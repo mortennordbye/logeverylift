@@ -1,171 +1,29 @@
 /**
- * MCP tools: structured workouts, planned vs done and sick periods
- * (docs/plans/workouts-and-compliance.md, section 8). The library tools, the
- * answers and the sick periods register only with the endurance switch on
- * (D18); get_compliance is for every user (decision 13).
- *
- * A workout that breaks the schema check is refused with every problem and
- * its path. That check is never overridable (D3).
+ * MCP tools: planned vs done and sick periods
+ * (docs/plans/workouts-and-compliance.md, section 8). The answers and the
+ * sick periods register only with the endurance switch on (D18);
+ * get_compliance is for every user (decision 13).
  */
 
-import { getLibraryWorkout, createWorkout, deleteWorkout, duplicateWorkout, listWorkouts, updateWorkout } from "@/lib/workouts";
 import { addIllness, deleteIllness, listIllness, updateIllness } from "@/lib/illness";
 import { audit, fail, failInternal, ok } from "@/lib/mcp/result";
-import { LIMITS_TEXT, limitRefusal, limitSummary, overrideArgs, overrideFrom } from "@/lib/mcp/limits";
-import { LimitRefusedError, limitContext } from "@/lib/training-limits";
 import { REVISION_RULES, assistantContext, planErrorResult, reasonArg } from "@/lib/mcp/revisions";
-import { applySessionOp, WorkoutSchemaError } from "@/lib/planned-sessions";
+import { applySessionOp } from "@/lib/planned-sessions";
 import { confirmDone, moveSuggestion, oneSession } from "@/lib/session-answers";
-import { illnessOf, sessionCompliance, thresholdValues, storedWorkout } from "@/lib/session-compliance";
+import { illnessOf, sessionCompliance } from "@/lib/session-compliance";
 import { DuplicateSession } from "@/lib/logged-sessions";
-import { getUserSettings, userToday } from "@/lib/user-settings";
+import { userToday } from "@/lib/user-settings";
 import { toDateStr } from "@/lib/utils/cycle-position";
 import { addDaysStr } from "@/lib/utils/seasons";
 import { CONSISTENCY_WEEKS, RETURN_RULE, SEE_DOCTOR_RULE, consistency, mondayOf, returnInfo } from "@/lib/utils/session-compliance";
-import { estimateWorkout, resolveWorkout } from "@/lib/utils/workout-steps";
-import { workoutPlannedLoad } from "@/lib/utils/step-results";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
-/** Planned load (docs/plans/endurance-app.md, 6.2): an estimate, 100 = one hour at threshold. */
-function plannedLoadOut(w: Parameters<typeof workoutPlannedLoad>[0], t: Parameters<typeof workoutPlannedLoad>[1]) {
-  const p = workoutPlannedLoad(w, t);
-  return { value: Math.round(p.load), partial: p.partial };
-}
-
 const dateArg = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD");
 const versionArg = z.number().int().positive().describe("The object's version from your last read or write. A write based on an older version is refused as a conflict.");
-const priorityArg = z.enum(["key", "support", "optional"]).nullable();
 
-const SCHEMA_TEXT =
-  "The workout is JSON checked by one schema (read the resource logeverylift://docs/workout-steps first). A workout that breaks it is not saved: the result lists every problem with its path. That check cannot be overridden.";
-
-function schemaRefusal(e: unknown) {
-  return e instanceof WorkoutSchemaError ? fail(`${e.message}. Fix each problem and send it again.`) : null;
-}
-
-/** Endurance-only tools: the library, the answers and sick periods. */
-export function registerWorkoutLibraryTools(server: McpServer, userId: string, clientId?: string) {
-  server.registerTool(
-    "list_workouts",
-    {
-      description:
-        "The user's workout library: reusable structured endurance workouts. Each: id, name, sport, priority (null = derived), summary (one line in the user's units), estimate (durationSeconds, distanceMeters and whether each is complete), version. Filter by sport or search by name; deleted: true lists the recently deleted ones.",
-      inputSchema: {
-        sport: z.enum(["swim", "bike", "run"]).optional(),
-        q: z.string().max(80).optional(),
-        deleted: z.boolean().optional(),
-      },
-      annotations: { readOnlyHint: true, openWorldHint: false },
-    },
-    async (args) => {
-      try {
-        const rows = await listWorkouts(userId, args);
-        return ok({
-          workouts: rows.map((w) => ({ id: w.id, name: w.name, sport: w.sport, priority: w.priority, summary: w.summary, estimate: w.estimate, version: w.version, deleted: w.deletedAt != null })),
-        });
-      } catch (e) {
-        return failInternal("list_workouts", e);
-      }
-    },
-  );
-
-  server.registerTool(
-    "get_workout",
-    {
-      description:
-        "One workout, from the library (workoutId) or a dated session (plannedSessionId): the JSON, the one-line summary, each step's target in the user's own numbers (watts, bpm, pace in their units) from their current thresholds, the estimate, missingAnchors (thresholds the workout needs that the user has not set), and plannedLoad ({value, partial}: an estimate from the targets, 100 = one hour at threshold; partial when a step had no power or pace target, inference).",
-      inputSchema: { workoutId: z.number().int().positive().optional(), plannedSessionId: z.number().int().positive().optional() },
-      annotations: { readOnlyHint: true, openWorldHint: false },
-    },
-    async ({ workoutId, plannedSessionId }) => {
-      if ((workoutId == null) === (plannedSessionId == null)) return fail("Send workoutId or plannedSessionId");
-      try {
-        const [thresholds, { units }] = await Promise.all([thresholdValues(userId), getUserSettings(userId)]);
-        if (workoutId != null) {
-          const w = await getLibraryWorkout(userId, workoutId);
-          if (!w) return fail("Workout not found");
-          const r = resolveWorkout(w.workout, thresholds, units);
-          return ok({ ...w, resolvedSteps: r.steps, missingAnchors: r.missingAnchors, estimate: estimateWorkout(w.workout, thresholds), plannedLoad: plannedLoadOut(w.workout, thresholds) });
-        }
-        const s = await oneSession(userId, plannedSessionId!);
-        if (!s) return fail("Planned session not found");
-        if (!s.workout) return fail("That session runs a program, not a workout");
-        const workout = storedWorkout(s.workout, s.id)!;
-        const r = resolveWorkout(workout, thresholds, units);
-        return ok({ plannedSessionId: s.id, date: s.date, workout, summary: s.workoutSummary, resolvedSteps: r.steps, missingAnchors: r.missingAnchors, estimate: estimateWorkout(workout, thresholds), plannedLoad: plannedLoadOut(workout, thresholds) });
-      } catch (e) {
-        return failInternal("get_workout", e);
-      }
-    },
-  );
-
-  server.registerTool(
-    "manage_workout",
-    {
-      description: [
-        "Create, update, duplicate or delete a workout in the user's library.",
-        "operation='create': workout (JSON), optional priority. 'update': workoutId, expectedVersion, and any of workout, priority, name. 'duplicate': workoutId. 'delete': workoutId, expectedVersion (the user can restore it).",
-        "Updating or deleting a library workout changes the dated sessions that a cycle slot made from it and that nobody changed, from this week's Monday on (sessionsRegenerated). Sessions with their own copy, done sessions and earlier weeks keep theirs. To change one day's session, use manage_planned_session set_workout.",
-        SCHEMA_TEXT,
-        `Every operation requires reason. ${REVISION_RULES}`,
-        `On update: ${LIMITS_TEXT} The weeks checked are those of the sessions the edit rewrites.`,
-      ].join(" "),
-      annotations: { destructiveHint: true, openWorldHint: false },
-      inputSchema: {
-        ...overrideArgs,
-        operation: z.enum(["create", "update", "duplicate", "delete"]),
-        workoutId: z.number().int().positive().optional(),
-        workout: z.unknown().optional(),
-        priority: priorityArg.optional(),
-        name: z.string().min(1).max(80).optional(),
-        reason: reasonArg,
-        expectedVersion: versionArg.optional(),
-      },
-    },
-    async (args) => {
-      const ctx = assistantContext(userId, clientId, args.reason);
-      const override = overrideFrom(args);
-      if (typeof override === "string") return fail(override);
-      try {
-        if (args.operation === "create") {
-          if (args.workout === undefined) return fail("create requires workout");
-          const r = await createWorkout(ctx, { workout: args.workout, priority: args.priority });
-          audit("manage_workout", { userId, op: "create", id: r.id });
-          return ok({ workoutId: r.id, version: r.version });
-        }
-        if (args.workoutId == null) return fail(`${args.operation} requires workoutId`);
-        if (args.operation === "duplicate") {
-          const r = await duplicateWorkout(ctx, args.workoutId);
-          audit("manage_workout", { userId, op: "duplicate", id: r.id });
-          return ok({ workoutId: r.id, version: r.version });
-        }
-        if (args.expectedVersion == null) return fail("expectedVersion is required: read the workout with list_workouts");
-        if (args.operation === "delete") {
-          const r = await deleteWorkout(ctx, args.workoutId, args.expectedVersion);
-          audit("manage_workout", { userId, op: "delete", id: args.workoutId });
-          return ok({ deleted: true, ...r });
-        }
-        const r = await updateWorkout(
-          ctx,
-          args.workoutId,
-          { workout: args.workout, priority: args.priority, name: args.name, expectedVersion: args.expectedVersion },
-          { lc: await limitContext(userId), override },
-        );
-        audit("manage_workout", { userId, op: "update", id: args.workoutId });
-        return ok({
-          workoutId: r.id,
-          version: r.version,
-          sessionsRegenerated: r.sessionsRegenerated,
-          ...(r.limits && { limits: limitSummary(r.limits.check, r.limits.unusedOverrides) }),
-        });
-      } catch (e) {
-        if (e instanceof LimitRefusedError) return limitRefusal(e);
-        return schemaRefusal(e) ?? (await planErrorResult(userId, e)) ?? failInternal("manage_workout", e);
-      }
-    },
-  );
-
+/** Endurance-only tools: the answers and sick periods. */
+export function registerEnduranceAnswerTools(server: McpServer, userId: string, clientId?: string) {
   server.registerTool(
     "confirm_planned_session",
     {

@@ -13,7 +13,6 @@ import { heavyLegsLines } from "@/lib/utils/training-limits";
 import { addDaysStr } from "@/lib/utils/planned-sessions";
 import { cycleLengthDays } from "@/lib/utils/cycle-position";
 import { requireSession } from "@/lib/utils/session";
-import { listWorkouts } from "@/lib/workouts";
 
 import { BackLink } from "@/components/ui/BackLink";
 
@@ -62,9 +61,7 @@ export default async function CalendarPage() {
   // Endurance users see each session's band and answer past ones here
   // (docs/plans/workouts-and-compliance.md, 7). Lifters get neither.
   const endurance = range != null && (await enduranceEnabledFor(session.user.id));
-  const [compliance, library] = endurance
-    ? await Promise.all([sessionCompliance(session.user.id, range.from, range.to), listWorkouts(session.user.id)])
-    : [[], []];
+  const compliance = endurance ? await sessionCompliance(session.user.id, range.from, range.to) : [];
   const complianceById: Record<number, CalendarCompliance> | undefined = endurance
     ? Object.fromEntries(compliance.map((c) => [c.id, { ...answerSession(c), state: c.state, band: c.band }]))
     : undefined;
@@ -93,7 +90,6 @@ export default async function CalendarPage() {
         planned={planned}
         compliance={complianceById}
         heavyLegs={heavyLegs}
-        library={endurance ? library.map((w) => ({ id: w.id, name: w.name, sport: w.sport, summary: w.summary })) : undefined}
       />
     </div>
   );

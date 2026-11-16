@@ -38,7 +38,7 @@ import { registerProfileTools } from "@/lib/mcp/tools/profile";
 import { registerProgramTools } from "@/lib/mcp/tools/programs";
 import { registerSeasonTools } from "@/lib/mcp/tools/seasons";
 import { registerPlannedSessionTools } from "@/lib/mcp/tools/planned-sessions";
-import { registerComplianceTools, registerWorkoutLibraryTools } from "@/lib/mcp/tools/workouts-compliance";
+import { registerComplianceTools, registerEnduranceAnswerTools } from "@/lib/mcp/tools/workouts-compliance";
 import { registerSessionTools } from "@/lib/mcp/tools/sessions";
 import { registerWorkoutTools } from "@/lib/mcp/tools/workouts";
 import { requireMcpAuth } from "@better-auth/mcp";
@@ -125,7 +125,7 @@ async function serve(req: Request, claims: { sub?: string; azp?: unknown; scope?
       registerCoachMemoryTools(server, userId, clientId);
       registerAthleteProfileTools(server, userId, clientId, { endurance });
       // Structured workouts, answers and sick periods only with the endurance switch on (D18).
-      if (endurance) registerWorkoutLibraryTools(server, userId, clientId);
+      if (endurance) registerEnduranceAnswerTools(server, userId, clientId);
       // Training load and step results (docs/plans/endurance-app.md, 7).
       if (endurance) registerEnduranceAppTools(server, userId);
       // Fuel, sweat tests and race-day plans (docs/plans/nutrition-and-race-day.md, 8).

@@ -46,7 +46,8 @@ import {
   type Sport,
 } from "@/lib/utils/session-compliance";
 import { currentThresholds } from "@/lib/utils/thresholds";
-import { describeWorkout, estimateWorkout, isHardWorkout, parseWorkout, type ThresholdValues, type Workout } from "@/lib/utils/workout-steps";
+import { describeWorkout, estimateWorkout, type ThresholdValues, type WorkoutEstimate } from "@/lib/utils/workout-steps";
+import { programWorkouts, type ProgramWorkout } from "@/lib/program-workouts";
 import { and, asc, eq, gte, inArray, isNull, lte, or } from "drizzle-orm";
 
 export type Amount = { durationSeconds: number | null; distanceMeters: number | null };
@@ -66,7 +67,8 @@ export type SessionCompliance = {
   storedPriority: "key" | "support" | "optional" | null;
   priority: "key" | "support" | "optional";
   hard: boolean;
-  workout: Workout | null;
+  /** The structured exercises of the program as step trees (docs/plans/one-program-model.md, 2). */
+  programWorkouts: ProgramWorkout[];
   workoutSummary: string | null;
   brickParentId: number | null;
   planned: Amount;
@@ -94,21 +96,12 @@ export async function thresholdValues(userId: string): Promise<ThresholdValues> 
   return Object.fromEntries(Object.entries(cur).map(([k, r]) => [k, r!.value])) as ThresholdValues;
 }
 
-/** A stored workout, parsed; null (and logged) when it does not pass the schema, which should never happen. */
-export function storedWorkout(json: unknown, id: number): Workout | null {
-  if (json == null) return null;
-  const r = parseWorkout(json);
-  if (r.ok) return r.workout;
-  console.error("[workouts] invalid_stored", { id });
-  return null;
-}
-
 /**
  * Per program: its sport (one discipline for every exercise), every endurance
  * sport in it in exercise order, and the planned time and distance of those sets.
  */
 async function programFacts(programIds: number[]) {
-  const out = new Map<number, { sport: Sport | null; sports: Sport[]; planned: Amount }>();
+  const out = new Map<number, { sport: Sport | null; sports: Sport[]; planned: Amount; hasSteps: boolean }>();
   if (!programIds.length) return out;
   const rows = await db
     .select({
@@ -116,6 +109,7 @@ async function programFacts(programIds: number[]) {
       discipline: exercises.discipline,
       durationSeconds: programSets.durationSeconds,
       distanceMeters: programSets.distanceMeters,
+      stepKind: programSets.stepKind,
     })
     .from(programExercises)
     .innerJoin(exercises, eq(exercises.id, programExercises.exerciseId))
@@ -128,10 +122,23 @@ async function programFacts(programIds: number[]) {
     const disciplines = new Set(mine.map((r) => r.discipline));
     const sport = disciplines.size === 1 && !disciplines.has(null) ? ([...disciplines][0] as Sport) : null;
     const sports = [...disciplines].filter((d): d is Sport => d != null);
-    const sum = (k: "durationSeconds" | "distanceMeters") => mine.reduce((a, r) => a + (r[k] ?? 0), 0) || null;
-    out.set(id, { sport, sports, planned: sport ? { durationSeconds: sum("durationSeconds"), distanceMeters: sum("distanceMeters") } : { durationSeconds: null, distanceMeters: null } });
+    // Step rows are planned through their step tree (programWorkouts), not summed here.
+    const sum = (k: "durationSeconds" | "distanceMeters") => mine.reduce((a, r) => a + (r.stepKind == null ? (r[k] ?? 0) : 0), 0) || null;
+    out.set(id, { sport, sports, hasSteps: mine.some((r) => r.stepKind != null), planned: sport ? { durationSeconds: sum("durationSeconds"), distanceMeters: sum("distanceMeters") } : { durationSeconds: null, distanceMeters: null } });
   }
   return out;
+}
+
+/**
+ * A program's planned amount: its plain endurance sets plus the estimate of
+ * each structured exercise. A measure an estimate cannot complete (a lap
+ * step, a distance with no speed) is unknown for the whole session.
+ */
+function withSteps(plain: Amount, estimates: WorkoutEstimate[]): Amount {
+  if (!estimates.length) return plain;
+  const total = (k: "durationSeconds" | "distanceMeters", complete: "durationComplete" | "distanceComplete") =>
+    estimates.some((e) => !e[complete]) ? null : (plain[k] ?? 0) + estimates.reduce((a, e) => a + e[k], 0) || null;
+  return { durationSeconds: total("durationSeconds", "durationComplete"), distanceMeters: total("distanceMeters", "distanceComplete") };
 }
 
 /** The sport of each program (null for strength or mixed), for the home screen's split. */
@@ -236,27 +243,27 @@ export async function sessionCompliance(userId: string, from: string, to: string
   const thresholds = endurance ? await thresholdValues(userId) : {};
 
   const programIds = [...new Set(rows.map((r) => r.row.programId).filter((id): id is number => id != null))];
-  const [facts, hard] = await Promise.all([programFacts(programIds), hardPrograms(db, programIds)]);
+  const [facts, hard] = await Promise.all([programFacts(programIds), hardPrograms(db, programIds, thresholds)]);
+  // Step trees only for programs that have steps: a lifter's page reads nothing more.
+  const steppedIds = programIds.filter((id) => facts.get(id)?.hasSteps);
+  const stepped = steppedIds.length ? await programWorkouts(db, steppedIds) : new Map<number, ProgramWorkout[]>();
 
   const views = rows.map(({ row, programName, programDeletedAt }) => {
-    const workout = storedWorkout(row.workout, row.id);
     const programId = programDeletedAt ? null : row.programId;
     const pf = programId != null ? facts.get(programId) : undefined;
-    const sport: Sport | null = workout ? workout.sport : (pf?.sport ?? null);
-    const sports: Sport[] = workout ? [workout.sport] : (pf?.sports ?? []);
-    const est = workout ? estimateWorkout(workout, thresholds) : null;
-    const planned: Amount = est
-      ? { durationSeconds: est.durationComplete && est.durationSeconds ? est.durationSeconds : null, distanceMeters: est.distanceComplete && est.distanceMeters ? est.distanceMeters : null }
-      : (pf?.planned ?? { durationSeconds: null, distanceMeters: null });
+    const sport: Sport | null = pf?.sport ?? null;
+    const sports: Sport[] = pf?.sports ?? [];
+    const programWorkoutList = programId != null ? (stepped.get(programId) ?? []) : [];
+    const planned: Amount = withSteps(pf?.planned ?? { durationSeconds: null, distanceMeters: null }, pf?.sport ? programWorkoutList.map((p) => estimateWorkout(p.workout, thresholds)) : []);
     return {
       row,
       programId,
       programName: programDeletedAt ? null : programName,
-      workout,
+      programWorkouts: programWorkoutList,
       sport,
       sports,
       planned,
-      hard: workout ? isHardWorkout(workout, thresholds) : programId != null ? (hard.get(programId) ?? false) : false,
+      hard: programId != null ? (hard.get(programId) ?? false) : false,
     };
   });
 
@@ -348,8 +355,8 @@ export async function sessionCompliance(userId: string, from: string, to: string
       storedPriority: r.priority,
       priority: priorities.get(r.id)!,
       hard: v.hard,
-      workout: v.workout,
-      workoutSummary: v.workout ? describeWorkout(v.workout, settings.units) : null,
+      programWorkouts: v.programWorkouts,
+      workoutSummary: v.programWorkouts.length ? v.programWorkouts.map((p) => describeWorkout(p.workout, settings.units)).join(" + ") : null,
       brickParentId: r.brickParentId,
       planned: v.planned,
       state,

@@ -301,3 +301,30 @@ describe("setToken — a weighted hold", () => {
     expect(setToken(s, true)).toBe("00:30 · 20kg");
   });
 });
+
+describe("formatSessionLength (one-program-model journey review)", () => {
+  it("reads an hour or more as hours and minutes, not 80:00", async () => {
+    const { formatSessionLength } = await import("@/lib/utils/format");
+    expect(formatSessionLength(4800)).toBe("1 h 20 min");
+    expect(formatSessionLength(3600)).toBe("1 h");
+    expect(formatSessionLength(1460)).toBe("24:20");
+  });
+});
+
+describe("plannedLine (one-program-model journey review)", () => {
+  it("gives a distance step its distance, not 'to lap'", async () => {
+    const { plannedLine } = await import("@/lib/utils/format");
+    expect(plannedLine({ plannedSeconds: null, plannedMeters: 2000 }, "km")).toBe("planned 2 km");
+    expect(plannedLine({ plannedSeconds: null, plannedMeters: 100 }, "m")).toBe("planned 100 m");
+    expect(plannedLine({ plannedSeconds: 120, plannedMeters: null }, "km")).toBe("planned 02:00");
+    expect(plannedLine({ plannedSeconds: null, plannedMeters: null }, "km")).toBe("planned to lap");
+  });
+});
+
+describe("loadText (one-program-model journey review)", () => {
+  it("says at least when a step had no time to count", async () => {
+    const { loadText } = await import("@/lib/utils/format");
+    expect(loadText({ load: 5.2, partial: true })).toBe("load at least 5");
+    expect(loadText({ load: 31.4, partial: false })).toBe("load about 31");
+  });
+});

@@ -1,4 +1,6 @@
 import { db } from "@/db";
+import { workoutToRows } from "@/lib/utils/program-steps";
+import { parseWorkout } from "@/lib/utils/workout-steps";
 import {
   exercises,
   oauthAccessTokens,
@@ -80,6 +82,16 @@ export async function createProgram(
     slots.push({ programExerciseId: pe.id, exerciseId: spec.exerciseId, setIds: sets.map((s) => s.id) });
   }
   return { program, slots };
+}
+
+/**
+ * A program of one endurance exercise whose sets are the steps of `workout`, a
+ * step tree as the step editor and MCP write it (docs/plans/one-program-model.md).
+ */
+export async function createStepProgram(userId: string, exerciseId: number, workout: unknown) {
+  const parsed = parseWorkout(workout);
+  if (!parsed.ok) throw new Error(`createStepProgram: ${JSON.stringify(parsed.errors)}`);
+  return createProgram(userId, [{ exerciseId, sets: workoutToRows(parsed.workout).map((r) => ({ ...r, targetReps: null, weightKg: null, restTimeSeconds: 0 })) }]);
 }
 
 export async function createSession(

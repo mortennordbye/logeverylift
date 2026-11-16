@@ -44,3 +44,30 @@ describe("todayPlanFrom", () => {
     expect(todayPlanFrom([])).toBeNull();
   });
 });
+
+describe("todayPlanFrom with endurance steps (docs/plans/one-program-model.md)", () => {
+  const step = (over: Partial<PlanRow>): PlanRow => set(1, "Run", { targetReps: null, restTimeSeconds: 0, ...over });
+  it("names each block once with its rounds, counts steps, and leaves the time out when a step has none", () => {
+    const rows = [
+      step({ stepKind: "warmup", distanceMeters: 2000 }),
+      ...[1, 2].flatMap((round) => [
+        step({ stepKind: "work", distanceMeters: 1000, blockId: 1, blockRound: round }),
+        step({ stepKind: "recovery", durationSeconds: 120, blockId: 1, blockRound: round }),
+      ]),
+      step({ stepKind: "cooldown", endsOnLap: true }),
+    ];
+    const p = todayPlanFrom(rows)!;
+    expect(p.exercises[0].sets).toBe("2 km warm-up · 2 × (1 km, 2 min easy) · to lap cool-down");
+    expect(p.minutes).toBeNull();
+    expect(p.stepsOnly).toBe(true);
+    expect(p.setCount).toBe(6);
+  });
+
+  it("keeps the time when every step is timed, and a lifter's plan has no step fields", () => {
+    const timed = todayPlanFrom([step({ stepKind: "work", durationSeconds: 1800 })])!;
+    expect(timed.minutes).toBe(30);
+    const lift = todayPlanFrom([set(1, "Bench Press", { weightKg: "80.00" })])!;
+    expect(lift.stepsOnly).toBeUndefined();
+    expect(lift.minutes).not.toBeNull();
+  });
+});

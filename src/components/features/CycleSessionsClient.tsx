@@ -15,7 +15,6 @@ import type { AnswerSession } from "@/components/features/answer-session";
 import { type ExerciseLine, ExerciseList, KeyMark, PickList, PlannedSessionSheet, sheetRow } from "@/components/features/PlannedSessionActions";
 import { PlanSheetPanel, SectionLabel } from "@/components/features/PlanSheetPanel";
 import { DidYouDoItSheet } from "@/components/features/SessionAnswers";
-import type { LibraryRow } from "@/components/features/WorkoutsLibraryClient";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { useUnits } from "@/contexts/user-settings-context";
 import { updateRotationSession } from "@/lib/actions/planned-sessions";
@@ -85,7 +84,6 @@ export function CycleWeek({
   today,
   phaseLine,
   programs,
-  library,
   programsMap,
   templateHref,
   dayLabels,
@@ -98,7 +96,6 @@ export function CycleWeek({
   today: string;
   phaseLine: string | null;
   programs: ProgramOption[];
-  library?: LibraryRow[];
   programsMap: Record<number, ProgramWithExercises>;
   templateHref: string;
   /** The template's own names for days with no session, by weekday (1 = Monday). */
@@ -237,7 +234,6 @@ export function CycleWeek({
         keyDates={keyDates}
         phaseLine={phaseLine}
         programs={programs}
-        library={library}
         exercises={open?.programId != null ? exerciseLines(programsMap[open.programId], units) : null}
         onClose={() => setOpen(null)}
       />

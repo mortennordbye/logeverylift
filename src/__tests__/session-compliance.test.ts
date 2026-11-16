@@ -285,30 +285,28 @@ describe("effectivePriorities", () => {
   });
 });
 
-describe("generation with workout slots", () => {
-  it("a workout slot makes sessions with its copy; a program slot is unchanged; a rest slot makes none", () => {
-    const wk = { v: 1, sport: "run", name: "Easy", steps: [] };
+describe("generation with slot priorities", () => {
+  it("a slot's priority goes on its sessions; a rest slot makes none", () => {
     const out = generateWeekday("2026-11-02", 7, [
       { id: 1, dayOfWeek: 1, daySlot: 1, programId: 9, label: null, notes: null, autoComplete: false },
-      { id: 2, dayOfWeek: 2, daySlot: 1, programId: null, label: null, notes: null, autoComplete: false, workout: wk, workoutId: 4, priority: "key" },
+      { id: 2, dayOfWeek: 2, daySlot: 1, programId: 8, label: null, notes: null, autoComplete: false, priority: "key" },
       { id: 3, dayOfWeek: 3, daySlot: 1, programId: null, label: null, notes: null, autoComplete: false },
     ]);
     expect(out).toEqual([
       { slotId: 1, templateDate: "2026-11-02", date: "2026-11-02", position: 1, programId: 9, label: null, notes: null, autoComplete: false },
-      { slotId: 2, templateDate: "2026-11-03", date: "2026-11-03", position: 1, programId: null, label: null, notes: null, autoComplete: false, workout: wk, workoutId: 4, priority: "key" },
+      { slotId: 2, templateDate: "2026-11-03", date: "2026-11-03", position: 1, programId: 8, label: null, notes: null, autoComplete: false, priority: "key" },
     ]);
   });
 
-  it("regeneration updates an untouched session's workout and priority in place", () => {
-    const wk = { v: 1, name: "New" };
+  it("regeneration updates an untouched session's priority in place", () => {
     const plan = regenerationPlan({
-      existing: [{ id: 50, slotId: 2, templateDate: "2026-11-10", date: "2026-11-10", position: 1, programId: null, label: null, notes: null, autoComplete: false, touched: false, done: false, workout: { v: 1, name: "Old" }, workoutId: 4, priority: null }],
-      generated: [{ slotId: 2, templateDate: "2026-11-10", date: "2026-11-10", position: 1, programId: null, label: null, notes: null, autoComplete: false, workout: wk, workoutId: 4, priority: "key" }],
+      existing: [{ id: 50, slotId: 2, templateDate: "2026-11-10", date: "2026-11-10", position: 1, programId: 8, label: null, notes: null, autoComplete: false, touched: false, done: false, priority: null }],
+      generated: [{ slotId: 2, templateDate: "2026-11-10", date: "2026-11-10", position: 1, programId: 8, label: null, notes: null, autoComplete: false, priority: "key" }],
       today: "2026-11-05",
       block: { start: "2026-11-02", end: "2026-11-30" },
       includePast: false,
     });
-    expect(plan.update).toEqual([{ id: 50, fields: { workout: wk, workoutId: 4, priority: "key" } }]);
+    expect(plan.update).toEqual([{ id: 50, fields: { priority: "key" } }]);
   });
 });
 

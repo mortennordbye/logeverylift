@@ -22,7 +22,7 @@ import { z } from "zod";
 
 export const WORKOUT_SPORTS = ["swim", "bike", "run"] as const;
 export const STEP_TYPES = ["warmup", "work", "recovery", "cooldown", "rest"] as const;
-export const TARGET_METRICS = ["power", "hr", "pace", "cadence"] as const;
+export const TARGET_METRICS = ["power", "hr", "pace", "cadence", "rpe"] as const;
 export const TARGET_ANCHORS = ["ftp", "lthr", "max_hr", "threshold_pace", "css", "absolute"] as const;
 export const SWIM_STROKES = ["free", "back", "breast", "fly", "im", "choice", "kick", "pull", "drill"] as const;
 export const SWIM_EQUIPMENT = ["pull_buoy", "paddles", "fins", "kickboard", "snorkel"] as const;
@@ -56,6 +56,8 @@ const TARGET_RANGE: Record<string, { min: number; max: number; unit: string }> =
   "pace:css": { min: 50, max: 130, unit: "% CSS speed" },
   "pace:absolute": { min: 0.3, max: 12, unit: "m/s" },
   "cadence:absolute": { min: 20, max: 200, unit: "rpm" },
+  // By feel, for days with no meter or no thresholds (docs/plans/one-program-model.md, decision 6).
+  "rpe:absolute": { min: 1, max: 10, unit: "RPE" },
 };
 const CSS_OFFSET = { min: -20, max: 60 };
 const ZONES: Record<string, number> = { "power:ftp": 5, "hr:lthr": 5 };
@@ -71,6 +73,7 @@ const SPORTS_FOR: Record<string, readonly WorkoutSport[]> = {
   "pace:css": ["swim"],
   "pace:absolute": ["swim", "bike", "run"],
   "cadence:absolute": ["bike", "run"],
+  "rpe:absolute": ["swim", "bike", "run"],
 };
 
 const idSchema = z.string().regex(/^[A-Za-z0-9_-]{1,24}$/, "letters, digits, - or _, at most 24");
@@ -93,11 +96,33 @@ const targetSchema = z.strictObject({
 
 const rangeSchema = z.strictObject({ low: z.number(), high: z.number() });
 
+/**
+ * The step fields of a program set (docs/plans/one-program-model.md, 1.1), as
+ * an input shape. Shapes only: the ranges and the rules across steps are
+ * checked on the whole exercise by checkStepRows (src/lib/utils/program-steps.ts).
+ */
+export const stepTargetsSchema = z.array(targetSchema).min(1).max(2);
+export const programStepFieldsSchema = z.object({
+  stepKind: z.enum(STEP_TYPES).nullable().optional(),
+  endsOnLap: z.boolean().optional(),
+  targets: stepTargetsSchema.nullable().optional(),
+  cadenceLow: z.number().int().min(0).max(300).nullable().optional(),
+  cadenceHigh: z.number().int().min(0).max(300).nullable().optional(),
+  blockId: z.number().int().min(1).max(1000).nullable().optional(),
+  blockRound: z.number().int().min(1).max(WORKOUT_LIMITS.repeatCount.max).nullable().optional(),
+  stroke: z.enum(SWIM_STROKES).nullable().optional(),
+  equipment: z.array(z.enum(SWIM_EQUIPMENT)).max(SWIM_EQUIPMENT.length).nullable().optional(),
+  sendOffSeconds: z.number().int().min(WORKOUT_LIMITS.sendOffSeconds.min).max(WORKOUT_LIMITS.sendOffSeconds.max).nullable().optional(),
+  note: z.string().trim().min(1).max(WORKOUT_LIMITS.note).nullable().optional(),
+});
+
 const stepSchema = z.strictObject({
   id: idSchema.optional(),
   type: z.enum(STEP_TYPES),
   end: endSchema,
   target: targetSchema.optional(),
+  // A second target that caps the first (for example power with an HR cap).
+  target2: targetSchema.optional(),
   cadence: rangeSchema.optional(),
   sendOffSeconds: z.number().int().min(WORKOUT_LIMITS.sendOffSeconds.min).max(WORKOUT_LIMITS.sendOffSeconds.max).optional(),
   stroke: z.enum(SWIM_STROKES).optional(),
@@ -167,14 +192,24 @@ function targetIssues(t: WorkoutTarget, sport: WorkoutSport): { path: string[]; 
   return out;
 }
 
+/**
+ * Program sets store whole metres, so a yard pool distance (100 yd = 91.44 m)
+ * is rounded on write; up to 0.5 m off a whole number of lengths is accepted
+ * (docs/plans/one-program-model.md, 1.1).
+ */
 function isWholeLengths(meters: number, pool: number): boolean {
   const lengths = meters / pool;
-  return Math.abs(lengths - Math.round(lengths)) * pool <= 0.01 && Math.round(lengths) >= 1;
+  return Math.abs(lengths - Math.round(lengths)) * pool <= 0.5 && Math.round(lengths) >= 1;
 }
 
 function stepIssues(step: WorkoutStep, w: Workout, inRepeat: WorkoutRepeat | null): Issue[] {
   const out: Issue[] = [];
   if (step.target) for (const i of targetIssues(step.target, w.sport)) out.push({ path: ["target", ...i.path], message: i.message });
+  if (step.target2) {
+    if (!step.target) out.push({ path: ["target2"], message: "a second target needs a first one" });
+    else if (step.target2.metric === step.target.metric) out.push({ path: ["target2", "metric"], message: "the second target must use another metric" });
+    for (const i of targetIssues(step.target2, w.sport)) out.push({ path: ["target2", ...i.path], message: i.message });
+  }
   if (step.cadence) {
     if (w.sport === "swim") out.push({ path: ["cadence"], message: "cadence is only for bike and run" });
     const r = TARGET_RANGE["cadence:absolute"];
@@ -311,9 +346,9 @@ export function anchorKind(t: WorkoutTarget, sport: WorkoutSport): ThresholdKind
 }
 
 /** A resolved target: metric bounds (W, bpm, m/s or rpm; null is open) and text in the user's units. */
-export type ResolvedTarget = { low: number | null; high: number | null; unit: "W" | "bpm" | "m/s" | "rpm"; text: string; missing: ThresholdKind | null };
+export type ResolvedTarget = { low: number | null; high: number | null; unit: "W" | "bpm" | "m/s" | "rpm" | "RPE"; text: string; missing: ThresholdKind | null };
 
-const UNIT_OF = { power: "W", hr: "bpm", pace: "m/s", cadence: "rpm" } as const;
+const UNIT_OF = { power: "W", hr: "bpm", pace: "m/s", cadence: "rpm", rpe: "RPE" } as const;
 
 /** Bounds as a percent (or absolute) before the anchor is applied. */
 function relativeBounds(t: WorkoutTarget, sport: WorkoutSport): [number | null, number | null] {
@@ -348,6 +383,7 @@ export function targetLabel(t: WorkoutTarget, sport: WorkoutSport, units: Units 
   };
   const key = `${t.metric}:${t.anchor}`;
   if (label[key]) return range(t.low!, t.high!, label[key]);
+  if (t.metric === "rpe") return `RPE ${range(t.low!, t.high!, "")}`;
   if (t.metric === "pace") return `${paceText(t.low!, sport, units)} to ${paceText(t.high!, sport, units)}`;
   return range(t.low!, t.high!, ` ${UNIT_OF[t.metric]}`);
 }
@@ -380,6 +416,8 @@ export function resolveTarget(t: WorkoutTarget, sport: WorkoutSport, thresholds:
     const fast = high !== null ? paceText(high, sport, units) : null;
     const slow = low !== null ? paceText(low, sport, units) : null;
     text = fast && slow ? `${fast.replace(/\/.*$/, "")}-${slow}` : (fast ?? slow ?? "");
+  } else if (t.metric === "rpe") {
+    text = targetLabel(t, sport, units);
   } else {
     const r = (n: number) => Math.round(n);
     text = low === null ? `up to ${r(high!)} ${unit}` : high === null ? `${r(low)} ${unit} or more` : r(low) === r(high) ? `${r(low)} ${unit}` : `${r(low)}-${r(high)} ${unit}`;
@@ -413,12 +451,16 @@ export type WorkoutEstimate = {
   distanceComplete: boolean;
 };
 
-/** Mid speed of a pace target, when it resolves. */
-function targetSpeed(s: WorkoutStep, sport: WorkoutSport, thresholds: ThresholdValues): number | null {
-  if (!s.target || s.target.metric !== "pace") return null;
-  const r = resolveTarget(s.target, sport, thresholds);
+/** Mid speed (m/s) of a pace target, when it resolves; null for any other target. */
+export function paceTargetSpeed(t: WorkoutTarget | undefined, sport: WorkoutSport, thresholds: ThresholdValues): number | null {
+  if (!t || t.metric !== "pace") return null;
+  const r = resolveTarget(t, sport, thresholds);
   if (r.low === null || r.high === null) return r.low ?? r.high;
   return (r.low + r.high) / 2;
+}
+
+function targetSpeed(s: WorkoutStep, sport: WorkoutSport, thresholds: ThresholdValues): number | null {
+  return paceTargetSpeed(s.target, sport, thresholds);
 }
 
 /** Total time and distance, from the steps and, where a pace target resolves, its speed. */
@@ -498,11 +540,13 @@ export function describeWorkout(w: Workout, units: Units = DEFAULT_UNITS): strin
 // ── Hard workout (next to isHardSession in src/lib/utils/training-limits.ts) ─
 
 /** Whether one target's low end is in zone 4 or above. Pace bounds are inference: the research table has no pace zones. */
-function hardTarget(t: WorkoutTarget, sport: WorkoutSport, thresholds: ThresholdValues): boolean {
+export function hardTarget(t: WorkoutTarget, sport: WorkoutSport, thresholds: ThresholdValues): boolean {
   if (t.zone !== undefined) return t.zone >= 4;
   // The slow end, as for percent targets: a larger offset is slower (review 11).
   if (t.offsetHigh !== undefined) return t.offsetHigh <= HARD_FROM.cssOffset;
   if (t.metric === "cadence") return false;
+  // RPE 7 or more is hard on the 1-10 scale (inference, as the zone bounds are).
+  if (t.metric === "rpe") return t.low! >= 7;
   let pct: number | null;
   if (t.anchor === "absolute") {
     const kind: ThresholdKind | null = t.metric === "power" ? "ftp" : t.metric === "hr" ? (sport === "bike" ? "lthr_bike" : sport === "run" ? "lthr_run" : null) : sport === "run" ? "run_threshold_pace" : sport === "swim" ? "swim_css" : null;

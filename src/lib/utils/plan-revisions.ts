@@ -23,8 +23,7 @@ export type MemorySnapshot = { v: 1; memory: Row };
 export type AthleteSnapshot = { v: 1; athlete: Row; availabilitySource?: FieldSource | null };
 export type ThresholdSnapshot = { v: 1; threshold: Row };
 export type InjurySnapshot = { v: 1; injury: Row };
-/** A library workout and a sick period (docs/plans/workouts-and-compliance.md, 4.5). */
-export type WorkoutSnapshot = { v: 1; workout: Row };
+/** A sick period (docs/plans/workouts-and-compliance.md, 4.5). */
 export type IllnessSnapshot = { v: 1; illness: Row };
 /** The inputs of one race-day plan (docs/plans/nutrition-and-race-day.md, 3). */
 export type RacePlanSnapshot = { v: 1; race_plan: Row };
@@ -44,7 +43,6 @@ export type PlanSnapshot =
   | AthleteSnapshot
   | ThresholdSnapshot
   | InjurySnapshot
-  | WorkoutSnapshot
   | IllnessSnapshot
   | RacePlanSnapshot
   | SeasonSnapshot;
@@ -55,7 +53,6 @@ export const isMemorySnapshot = (s: PlanSnapshot): s is MemorySnapshot => "memor
 export const isAthleteSnapshot = (s: PlanSnapshot): s is AthleteSnapshot => "athlete" in s;
 export const isThresholdSnapshot = (s: PlanSnapshot): s is ThresholdSnapshot => "threshold" in s;
 export const isInjurySnapshot = (s: PlanSnapshot): s is InjurySnapshot => "injury" in s;
-export const isWorkoutSnapshot = (s: PlanSnapshot): s is WorkoutSnapshot => "workout" in s && !("session" in s);
 export const isIllnessSnapshot = (s: PlanSnapshot): s is IllnessSnapshot => "illness" in s;
 export const isRacePlanSnapshot = (s: PlanSnapshot): s is RacePlanSnapshot => "race_plan" in s;
 
@@ -99,7 +96,6 @@ export function snapshotName(s: PlanSnapshot): string {
     return `Injury: ${side}${INJURY_AREA_TEXT(s.injury.area)}`;
   }
   if (isSeasonSnapshot(s)) return String(s.season.name);
-  if (isWorkoutSnapshot(s)) return `Workout: ${String(s.workout.name)}`;
   if (isIllnessSnapshot(s)) return `Sick period from ${String(s.illness.startedOn)}`;
   if (isRacePlanSnapshot(s)) return "Race plan";
   const text = String(s.memory.text);
@@ -208,6 +204,18 @@ const SET_FIELDS: Record<string, string> = {
   setType: "type",
   sessionRole: "role",
   setNumber: "position",
+  // Endurance steps (docs/plans/one-program-model.md).
+  stepKind: "step",
+  endsOnLap: "ends on lap",
+  targets: "target",
+  cadenceLow: "cadence low",
+  cadenceHigh: "cadence high",
+  blockId: "repeat block",
+  blockRound: "round",
+  stroke: "stroke",
+  equipment: "equipment",
+  sendOffSeconds: "send-off",
+  note: "step note",
 };
 
 const UNITS: Record<string, string> = {
@@ -219,6 +227,9 @@ const UNITS: Record<string, string> = {
   peakDurationSeconds: " s",
   inclinePercent: "%",
   startDelaySeconds: " s",
+  sendOffSeconds: " s",
+  cadenceLow: " rpm",
+  cadenceHigh: " rpm",
 };
 
 const show = (field: string, v: unknown) => {
@@ -244,6 +255,7 @@ const EXERCISE_FIELDS: Record<string, string> = {
   overloadIncrementReps: "rep step",
   exerciseType: "exercise type",
   weightStack: "weight stack",
+  poolLengthM: "pool length",
 };
 
 /** A Plan field on the history page: its label, and how a value reads (plain text when absent). */
@@ -365,7 +377,7 @@ function fieldLines(prefix: string, labels: Record<string, string>, before: Row,
   const out: string[] = [];
   for (const [field, label] of Object.entries(labels)) {
     if (sameValue(before[field], after[field])) continue;
-    if (field === "notes" || field === "endMessage") {
+    if (field === "notes" || field === "endMessage" || field === "targets" || field === "equipment" || field === "note") {
       out.push(`${prefix}${label} changed`);
       continue;
     }
@@ -397,10 +409,6 @@ export function diffSnapshots(before: PlanSnapshot | null, after: PlanSnapshot):
     if (!sameValue(b.programId, a.programId)) out.push(changeLine("Program", prev.programName, after.programName));
     if (!sameValue(b.label ?? null, a.label ?? null)) out.push(changeLine("Label", b.label, a.label));
     if (!sameValue(b.notes ?? null, a.notes ?? null)) out.push("Notes changed");
-    if (canonical(b.workout ?? null) !== canonical(a.workout ?? null)) {
-      const name = (w: unknown) => (w && typeof w === "object" ? String((w as { name?: unknown }).name ?? "workout") : null);
-      out.push(a.workout == null ? `Workout ${name(b.workout)} cleared` : b.workout == null ? `Workout set to ${name(a.workout)}` : `Workout changed from ${name(b.workout)} to ${name(a.workout)}`);
-    }
     if (!sameValue(b.priority ?? null, a.priority ?? null)) out.push(changeLine("Priority", b.priority ?? "default", a.priority ?? "default"));
     if (!sameValue(b.brickParentId ?? null, a.brickParentId ?? null)) out.push(a.brickParentId == null ? "Brick unlinked" : "Linked as a brick");
     if (!sameValue(b.garminActivityId ?? null, a.garminActivityId ?? null)) out.push(a.garminActivityId == null ? "Garmin activity unlinked" : "Garmin activity picked");
@@ -455,17 +463,6 @@ export function diffSnapshots(before: PlanSnapshot | null, after: PlanSnapshot):
     if (!sameValue(prev.description, after.injury.description)) out.push("description changed");
     if (!sameValue(prev.avoid ?? null, after.injury.avoid ?? null)) out.push("what to avoid changed");
     if (!sameValue(prev.deletedAt ?? null, after.injury.deletedAt ?? null)) out.push(after.injury.deletedAt ? "Deleted" : "Restored");
-    return out;
-  }
-  if (isWorkoutSnapshot(after)) {
-    const prev = before && isWorkoutSnapshot(before) ? before.workout : null;
-    const a = after.workout;
-    if (!prev) return [`Added workout “${a.name}”`];
-    const out: string[] = [];
-    if (!sameValue(prev.name, a.name)) out.push(`Name ${prev.name} → ${a.name}`);
-    if (canonical(prev.workout) !== canonical(a.workout)) out.push("Steps changed");
-    if (!sameValue(prev.priority ?? null, a.priority ?? null)) out.push(`Priority ${prev.priority ?? "default"} → ${a.priority ?? "default"}`);
-    if (!sameValue(prev.deletedAt ?? null, a.deletedAt ?? null)) out.push(a.deletedAt ? "Deleted" : "Restored");
     return out;
   }
   if (isIllnessSnapshot(after)) {
@@ -652,7 +649,11 @@ export function syncOwnedSetFields(set: Row): string[] {
   if (peakDistance) out.push("distanceMeters");
   if (peakDuration) out.push("durationSeconds");
   if (set.sessionRole === "work" && (peakDistance || peakDuration)) {
-    out.push("targetHeartRateZone", "restTimeSeconds");
+    // On a step with a zone target the sync writes the target instead of the
+    // old zone field (docs/plans/one-program-model.md, decision 4).
+    const targets = set.stepKind != null && Array.isArray(set.targets) ? (set.targets as { zone?: number }[]) : null;
+    if (targets?.length) out.push(...(targets[0].zone !== undefined ? ["targets"] : []), "restTimeSeconds");
+    else out.push("targetHeartRateZone", "restTimeSeconds");
   }
   return out;
 }
