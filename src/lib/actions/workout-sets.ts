@@ -986,6 +986,8 @@ export async function getCompletedSessions(
         intendedDate: workoutSessions.intendedDate,
         plannedSessionId: workoutSessions.plannedSessionId,
         source: workoutSessions.source,
+        pausedSeconds: workoutSessions.pausedSeconds,
+        clientKey: workoutSessions.clientKey,
         programName: programs.name,
         setCount: sql<number>`COUNT(${workoutSets.id})`,
         exerciseCount: sql<number>`COUNT(DISTINCT ${workoutSets.exerciseId})`,
@@ -1018,6 +1020,8 @@ export async function getCompletedSessions(
         workoutSessions.intendedDate,
         workoutSessions.plannedSessionId,
         workoutSessions.source,
+        workoutSessions.pausedSeconds,
+        workoutSessions.clientKey,
         programs.name,
       )
       .orderBy(desc(workoutSessions.startTime));
@@ -1073,6 +1077,8 @@ export async function getSessionDetail(
           intendedDate: workoutSessions.intendedDate,
           plannedSessionId: workoutSessions.plannedSessionId,
           source: workoutSessions.source,
+          pausedSeconds: workoutSessions.pausedSeconds,
+          clientKey: workoutSessions.clientKey,
           programName: programs.name,
         })
         .from(workoutSessions)

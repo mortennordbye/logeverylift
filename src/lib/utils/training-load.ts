@@ -125,7 +125,7 @@ export const DEFAULT_IF: Record<"warmup" | "work" | "recovery" | "cooldown" | "r
 const POWER_ZONE_MID = [45, 65, 82, 97, 112];
 
 export type PlannedTarget = {
-  metric: "power" | "hr" | "pace" | "cadence";
+  metric: "power" | "hr" | "pace" | "cadence" | "rpe";
   anchor: "ftp" | "lthr" | "max_hr" | "threshold_pace" | "css" | "absolute";
   low?: number;
   high?: number;

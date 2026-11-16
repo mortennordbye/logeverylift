@@ -564,7 +564,11 @@ export type ExportedProgram = {
         /** Double progression's rep range. Absent on exports that predate it. */
         repMin?: number | null;
         repMax?: number | null;
+        /** Endurance step fields (docs/plans/one-program-model.md). Only on a step. */
+        step?: Record<string, unknown>;
       }>;
+      /** Swim pool length in metres. Only when set. */
+      poolM?: number;
     }>;
   };
 };

@@ -32,6 +32,7 @@ when the brief was written.
 | 11 | [Back navigation](back-navigation.md) (Back goes where you came from) | built on `fix/back-navigation` | no | yes (set pages' Back) |
 | 12 | [Plan tab redesign](plan-tab-redesign.md) (Cycles becomes Plan; four packages) | built on `feat/plan-redesign`, waiting for the owner's local test | no | no |
 | 17 | [AI coach hub](ai-coach-hub.md) (one More row for AI; the built-in AI gives saved answers, a running plan changes through the user's own AI). Rows 13 to 16 are on the `docs/endurance-journeys` branch. | built on `feat/ai-coach-hub` | no | no |
+| 18 | [One program model](one-program-model.md) (structured endurance workouts move into programs; the workout library goes) | building on `feat/one-program-model` | yes | yes (set logging, drag-reorder) |
 
 Why this order:
 - 1 is small, has no schema change, and clears two BACKLOG items.

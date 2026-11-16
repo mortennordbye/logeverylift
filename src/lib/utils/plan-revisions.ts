@@ -208,6 +208,18 @@ const SET_FIELDS: Record<string, string> = {
   setType: "type",
   sessionRole: "role",
   setNumber: "position",
+  // Endurance steps (docs/plans/one-program-model.md).
+  stepKind: "step",
+  endsOnLap: "ends on lap",
+  targets: "target",
+  cadenceLow: "cadence low",
+  cadenceHigh: "cadence high",
+  blockId: "repeat block",
+  blockRound: "round",
+  stroke: "stroke",
+  equipment: "equipment",
+  sendOffSeconds: "send-off",
+  note: "step note",
 };
 
 const UNITS: Record<string, string> = {
@@ -219,6 +231,9 @@ const UNITS: Record<string, string> = {
   peakDurationSeconds: " s",
   inclinePercent: "%",
   startDelaySeconds: " s",
+  sendOffSeconds: " s",
+  cadenceLow: " rpm",
+  cadenceHigh: " rpm",
 };
 
 const show = (field: string, v: unknown) => {
@@ -244,6 +259,7 @@ const EXERCISE_FIELDS: Record<string, string> = {
   overloadIncrementReps: "rep step",
   exerciseType: "exercise type",
   weightStack: "weight stack",
+  poolLengthM: "pool length",
 };
 
 /** A Plan field on the history page: its label, and how a value reads (plain text when absent). */
@@ -365,7 +381,7 @@ function fieldLines(prefix: string, labels: Record<string, string>, before: Row,
   const out: string[] = [];
   for (const [field, label] of Object.entries(labels)) {
     if (sameValue(before[field], after[field])) continue;
-    if (field === "notes" || field === "endMessage") {
+    if (field === "notes" || field === "endMessage" || field === "targets" || field === "equipment" || field === "note") {
       out.push(`${prefix}${label} changed`);
       continue;
     }

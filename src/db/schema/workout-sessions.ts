@@ -73,6 +73,11 @@ export const workoutSessions = pgTable("workout_sessions", {
   // 3.3). Null for a workout started any other way; the matcher still links it
   // by date and program on read.
   plannedSessionId: integer("planned_session_id").references(() => plannedSessions.id, { onDelete: "set null" }),
+  // Guided endurance sessions (docs/plans/one-program-model.md, 1.2): time the
+  // player was paused, and the idempotency key of the player's save, so a
+  // retry never writes twice.
+  pausedSeconds: integer("paused_seconds"),
+  clientKey: text("client_key"),
 }, (t) => [
   index("idx_ws_user_completed_start").on(t.userId, t.isCompleted, t.startTime),
   index("idx_ws_planned").on(t.plannedSessionId),
@@ -82,6 +87,9 @@ export const workoutSessions = pgTable("workout_sessions", {
   uniqueIndex("uniq_ws_auto_planned")
     .on(t.userId, t.plannedSessionId)
     .where(sql`${t.source} = 'auto' AND ${t.plannedSessionId} IS NOT NULL`),
+  uniqueIndex("uniq_ws_client_key")
+    .on(t.userId, t.clientKey)
+    .where(sql`${t.clientKey} IS NOT NULL`),
   uniqueIndex("uniq_ws_auto_day")
     .on(t.userId, t.programId, t.date)
     .where(sql`${t.source} = 'auto' AND ${t.plannedSessionId} IS NULL`),

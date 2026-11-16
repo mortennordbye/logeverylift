@@ -37,7 +37,9 @@ import {
     decimal,
     index,
     integer,
+    jsonb,
     pgTable,
+    real,
     serial,
     text,
     timestamp,
@@ -47,6 +49,9 @@ import { sql } from "drizzle-orm";
 import { exercises } from "./exercises";
 import { programExercises, programSets } from "./programs";
 import { workoutSessions } from "./workout-sessions";
+
+/** How a logged endurance step went (docs/plans/one-program-model.md, 1.2). */
+export const STEP_STATUS_VALUES = ["done", "partial", "skipped", "not_done"] as const;
 
 export const workoutSets = pgTable("workout_sets", {
   id: serial("id").primaryKey(),
@@ -116,6 +121,20 @@ export const workoutSets = pgTable("workout_sets", {
   // the next session suggests the increment even though the usual two confident
   // hits haven't accumulated. Read by buildSuggestion.
   wasEasy: boolean("was_easy").default(false).notNull(),
+  // ── Endurance steps (docs/plans/one-program-model.md, 1.2) ──────────────
+  // Null on strength sets and on endurance sets logged before steps existed.
+  // done | partial (cut short) | skipped | not_done. A skipped step writes a
+  // row with isCompleted false, so planned-vs-done can show it.
+  stepStatus: text("step_status", { enum: STEP_STATUS_VALUES }),
+  // Time added to the step in the guided player.
+  extendedSeconds: integer("extended_seconds"),
+  // The measured value of the main target's metric (average W, bpm, m/s, rpm or RPE).
+  measuredValue: real("measured_value"),
+  avgHr: integer("avg_hr"),
+  // The step as planned when it was logged: kind, end, targets and the
+  // threshold values used, so a later edit, the weekly sync or a retest does
+  // not change what this session was asked to do.
+  plannedStep: jsonb("planned_step"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (t) => [
   index("idx_wsets_session").on(t.sessionId),
