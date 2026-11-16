@@ -382,6 +382,17 @@ describe("logging a structured program session (step 3)", () => {
     });
   });
 
+  it("keeps the session distance the results form sends when no step has one", async () => {
+    await withClock(async (user) => {
+      const { saveStepResults } = await import("@/lib/step-results");
+      const { workoutSets } = await import("@/db/schema");
+      const { plannedSessionId } = await plannedRun(user);
+      const saved = await saveStepResults(user, { plannedSessionId, distanceMeters: 7400, steps: [{ key: "s1", status: "done", activeSeconds: 600 }, { key: "s3#1", status: "done", activeSeconds: 250 }] }, "manual");
+      const sets = await db.select().from(workoutSets).where(eq(workoutSets.sessionId, saved.workoutSessionId));
+      expect(sets.reduce((a, s) => a + (s.distanceMeters ?? 0), 0)).toBe(7400);
+    });
+  });
+
   it("records one distance PR for the session's steps together", async () => {
     await withClock(async (user) => {
       const { saveStepResults } = await import("@/lib/step-results");

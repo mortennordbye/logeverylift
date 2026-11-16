@@ -165,6 +165,12 @@ export async function saveProgramStepResults(userId: string, input: SaveStepResu
       };
     });
   });
+  // The session distance the results form or the assistant gives, when no
+  // step has its own, goes on the first step done, so the session keeps it.
+  if (input.distanceMeters != null && input.distanceMeters > 0 && !sets.some((x) => x.distanceMeters)) {
+    const first = sets.find((x) => x.step.isCompleted);
+    if (first) first.distanceMeters = Math.round(input.distanceMeters);
+  }
   const totals = resultTotals(plays.flatMap((p) => p.rows), [...results.values()]);
 
   // An app session already linked to this planned day takes the results;
