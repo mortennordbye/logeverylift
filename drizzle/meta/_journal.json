@@ -673,6 +673,13 @@
       "when": 1794818293960,
       "tag": "0095_one_day_programs",
       "breakpoints": true
+    },
+    {
+      "idx": 96,
+      "version": "7",
+      "when": 1794821979010,
+      "tag": "0096_drop_structured_workouts",
+      "breakpoints": true
     }
   ]
 }

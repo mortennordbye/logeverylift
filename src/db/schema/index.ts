@@ -40,9 +40,8 @@ export * from "./weight-history";
 export * from "./workout-reactions";
 export * from "./workout-sessions";
 export * from "./workout-sets";
-export * from "./workouts";
+export * from "./session-priority";
 export * from "./illness";
-export * from "./step-results";
 export * from "./nutrition";
 
 // Relations for Drizzle relational queries

@@ -151,7 +151,8 @@ describe("restores of revisions from before the one program model", () => {
       .where(eq(planRevisions.id, rev.id));
     expect(await restoreRevision({ userId: me, writer: "user" }, rev.id)).not.toBeNull();
     const slots = await db.select().from(trainingCycleSlots).where(eq(trainingCycleSlots.trainingCycleId, c));
-    expect(slots.find((s) => s.dayOfWeek === 6)).toMatchObject({ programId: null, workoutId: null });
+    // The column is gone (step 6b); the old snapshot's workoutId is read past.
+    expect(slots.find((s) => s.dayOfWeek === 6)).toMatchObject({ programId: null });
   });
 
   it("a session restore never brings back the session's own workout", async () => {
@@ -168,8 +169,7 @@ describe("restores of revisions from before the one program model", () => {
       .where(eq(planRevisions.id, rev.id));
     expect(await restoreRevision({ userId: me, writer: "user" }, rev.id)).not.toBeNull();
     const [row] = await db.select().from(plannedSessions).where(eq(plannedSessions.id, sat.id));
-    expect(row).toMatchObject({ label: "Old", programId: run, workoutId: null });
-    expect(row.workout).toBeNull();
+    expect(row).toMatchObject({ label: "Old", programId: run });
   });
 });
 

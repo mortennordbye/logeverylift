@@ -32,7 +32,6 @@ import {
   trainingCycles,
   users,
   userWeightEntries,
-  workouts,
   workoutSessions,
 } from "../../src/db/schema";
 
@@ -116,7 +115,6 @@ export async function resetE2EUser(email: string): Promise<void> {
     await tx.delete(athleteThresholds).where(eq(athleteThresholds.userId, userId));
     await tx.delete(athleteInjuries).where(eq(athleteInjuries.userId, userId));
     await tx.delete(illnessPeriods).where(eq(illnessPeriods.userId, userId));
-    await tx.delete(workouts).where(eq(workouts.userId, userId));
     await tx.delete(aiSetupPlans).where(eq(aiSetupPlans.userId, userId));
     await tx.delete(aiGenerations).where(eq(aiGenerations.userId, userId));
     await tx.delete(customWeightUsage).where(eq(customWeightUsage.userId, userId));

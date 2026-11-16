@@ -7,8 +7,6 @@ import {
   dismissedMakeups,
   athleteInjuries,
   illnessPeriods,
-  workouts,
-  workoutStepResults,
   athleteProfiles,
   athleteThresholds,
   coachMemory,
@@ -155,11 +153,9 @@ export async function collectUserData(userId: string) {
     athlete_thresholds: await db.select().from(athleteThresholds).where(eq(athleteThresholds.userId, userId)),
     athlete_injuries: await db.select().from(athleteInjuries).where(eq(athleteInjuries.userId, userId)),
     // plan-read: includes deleted (the export holds all of the user's data)
-    workouts: await db.select().from(workouts).where(eq(workouts.userId, userId)),
     // plan-read: includes deleted (the export holds all of the user's data)
     illness_periods: await db.select().from(illnessPeriods).where(eq(illnessPeriods.userId, userId)),
     // Per-step results of structured sessions (docs/plans/endurance-app.md, 9).
-    workout_step_results: await db.select().from(workoutStepResults).where(eq(workoutStepResults.userId, userId)),
     // Fuel logs, products, sweat tests and race plans (docs/plans/nutrition-and-race-day.md, 7).
     fuel_logs: await db.select().from(fuelLogs).where(eq(fuelLogs.userId, userId)),
     fuel_products: await db.select().from(fuelProducts).where(eq(fuelProducts.userId, userId)),
