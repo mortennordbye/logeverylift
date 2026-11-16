@@ -16,10 +16,10 @@ export function generateMetadata(): Promise<Metadata> {
 }
 
 const SHOT_FILES = [
-  { src: "/screenshots/home.png", w: 920, h: 2000 },
-  { src: "/screenshots/metrics.png", w: 920, h: 2000 },
-  { src: "/screenshots/calendar.png", w: 920, h: 2000 },
-  { src: "/screenshots/ai-setup.png", w: 920, h: 2000 },
+  { src: "/screenshots/widgets.png", w: 1206, h: 2622 },
+  { src: "/screenshots/ai-coach.png", w: 1206, h: 2622 },
+  { src: "/screenshots/season.png", w: 1206, h: 2622 },
+  { src: "/screenshots/progress.png", w: 1206, h: 2622 },
 ];
 
 // All visible copy on this page, per language. `?lang=no` switches to Norwegian.
@@ -33,14 +33,14 @@ const COPY = {
       "Be one of the first to train with AI-built programs and a smart progression engine that tells you exactly what to put on the bar next session.",
     cta: "Get early access",
     ctaNote: "Free while in early access. Your feedback shapes what ships next.",
-    heroAlt: "Deadlift sets with next-session weight suggestions",
+    heroAlt: "Home screen with today's workout and the training block",
     welcomeBack: "Welcome back",
     welcomeBackBody: "Sign in to pick up today's workout.",
     shots: [
-      { title: "Your block, on autopilot", body: "The app knows your week. One tap to start." },
-      { title: "Progress you can see", body: "Top lifts and per-exercise trends." },
-      { title: "Planned vs done", body: "Every cycle on one calendar." },
-      { title: "AI program builder", body: "Describe your goal. Get a full plan in seconds." },
+      { title: "Your home, your way", body: "Pick the widgets you want to see." },
+      { title: "An AI coach that knows your training", body: "Ask about your plan, your lifts and your next session." },
+      { title: "Plan your season", body: "Phases that build toward your goal." },
+      { title: "Progress you can see", body: "Sessions, streaks and body weight over time." },
     ],
     featuresHeading: "Smarter than a notebook",
     featuresIntro: "New features land every week. Early users see them first.",
@@ -70,14 +70,14 @@ const COPY = {
       "Bli en av de første som trener med AI-bygde programmer og en smart progresjonsmotor som forteller deg nøyaktig hva du skal legge på stanga neste økt.",
     cta: "Få tidlig tilgang",
     ctaNote: "Gratis i perioden med tidlig tilgang. Tilbakemeldingene dine former det som kommer.",
-    heroAlt: "Markløftsett med vektforslag til neste økt",
+    heroAlt: "Hjemskjerm med dagens økt og treningsblokken",
     welcomeBack: "Velkommen tilbake",
     welcomeBackBody: "Logg inn for å fortsette dagens økt.",
     shots: [
-      { title: "Treningsblokken på autopilot", body: "Appen kjenner uka di. Ett trykk for å starte." },
-      { title: "Fremgang du kan se", body: "Beste løft og utvikling per øvelse." },
-      { title: "Planlagt mot gjennomført", body: "Alle sykluser i én kalender." },
-      { title: "AI-programbygger", body: "Beskriv målet ditt. Få en komplett plan på sekunder." },
+      { title: "Hjemskjermen din, på din måte", body: "Velg widgetene du vil se." },
+      { title: "En AI-coach som kjenner treningen din", body: "Spør om planen, løftene og neste økt." },
+      { title: "Planlegg sesongen", body: "Faser som bygger mot målet ditt." },
+      { title: "Fremgang du kan se", body: "Økter, ukerekker og kroppsvekt over tid." },
     ],
     featuresHeading: "Smartere enn en notatbok",
     featuresIntro: "Nye funksjoner kommer hver uke. De første brukerne ser dem først.",
@@ -186,7 +186,7 @@ export default async function WelcomePage({ searchParams }: Props) {
 
           <div className="mx-auto w-full max-w-[300px] overflow-hidden rounded-[36px] border border-border">
             <Image
-              src="/screenshots/exercise-detail.png"
+              src="/screenshots/home.png"
               alt={t.heroAlt}
               width={1206}
               height={2622}

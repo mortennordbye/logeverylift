@@ -22,30 +22,44 @@ Built with Next.js 16 (App Router) and React Server Components. Runs in Docker c
 <table>
   <tr>
     <td align="center" width="33%">
-      <img src="docs/screenshots/home.png" alt="Workout home screen — active training block, today's session, and weekly progress" width="240" /><br />
-      <sub><b>Home</b> — active block & today's session</sub>
+      <img src="docs/screenshots/home.png" alt="Home screen with today's workout and the training block" width="240" /><br />
+      <sub><b>Home</b> · today's workout</sub>
     </td>
     <td align="center" width="33%">
-      <img src="docs/screenshots/exercise-detail.png" alt="Exercise detail — per-set targets, last-session history, progression hints, and rest timers" width="240" /><br />
-      <sub><b>Exercise</b> — per-set targets & rest timers</sub>
+      <img src="docs/screenshots/widgets.png" alt="Home widgets for streak, weekly goal, recent PRs, body weight and cycle" width="240" /><br />
+      <sub><b>Widgets</b> · pick what you see</sub>
     </td>
     <td align="center" width="33%">
-      <img src="docs/screenshots/calendar.png" alt="Calendar — scheduled and completed sessions across training cycles" width="240" /><br />
-      <sub><b>Calendar</b> — scheduled vs completed</sub>
+      <img src="docs/screenshots/add-widget.png" alt="Add a widget sheet with the widgets you can put on the home screen" width="240" /><br />
+      <sub><b>Add a widget</b> · build your own home</sub>
     </td>
   </tr>
   <tr>
     <td align="center" width="33%">
-      <img src="docs/screenshots/metrics.png" alt="Metrics — top lifts and per-exercise progression charts" width="240" /><br />
-      <sub><b>Metrics</b> — top lifts & progression</sub>
+      <img src="docs/screenshots/plan.png" alt="Plan tab with the running cycle, the season and past cycles" width="240" /><br />
+      <sub><b>Plan</b> · cycles and seasons</sub>
     </td>
     <td align="center" width="33%">
-      <img src="docs/screenshots/ai-setup.png" alt="AI Setup — generate programs and training schedule from a prompt" width="240" /><br />
-      <sub><b>AI Setup</b> — generate programs from a prompt</sub>
+      <img src="docs/screenshots/season.png" alt="Season with a goal, a countdown and its phases" width="240" /><br />
+      <sub><b>Season</b> · phases toward a goal</sub>
     </td>
     <td align="center" width="33%">
-      <img src="docs/screenshots/exercises.png" alt="Exercise library — browse by body area, muscle, equipment, and type, or add your own" width="240" /><br />
-      <sub><b>Exercises</b> — browse the library or add your own</sub>
+      <img src="docs/screenshots/progress.png" alt="Progress with sessions, streak, activity and body weight" width="240" /><br />
+      <sub><b>Progress</b> · stats and body weight</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="33%">
+      <img src="docs/screenshots/ai-coach.png" alt="AI coach hub with the plan, Claude connected and coach notes" width="240" /><br />
+      <sub><b>AI coach</b> · plan, assistant, memory</sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="docs/screenshots/ai-setup.png" alt="AI plan builder with goal, experience, days and equipment" width="240" /><br />
+      <sub><b>AI plan builder</b> · a plan from four questions</sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="docs/screenshots/exercise-progress.png" alt="Exercise page with a weight chart and personal records" width="240" /><br />
+      <sub><b>Exercise</b> · progress and records</sub>
     </td>
   </tr>
 </table>
