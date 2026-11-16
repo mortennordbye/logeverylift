@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 import { LEGAL_VERSION } from "@/lib/constants/legal";
 import Home from "@/app/page";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createExercise, createProgram, createUser } from "./factories";
+import { createExercise, createProgram, createStepProgram, createUser } from "./factories";
 import { asUser } from "./setup";
 
 /**
@@ -109,12 +109,14 @@ describe("statements per home render (T2)", () => {
     await db.update(users).set({ enduranceEnabled: true }).where(eq(users.id, me));
     const cycleId = await weekdayCycle();
     const run = { v: 1, sport: "run", name: "Run", steps: [{ type: "work", end: { type: "time", seconds: 1800 } }] };
+    const runEx = (await createExercise({ name: `Run ${Math.random()}`, category: "cardio", discipline: "run" })).id;
+    const programId = (await createStepProgram(me, runEx, run)).program.id;
     await db.insert(plannedSessions).values([
-      { userId: me, cycleId, date: "2026-11-05", label: "Tempo", workout: run },
-      { userId: me, cycleId, date: "2026-11-04", label: "Easy", workout: run },
+      { userId: me, cycleId, date: "2026-11-05", label: "Tempo", programId },
+      { userId: me, cycleId, date: "2026-11-04", label: "Easy", programId },
     ]);
     const first = await countHome();
     const steady = await countHome();
-    expect({ first, steady }).toEqual({ first: 154, steady: 120 });
+    expect({ first, steady }).toEqual({ first: 162, steady: 122 });
   });
 });

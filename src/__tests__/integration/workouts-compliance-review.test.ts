@@ -1,25 +1,25 @@
 import { db } from "@/db";
-import { garminActivities, garminConnections, planRevisions, plannedSessions, trainingCycleSlots, trainingCycles, workoutSessions, workouts } from "@/db/schema";
-import { manageWorkout } from "@/lib/actions/workouts-compliance";
+import { garminActivities, garminConnections, planRevisions, plannedSessions, trainingCycleSlots, trainingCycles, workoutSessions } from "@/db/schema";
 import { getActiveCycleForUser } from "@/lib/actions/training-cycles";
 import { registerAthleteProfileTools } from "@/lib/mcp/tools/athlete-profile";
 import { registerCycleTools } from "@/lib/mcp/tools/cycles";
 import { registerPlannedSessionTools } from "@/lib/mcp/tools/planned-sessions";
 import { registerProgramTools } from "@/lib/mcp/tools/programs";
-import { registerWorkoutLibraryTools } from "@/lib/mcp/tools/workouts-compliance";
+import { registerEnduranceAnswerTools } from "@/lib/mcp/tools/workouts-compliance";
 import { restoreRevision } from "@/lib/plan-revisions";
 import { moveSuggestion } from "@/lib/session-answers";
 import { sessionCompliance } from "@/lib/session-compliance";
 import { and, asc, desc, eq, isNull } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createExercise, createProgram, createUser } from "./factories";
+import { createExercise, createProgram, createStepProgram, createUser } from "./factories";
 import { mcpTools } from "./mcp-call";
 import { asUser } from "./setup";
 
 /**
- * Review fixes for structured workouts and planned vs done
+ * Review fixes for structured sessions and planned vs done
  * (docs/plans/workouts-and-compliance.md, section 19). Each test failed on the
- * code before its fix. Clock: Thu 2026-11-05 12:00 UTC; zone UTC.
+ * code before its fix. Structured sessions are programs with steps
+ * (docs/plans/one-program-model.md). Clock: Thu 2026-11-05 12:00 UTC; zone UTC.
  */
 
 vi.mock("@/lib/env", async (importOriginal) => {
@@ -66,7 +66,9 @@ async function cycle(userId: string, slots: Partial<typeof trainingCycleSlots.$i
 const sessionsOf = (cycleId: number) =>
   db.select().from(plannedSessions).where(and(eq(plannedSessions.cycleId, cycleId), isNull(plannedSessions.deletedAt))).orderBy(asc(plannedSessions.date), asc(plannedSessions.position));
 const program = async (exerciseId: number, sets: Record<string, unknown>[] = [{}], userId = me) => (await createProgram(userId, [{ exerciseId, sets }])).program.id;
-const lib = (userId = me) => mcpTools((s, u) => registerWorkoutLibraryTools(s, u), userId);
+const answers = (userId = me) => mcpTools((s, u) => registerEnduranceAnswerTools(s, u), userId);
+/** A program of one run or ride exercise with these steps. */
+const steps = async (workout: { sport: string } & Record<string, unknown>, userId = me) => (await createStepProgram(userId, workout.sport === "bike" ? bikeEx : runEx, workout)).program.id;
 const planned = (userId = me) => mcpTools(registerPlannedSessionTools, userId);
 const cycles = (userId = me) => mcpTools((s, u) => registerCycleTools(s, u), userId);
 const cycleVersion = async (id: number) => (await db.select({ v: trainingCycles.version }).from(trainingCycles).where(eq(trainingCycles.id, id)))[0].v;
@@ -102,70 +104,30 @@ describe("review 1: a run does not clear the day's strength session", () => {
   });
 });
 
-describe("review 2 and 3: the long-run cap and hard sessions see workouts", () => {
-  it("refuses an added 4 h run workout over the cap", async () => {
+describe("review 2 and 3: the long-run cap and hard sessions see programs with steps", () => {
+  it("refuses an added 4 h run over the cap", async () => {
     await withGarminRuns();
     const c = await cycle(me, []);
-    const r = await planned()("manage_planned_session", { operation: "add", cycleId: c, date: "2026-11-07", workout: runWorkout("Very long", 4 * 3600), reason: "Long run" });
+    const r = await planned()("manage_planned_session", { operation: "add", cycleId: c, date: "2026-11-07", programId: await steps(runWorkout("Very long", 4 * 3600)), reason: "Long run" });
     expect(r.isError).toBe(true);
     expect(JSON.parse(r.raw).brokenLimits[0].rule).toBe("long_run_cap");
   });
 
-  it("refuses a slot with a 4 h run library workout over the cap", async () => {
-    await withGarminRuns();
-    const c = await cycle(me, []);
-    const w = (await lib()("manage_workout", { operation: "create", workout: runWorkout("Very long", 4 * 3600), reason: "x" })).data;
-    const r = await cycles()("edit_cycle_slot", { operation: "upsert", trainingCycleId: c, dayOfWeek: 6, workoutId: w.workoutId, reason: "Long run", expectedVersion: await cycleVersion(c) });
-    expect(r.isError).toBe(true);
-    expect(JSON.parse(r.raw).brokenLimits[0].rule).toBe("long_run_cap");
-  });
-
-  it("counts a hard workout slot on a cycle's template week", async () => {
+  it("counts a hard slot with steps on a cycle's template week", async () => {
     const hard = await program(bikeEx, [{ durationSeconds: 300, sessionRole: "work", targetReps: null }]);
     const c = await cycle(me, [{ dayOfWeek: 1, programId: hard }, { dayOfWeek: 3, programId: hard }, { dayOfWeek: 5, programId: hard }], { generate: false });
-    const w = (await lib()("manage_workout", { operation: "create", workout: hardRun, reason: "x" })).data;
-    const r = await cycles()("edit_cycle_slot", { operation: "upsert", trainingCycleId: c, dayOfWeek: 7, workoutId: w.workoutId, reason: "Fourth", expectedVersion: await cycleVersion(c) });
+    const r = await cycles()("edit_cycle_slot", { operation: "upsert", trainingCycleId: c, dayOfWeek: 7, programId: await steps(hardRun), reason: "Fourth", expectedVersion: await cycleVersion(c) });
     expect(r.isError).toBe(true);
     expect(JSON.parse(r.raw).brokenLimits[0].rule).toBe("hard_sessions_per_week");
   });
 
-  it("refuses an assistant's library edit that makes the sessions' run too long, accepts an override; a user's rename is not checked", async () => {
-    await withGarminRuns();
-    const w = (await lib()("manage_workout", { operation: "create", workout: runWorkout("Saturday run", 30 * 60), reason: "x" })).data;
-    await cycle(me, [{ dayOfWeek: 6, workoutId: w.workoutId }]);
-    const r = await lib()("manage_workout", { operation: "update", workoutId: w.workoutId, workout: runWorkout("Saturday run", 4 * 3600), reason: "Longer", expectedVersion: w.version });
-    expect(r.isError).toBe(true);
-    expect(JSON.parse(r.raw).brokenLimits[0].rule).toBe("long_run_cap");
-    const [row] = await db.select().from(workouts).where(eq(workouts.id, w.workoutId));
-    expect((row.workout as { steps: { end: { seconds: number } }[] }).steps[0].end.seconds).toBe(1800);
-    const ok = await lib()("manage_workout", { operation: "update", workoutId: w.workoutId, workout: runWorkout("Saturday run", 4 * 3600), reason: "Longer", expectedVersion: w.version, overrideLimits: ["long_run_cap"], overrideReason: "The athlete did 3 h last week off the watch" });
-    expect(ok.isError, ok.raw).toBe(false);
-    expect((await manageWorkout({ op: "rename", id: w.workoutId, name: "Big day" })).success).toBe(true);
-  });
-});
-
-describe("re-review 1: a library edit checks only cycles whose sessions follow it", () => {
-  it("an unscheduled draft or a completed cycle using the workout does not block the edit", async () => {
-    const hard = await program(bikeEx, [{ durationSeconds: 300, sessionRole: "work", targetReps: null }]);
-    const w = (await lib()("manage_workout", { operation: "create", workout: runWorkout("Sunday run", 1800), reason: "x" })).data;
-    for (const status of ["draft", "completed"] as const) {
-      const [c] = await db.insert(trainingCycles).values({ userId: me, name: status, durationWeeks: 4, status, startDate: status === "completed" ? "2026-09-01" : null }).returning();
-      await db.insert(trainingCycleSlots).values([
-        ...[1, 3, 5].map((d) => ({ trainingCycleId: c.id, dayOfWeek: d, programId: hard })),
-        { trainingCycleId: c.id, dayOfWeek: 7, workoutId: w.workoutId },
-      ]);
-    }
-    const r = await lib()("manage_workout", { operation: "update", workoutId: w.workoutId, workout: hardRun, reason: "Harder", expectedVersion: w.version });
-    expect(r.isError, r.raw).toBe(false);
-    expect(r.data.sessionsRegenerated).toBe(0);
-  });
 });
 
 describe("review 4: a brick does not move a done leg", () => {
   it("refuses to move the first leg when the second is logged", async () => {
     const c = await cycle(me, []);
-    const ride = await planned()("manage_planned_session", { operation: "add", cycleId: c, date: TODAY, workout: { v: 1, sport: "bike", name: "Ride", steps: [{ type: "work", end: { type: "time", seconds: 3600 } }] }, reason: "x" });
-    const run = await planned()("manage_planned_session", { operation: "add", cycleId: c, date: TODAY, workout: runWorkout("Off the bike", 1200), brickParentId: ride.data.session.id, reason: "x" });
+    const ride = await planned()("manage_planned_session", { operation: "add", cycleId: c, date: TODAY, programId: await steps({ v: 1, sport: "bike", name: "Ride", steps: [{ type: "work", end: { type: "time", seconds: 3600 } }] }), reason: "x" });
+    const run = await planned()("manage_planned_session", { operation: "add", cycleId: c, date: TODAY, programId: await steps(runWorkout("Off the bike", 1200)), brickParentId: ride.data.session.id, reason: "x" });
     await logged(me, TODAY, null, runEx, run.data.session.id);
     const r = await planned()("manage_planned_session", { operation: "move", id: ride.data.session.id, date: "2026-11-06", reason: "x", expectedVersion: ride.data.version });
     expect(r.isError).toBe(true);
@@ -175,35 +137,39 @@ describe("review 4: a brick does not move a done leg", () => {
   });
 });
 
-describe("review 7 and 8: restores and the workout slots", () => {
-  it("restoring a deleted library workout brings its sessions back; undoing an edit brings the old copy back", async () => {
-    const w = (await lib()("manage_workout", { operation: "create", workout: runWorkout("Saturday run", 1800), reason: "x" })).data;
-    const c = await cycle(me, [{ dayOfWeek: 6, workoutId: w.workoutId }]);
-    const before = (await sessionsOf(c)).length;
-    const upd = await lib()("manage_workout", { operation: "update", workoutId: w.workoutId, workout: runWorkout("Saturday run", 2400), reason: "Longer", expectedVersion: w.version });
-    const [edit] = await db.select().from(planRevisions).where(and(eq(planRevisions.objectType, "workout"), eq(planRevisions.objectId, w.workoutId))).orderBy(asc(planRevisions.id));
-    expect(await restoreRevision({ userId: me, writer: "user" }, edit.id)).not.toBeNull();
-    const sat = (await sessionsOf(c)).find((r) => r.date === "2026-11-07")!;
-    expect((sat.workout as { steps: { end: { seconds: number } }[] }).steps[0].end.seconds).toBe(1800);
-
-    await lib()("manage_workout", { operation: "delete", workoutId: w.workoutId, reason: "x", expectedVersion: upd.data.version + 1 });
-    expect((await sessionsOf(c)).length).toBe(0);
-    expect((await manageWorkout({ op: "restore", id: w.workoutId })).success).toBe(true);
-    expect((await sessionsOf(c)).length).toBe(before);
-  });
-
-  it("a cycle restore clears a slot's workout that no longer exists", async () => {
-    const w = (await lib()("manage_workout", { operation: "create", workout: runWorkout("Gone", 1800), reason: "x" })).data;
+describe("restores of revisions from before the one program model", () => {
+  it("a cycle restore never brings back a slot's library workout", async () => {
     const lift = await program(liftEx);
     const c = await cycle(me, [{ dayOfWeek: 1, programId: lift }]);
-    await cycles()("edit_cycle_slot", { operation: "upsert", trainingCycleId: c, dayOfWeek: 6, workoutId: w.workoutId, reason: "x", expectedVersion: await cycleVersion(c) });
+    await cycles()("edit_cycle_slot", { operation: "upsert", trainingCycleId: c, dayOfWeek: 6, programId: lift, reason: "x", expectedVersion: await cycleVersion(c) });
     const [rev] = await db.select().from(planRevisions).where(and(eq(planRevisions.objectType, "cycle"), eq(planRevisions.objectId, c))).orderBy(desc(planRevisions.id)).limit(1);
-    await cycles()("edit_cycle_slot", { operation: "remove", cycleId: c, slotId: (await db.select().from(trainingCycleSlots).where(and(eq(trainingCycleSlots.trainingCycleId, c), eq(trainingCycleSlots.dayOfWeek, 6))))[0].id, reason: "x", expectedVersion: await cycleVersion(c) });
-    await db.delete(planRevisions).where(and(eq(planRevisions.objectType, "workout"), eq(planRevisions.objectId, w.workoutId)));
-    await db.delete(workouts).where(eq(workouts.id, w.workoutId)); // purged
+    // An older snapshot: Saturday ran a library workout that is gone for good.
+    const snap = rev.snapshot as { slots: Record<string, unknown>[] };
+    await db
+      .update(planRevisions)
+      .set({ snapshot: { ...snap, slots: snap.slots.map((s) => (s.dayOfWeek === 6 ? { ...s, programId: null, workoutId: 999999 } : s)) } })
+      .where(eq(planRevisions.id, rev.id));
     expect(await restoreRevision({ userId: me, writer: "user" }, rev.id)).not.toBeNull();
     const slots = await db.select().from(trainingCycleSlots).where(eq(trainingCycleSlots.trainingCycleId, c));
-    expect(slots.find((s) => s.dayOfWeek === 6)?.workoutId).toBeNull();
+    expect(slots.find((s) => s.dayOfWeek === 6)).toMatchObject({ programId: null, workoutId: null });
+  });
+
+  it("a session restore never brings back the session's own workout", async () => {
+    const run = await program(runEx, [{ durationSeconds: 1800, targetReps: null, weightKg: null }]);
+    const c = await cycle(me, [{ dayOfWeek: 6, programId: run }]);
+    const sat = (await sessionsOf(c)).find((r) => r.date === "2026-11-07")!;
+    const changed = await planned()("manage_planned_session", { operation: "change", id: sat.id, label: "Long", reason: "x", expectedVersion: sat.version });
+    expect(changed.isError, changed.raw).toBe(false);
+    const [rev] = await db.select().from(planRevisions).where(and(eq(planRevisions.objectType, "planned_session"), eq(planRevisions.objectId, sat.id))).orderBy(desc(planRevisions.id)).limit(1);
+    const snap = rev.snapshot as { session: Record<string, unknown> };
+    await db
+      .update(planRevisions)
+      .set({ snapshot: { ...snap, session: { ...snap.session, label: "Old", workout: runWorkout("Old copy", 1800), workoutId: 999999 } } })
+      .where(eq(planRevisions.id, rev.id));
+    expect(await restoreRevision({ userId: me, writer: "user" }, rev.id)).not.toBeNull();
+    const [row] = await db.select().from(plannedSessions).where(eq(plannedSessions.id, sat.id));
+    expect(row).toMatchObject({ label: "Old", programId: run, workoutId: null });
+    expect(row.workout).toBeNull();
   });
 });
 
@@ -233,7 +199,7 @@ describe("review 14, 15, 16: picks, template bricks and chains", () => {
     const wed = (await sessionsOf(c))[0];
     const [act] = await db.insert(garminActivities).values({ userId: me, garminActivityId: 77, startTimeLocal: new Date("2026-11-04T07:00:00Z"), activityType: "running", data: { duration: 1800 } }).returning();
     const sk = await planned()("manage_planned_session", { operation: "skip", id: wed.id, reason: "x", expectedVersion: wed.version });
-    const r = await lib()("confirm_planned_session", { plannedSessionId: wed.id, outcome: "done", garminActivityId: act.id, reason: "x", expectedVersion: sk.data.version });
+    const r = await answers()("confirm_planned_session", { plannedSessionId: wed.id, outcome: "done", garminActivityId: act.id, reason: "x", expectedVersion: sk.data.version });
     expect(r.isError).toBe(true);
     expect(r.raw).toContain("skipped");
   });
@@ -255,7 +221,7 @@ describe("review 14, 15, 16: picks, template bricks and chains", () => {
   it("refuses a brick of three: a first leg cannot become a second leg", async () => {
     const c = await cycle(me, []);
     const add = async (name: string, brickParentId?: number) =>
-      (await planned()("manage_planned_session", { operation: "add", cycleId: c, date: "2026-11-07", workout: runWorkout(name, 1200), ...(brickParentId && { brickParentId }), reason: "x" })).data;
+      (await planned()("manage_planned_session", { operation: "add", cycleId: c, date: "2026-11-07", programId: await steps(runWorkout(name, 1200)), ...(brickParentId && { brickParentId }), reason: "x" })).data;
     const a = await add("A");
     const b = await add("B");
     const cc = await add("C", b.session.id);
@@ -267,34 +233,35 @@ describe("review 14, 15, 16: picks, template bricks and chains", () => {
 });
 
 describe("review 18: another user's ids", () => {
-  it("are refused for workouts, bricks, picks and sick periods", async () => {
-    const theirW = (await lib(other)("manage_workout", { operation: "create", workout: runWorkout("Theirs", 1800), reason: "x" })).data;
+  it("are refused for programs, bricks, picks and sick periods", async () => {
+    const theirP = await steps(runWorkout("Theirs", 1800), other);
     asUser(other);
     const theirC = await cycle(other, []);
-    const theirS = (await planned(other)("manage_planned_session", { operation: "add", cycleId: theirC, date: "2026-11-07", workout: runWorkout("Theirs", 1800), reason: "x" })).data;
+    const theirS = (await planned(other)("manage_planned_session", { operation: "add", cycleId: theirC, date: "2026-11-07", programId: theirP, reason: "x" })).data;
     const [theirAct] = await db.insert(garminActivities).values({ userId: other, garminActivityId: 88, startTimeLocal: new Date("2026-11-05T07:00:00Z"), activityType: "running", data: { duration: 1800 } }).returning();
-    const theirIll = (await lib(other)("manage_illness", { operation: "add", startedOn: "2026-11-01", endedOn: "2026-11-02", reason: "x" })).data;
+    const theirIll = (await answers(other)("manage_illness", { operation: "add", startedOn: "2026-11-01", endedOn: "2026-11-02", reason: "x" })).data;
     asUser(me, "admin");
     const c = await cycle(me, []);
-    const mine = (await planned()("manage_planned_session", { operation: "add", cycleId: c, date: TODAY, workout: runWorkout("Mine", 1800), reason: "x" })).data;
+    const mine = (await planned()("manage_planned_session", { operation: "add", cycleId: c, date: TODAY, programId: await steps(runWorkout("Mine", 1800)), reason: "x" })).data;
 
-    expect((await lib()("get_workout", { workoutId: theirW.workoutId })).raw).toBe("Error: Workout not found");
-    expect((await planned()("manage_planned_session", { operation: "set_workout", id: mine.session.id, workoutId: theirW.workoutId, reason: "x", expectedVersion: mine.version })).raw).toBe("Error: Workout not found");
+    expect((await planned()("manage_planned_session", { operation: "change", id: mine.session.id, programId: theirP, reason: "x", expectedVersion: mine.version })).raw).toBe("Error: Program not found");
     expect((await planned()("manage_planned_session", { operation: "link_brick", id: mine.session.id, brickParentId: theirS.session.id, reason: "x", expectedVersion: mine.version })).raw).toBe("Error: Brick session not found");
-    expect((await lib()("confirm_planned_session", { plannedSessionId: mine.session.id, outcome: "done", garminActivityId: theirAct.id, reason: "x", expectedVersion: mine.version })).raw).toBe("Error: Activity not found");
-    expect((await lib()("manage_illness", { operation: "delete", illnessId: theirIll.illnessId, reason: "x", expectedVersion: 1 })).raw).toBe("Error: Sick period not found");
-    expect((await lib()("confirm_planned_session", { plannedSessionId: theirS.session.id, outcome: "done", durationSeconds: 1800, reason: "x" })).raw).toBe("Error: Session not found");
+    expect((await answers()("confirm_planned_session", { plannedSessionId: mine.session.id, outcome: "done", garminActivityId: theirAct.id, reason: "x", expectedVersion: mine.version })).raw).toBe("Error: Activity not found");
+    expect((await answers()("manage_illness", { operation: "delete", illnessId: theirIll.illnessId, reason: "x", expectedVersion: 1 })).raw).toBe("Error: Sick period not found");
+    expect((await answers()("confirm_planned_session", { plannedSessionId: theirS.session.id, outcome: "done", durationSeconds: 1800, reason: "x" })).raw).toBe("Error: Session not found");
     const profile = await mcpTools((s, u) => registerAthleteProfileTools(s, u, undefined, { endurance: true }), me)("get_athlete_profile", {});
     expect(profile.data.sickPeriods).toEqual([]);
   });
 });
 
-describe("review 6: list_revisions gates workouts and sick periods", () => {
-  it("refuses them with the switch off", async () => {
-    const w = (await lib()("manage_workout", { operation: "create", workout: runWorkout("x", 1800), reason: "x" })).data;
+describe("review 6: list_revisions gates sick periods", () => {
+  it("refuses them with the switch off; library workouts are no object type any more", async () => {
+    const ill = (await answers()("manage_illness", { operation: "add", startedOn: "2026-11-01", endedOn: "2026-11-02", reason: "x" })).data;
     const { users } = await import("@/db/schema");
     await db.update(users).set({ enduranceEnabled: false }).where(eq(users.id, me));
-    const r = await mcpTools((s, u) => registerProgramTools(s, u), me)("list_revisions", { objectType: "workout", objectId: w.workoutId });
+    const tools = mcpTools((s, u) => registerProgramTools(s, u), me);
+    const r = await tools("list_revisions", { objectType: "illness", objectId: ill.illnessId });
     expect(r.raw).toBe("Error: Endurance features are not on for this account");
+    expect((await tools("list_revisions", { objectType: "workout", objectId: 1 })).isError).toBe(true);
   });
 });

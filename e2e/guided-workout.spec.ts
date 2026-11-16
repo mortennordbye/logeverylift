@@ -1,7 +1,9 @@
-import { eq } from "drizzle-orm";
-import { athleteThresholds, plannedSessions, trainingCycles, users, workoutSessions, workoutStepResults } from "../src/db/schema";
+import { asc, eq } from "drizzle-orm";
+import { athleteThresholds, plannedSessions, trainingCycles, users, workoutSessions, workoutSets } from "../src/db/schema";
+import type { Workout } from "../src/lib/utils/workout-steps";
 import { e2eUser } from "./fixtures/env";
 import { testDb } from "./fixtures/reset";
+import { insertStepProgram } from "./fixtures/step-program";
 import { expect, test } from "./fixtures/test";
 
 /**
@@ -9,7 +11,9 @@ import { expect, test } from "./fixtures/test";
  * endurance user starts today's ride from home, the steps change on their own,
  * pause, resume, skip and lap work, the results save as a logged session
  * linked to the plan, and the week view shows it done. A swim opens the pool
- * view and its send-off clock.
+ * view and its send-off clock. Each session runs a program with steps
+ * (docs/plans/one-program-model.md); e2e/guided-program.spec.ts starts one
+ * from the workout screen instead.
  *
  * The browser runs in a far time zone (UTC+14), unlike the server and the
  * user's setting, so a date or number formatted differently on the server and
@@ -23,7 +27,7 @@ function today(): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-const ride = {
+const ride: Workout = {
   v: 1,
   sport: "bike",
   name: "Quick ride",
@@ -34,7 +38,7 @@ const ride = {
     { type: "cooldown", end: { type: "lap" } },
   ],
 };
-const swim = {
+const swim: Workout = {
   v: 1,
   sport: "swim",
   name: "Pool set",
@@ -45,8 +49,8 @@ const swim = {
   ],
 };
 
-/** The worker's user with the endurance switch, FTP and CSS, and one session today with `workout`. */
-async function setup(parallelIndex: number, workout: unknown) {
+/** The worker's user with the endurance switch, FTP and CSS, and one session today running a program with `workout`'s steps. */
+async function setup(parallelIndex: number, workout: Workout) {
   const db = testDb();
   const user = await db.query.users.findFirst({ where: eq(users.email, e2eUser(parallelIndex).email) });
   const userId = user!.id;
@@ -62,7 +66,8 @@ async function setup(parallelIndex: number, workout: unknown) {
     .insert(trainingCycles)
     .values({ userId, name: "Tri block", durationWeeks: 4, status: "active", startDate: today(), sessionsGeneratedAt: new Date() })
     .returning();
-  const [row] = await db.insert(plannedSessions).values({ userId, cycleId: cycle.id, date: today(), workout }).returning({ id: plannedSessions.id });
+  const programId = await insertStepProgram(db, userId, workout);
+  const [row] = await db.insert(plannedSessions).values({ userId, cycleId: cycle.id, date: today(), programId }).returning({ id: plannedSessions.id });
   return { userId, plannedId: row.id };
 }
 
@@ -131,9 +136,10 @@ test("a guided ride from home: steps change on time, pause, skip, lap, results s
   await expect
     .poll(async () => (await db.select().from(workoutSessions).where(eq(workoutSessions.userId, userId))).map((s) => [s.plannedSessionId, s.isCompleted, s.source]))
     .toEqual([[plannedId, true, "app"]]);
-  const [results] = await db.select().from(workoutStepResults).where(eq(workoutStepResults.userId, userId));
-  expect(results.source).toBe("player");
-  expect((results.steps as { key: string; status: string }[]).map((s) => s.status)).toEqual(["done", "done", "skipped", "done"]);
+  const [session] = await db.select().from(workoutSessions).where(eq(workoutSessions.userId, userId));
+  expect(session.clientKey).not.toBeNull(); // a player save
+  const sets = await db.select().from(workoutSets).where(eq(workoutSets.sessionId, session.id)).orderBy(asc(workoutSets.setNumber));
+  expect(sets.map((s) => s.stepStatus)).toEqual(["done", "done", "skipped", "done"]);
 
   await page.goto("/week");
   await expect(page.getByTestId("load-card")).toBeVisible();

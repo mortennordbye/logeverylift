@@ -3,6 +3,7 @@ import type { Page } from "@playwright/test";
 import { plannedSessions, programs, trainingCycleSlots, trainingCycles, users, workoutSessions } from "../src/db/schema";
 import { e2eUser } from "./fixtures/env";
 import { testDb } from "./fixtures/reset";
+import { insertStepProgram } from "./fixtures/step-program";
 import { expect, test } from "./fixtures/test";
 
 /**
@@ -140,8 +141,8 @@ test("endurance, weekday cycle with a session today and one to confirm", async (
     steps: [{ type: "work", end: { type: "time", seconds: minutes * 60 } }],
   });
   await db.insert(plannedSessions).values([
-    { userId, cycleId: cycle.id, date: dayStr(0), label: "Tempo run", workout: run("Tempo run", 40) },
-    { userId, cycleId: cycle.id, date: dayStr(-1), label: "Easy run", workout: run("Easy run", 30) },
+    { userId, cycleId: cycle.id, date: dayStr(0), label: "Tempo run", programId: await insertStepProgram(db, userId, run("Tempo run", 40)) },
+    { userId, cycleId: cycle.id, date: dayStr(-1), label: "Easy run", programId: await insertStepProgram(db, userId, run("Easy run", 30)) },
   ]);
 
   await page.goto("/");

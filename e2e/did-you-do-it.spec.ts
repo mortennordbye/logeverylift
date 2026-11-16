@@ -3,6 +3,7 @@ import { illnessPeriods, plannedSessions, trainingCycles, users, workoutSessions
 import { RETURN_RULE } from "../src/lib/utils/session-compliance";
 import { e2eUser } from "./fixtures/env";
 import { testDb } from "./fixtures/reset";
+import { insertStepProgram } from "./fixtures/step-program";
 import { expect, test } from "./fixtures/test";
 
 /**
@@ -32,7 +33,7 @@ const runWorkout = (name: string, minutes: number) => ({
 
 type Row = { date: string; name: string; minutes: number; priority?: "key" | "support"; status?: "planned" | "missed" };
 
-/** The user with no history and one weekday cycle holding only `rows`, run sessions with a workout. */
+/** The user with no history and one weekday cycle holding only `rows`, run sessions of a program with steps. */
 async function enduranceUser(parallelIndex: number, rows: Row[], endurance = true) {
   const db = testDb();
   const user = await db.query.users.findFirst({ where: eq(users.email, e2eUser(parallelIndex).email) });
@@ -56,7 +57,7 @@ async function enduranceUser(parallelIndex: number, rows: Row[], endurance = tru
         cycleId: cycle.id,
         date: r.date,
         label: r.name,
-        workout: runWorkout(r.name, r.minutes),
+        programId: await insertStepProgram(db, userId, runWorkout(r.name, r.minutes)),
         priority: r.priority ?? null,
         status: r.status ?? "planned",
         statusOn: r.status === "missed" ? dayStr(0) : null,

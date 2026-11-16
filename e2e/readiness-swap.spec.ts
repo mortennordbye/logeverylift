@@ -14,13 +14,15 @@ import {
 } from "../src/db/schema";
 import { e2eUser } from "./fixtures/env";
 import { testDb } from "./fixtures/reset";
+import { insertStepProgram } from "./fixtures/step-program";
 import { expect, test } from "./fixtures/test";
 
 /**
  * The readiness swap and the heavy-legs line
  * (docs/plans/limits-strength-readiness.md, 4 and 5). On a low-readiness
  * morning (Garmin, admins only) home offers to make today's hard session
- * easy; the tap writes the easy workout and an `apply` revision. A lifter
+ * easy; the tap puts a one-day program of the easy steps on the day and
+ * writes an `apply` revision. A lifter
  * sees no card. The calendar marks heavy legs the day before a key run.
  * The browser and the user are in Auckland, so a day label that the server
  * and the browser worked out apart would differ from UTC.
@@ -95,7 +97,8 @@ test("a low-readiness morning offers to make today's hard ride easy; the tap wri
   await db.update(users).set({ role: "admin", enduranceEnabled: true, timeZone: ZONE }).where(eq(users.id, userId));
   // Better Auth caches the session, role included, in a cookie; drop it so the new role is read.
   await context.clearCookies({ name: /session_data/ });
-  const [rideId] = await cycleWith(userId, [{ date: dayStr(0), label: "Threshold ride", workout: thresholdRide }]);
+  const ride = await insertStepProgram(db, userId, thresholdRide);
+  const [rideId] = await cycleWith(userId, [{ date: dayStr(0), label: "Threshold ride", programId: ride }]);
   await lowReadiness(userId);
 
   await page.goto("/");
@@ -108,10 +111,10 @@ test("a low-readiness morning offers to make today's hard ride easy; the tap wri
   await expect(card).toBeHidden();
   await expect
     .poll(async () => {
-      const [row] = await db.select().from(plannedSessions).where(eq(plannedSessions.id, rideId));
-      return (row.workout as { name?: string } | null)?.name;
+      const [row] = await db.select({ name: programs.name, forPlannedSessionId: programs.forPlannedSessionId }).from(plannedSessions).innerJoin(programs, eq(programs.id, plannedSessions.programId)).where(eq(plannedSessions.id, rideId));
+      return row;
     })
-    .toBe("Easy bike (readiness)");
+    .toEqual({ name: "Easy bike (readiness)", forPlannedSessionId: rideId });
   const [rev] = await db
     .select()
     .from(planRevisions)
@@ -123,7 +126,7 @@ test("a lifter with the same readings sees no card", async ({ page, context }, t
   const userId = await me(testInfo.parallelIndex);
   await testDb().update(users).set({ role: "admin", enduranceEnabled: false, timeZone: ZONE }).where(eq(users.id, userId));
   await context.clearCookies({ name: /session_data/ });
-  await cycleWith(userId, [{ date: dayStr(0), label: "Threshold ride", workout: thresholdRide }]);
+  await cycleWith(userId, [{ date: dayStr(0), label: "Threshold ride", programId: await insertStepProgram(testDb(), userId, thresholdRide) }]);
   await lowReadiness(userId);
   await page.goto("/");
   await expect(page.getByText("Tri block")).toBeVisible();
@@ -147,7 +150,7 @@ test("the calendar marks heavy legs the day before a key run", async ({ page }, 
   const keyDay = dayStr(first + 1);
   await cycleWith(userId, [
     { date: liftDay, programId: legs.id },
-    { date: keyDay, label: "Long run", priority: "key", workout: { v: 1, sport: "run", name: "Long run", steps: [{ type: "work", end: { type: "time", seconds: 6000 } }] } },
+    { date: keyDay, label: "Long run", priority: "key", programId: await insertStepProgram(db, userId, { v: 1, sport: "run", name: "Long run", steps: [{ type: "work", end: { type: "time", seconds: 6000 } }] }) },
   ]);
 
   await page.goto("/more/calendar");
