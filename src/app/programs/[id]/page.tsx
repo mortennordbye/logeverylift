@@ -3,6 +3,7 @@ import { getFriends } from "@/lib/actions/friends";
 import { getProgramWithExercises } from "@/lib/actions/programs";
 import { syncActiveCyclePeriodization } from "@/lib/actions/training-cycles";
 import { getLastCompletedSession } from "@/lib/actions/workout-sessions";
+import { programStepsView } from "@/lib/program-steps-view";
 import { requireSession } from "@/lib/utils/session";
 import { notFound } from "next/navigation";
 
@@ -17,13 +18,14 @@ export default async function ProgramDetailPage({ params, searchParams }: Props)
   const programId = Number(id);
   if (isNaN(programId)) notFound();
 
-  await requireSession();
+  const { user } = await requireSession();
   // Shows a periodized set's target, so this week's sync runs first (PZ-29).
   await syncActiveCyclePeriodization();
-  const [programResult, lastSessionResult, friendsResult] = await Promise.all([
+  const [programResult, lastSessionResult, friendsResult, steps] = await Promise.all([
     getProgramWithExercises(programId),
     getLastCompletedSession(programId),
     getFriends(),
+    programStepsView(user.id, programId),
   ]);
   if (!programResult.success) notFound();
 
@@ -35,6 +37,8 @@ export default async function ProgramDetailPage({ params, searchParams }: Props)
     isRunning: pe.exercise.name === "Running" || pe.exercise.discipline != null,
     discipline: pe.exercise.discipline,
     sets: pe.programSets,
+    // Structured endurance steps in one line (docs/plans/one-program-model.md).
+    stepSummary: steps?.summaries.get(pe.id) ?? null,
   }));
 
   return (

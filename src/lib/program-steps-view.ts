@@ -15,7 +15,7 @@ import { programWorkouts } from "@/lib/program-workouts";
 import { thresholdValues } from "@/lib/session-compliance";
 import { getUserSettings, userToday } from "@/lib/user-settings";
 import { toDateStr } from "@/lib/utils/cycle-position";
-import { formatTime } from "@/lib/utils/format";
+import { formatSessionLength, loadText } from "@/lib/utils/format";
 import { workoutPlannedLoad } from "@/lib/utils/step-results";
 import { describeWorkout, estimateWorkout, resolveTarget, type WorkoutTarget } from "@/lib/utils/workout-steps";
 import { and, asc, eq, isNotNull } from "drizzle-orm";
@@ -32,12 +32,13 @@ export async function programStepsView(userId: string, programId: number): Promi
   const est = all.map((p) => estimateWorkout(p.workout, anchors));
   const seconds = est.reduce((a, e) => a + e.durationSeconds, 0);
   const meters = est.reduce((a, e) => a + e.distanceMeters, 0);
-  const load = all.reduce((a, p) => a + workoutPlannedLoad(p.workout, anchors).load, 0);
+  const loads = all.map((p) => workoutPlannedLoad(p.workout, anchors));
+  const load = { load: loads.reduce((a, l) => a + l.load, 0), partial: loads.some((l) => l.partial) };
   const sport = all[0].sport;
   const totals = [
-    seconds > 0 ? `${est.every((e) => e.durationComplete) ? "" : "at least "}${formatTime(seconds)}` : null,
+    seconds > 0 ? `${est.every((e) => e.durationComplete) ? "" : "at least "}${formatSessionLength(seconds)}` : null,
     meters > 0 ? `${est.every((e) => e.distanceComplete) ? "" : "at least "}${distanceLabel(meters, sport, units)}` : null,
-    load > 0 ? `load about ${Math.round(load)}` : null,
+    load.load > 0 ? loadText(load) : null,
   ]
     .filter(Boolean)
     .join(" · ");

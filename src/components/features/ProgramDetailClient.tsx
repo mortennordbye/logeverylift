@@ -43,6 +43,8 @@ type ProgramExItem = {
   isRunning?: boolean;
   discipline?: Discipline | null;
   sets: ProgramSet[];
+  /** A structured endurance exercise's steps in one line (docs/plans/one-program-model.md). */
+  stepSummary?: string | null;
 };
 
 type LastSession = {
@@ -92,7 +94,9 @@ function SortableExerciseRow({
   } = useSortable({ id: exercise.id, disabled: !isEditing });
   const units = useUnits();
 
-  const summary = exercise.isRunning
+  const summary = exercise.stepSummary
+    ? exercise.stepSummary
+    : exercise.isRunning
     ? buildRunSetSummary(exercise.sets, exercise.discipline, units)
     : buildSetSummary(exercise.sets, exercise.isTimed);
 

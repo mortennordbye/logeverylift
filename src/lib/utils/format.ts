@@ -25,6 +25,33 @@ export function formatTime(totalSeconds: number): string {
   return `${m}:${s}`;
 }
 
+/** A session's length: "24:20" under an hour, "1 h 20 min" from an hour on (80:00 reads as a clock). */
+export function formatSessionLength(totalSeconds: number): string {
+  if (totalSeconds < 3600) return formatTime(totalSeconds);
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.round((totalSeconds % 3600) / 60);
+  return m ? `${h} h ${m} min` : `${h} h`;
+}
+
+/**
+ * Planned load as words: "load about 31", or "load at least 5" when a step
+ * had no time to count (a distance with no pace target, a lap step).
+ */
+export function loadText(l: { load: number; partial: boolean }): string {
+  return `load ${l.partial ? "at least" : "about"} ${Math.round(l.load)}`;
+}
+
+/** What a step was planned at, for its results row: its time, else its distance, else the lap button. */
+export function plannedLine(p: { plannedSeconds: number | null; plannedMeters: number | null }, unit: "m" | "yd" | "km" | "mi"): string {
+  if (p.plannedSeconds !== null) return `planned ${formatTime(p.plannedSeconds)}`;
+  if (p.plannedMeters !== null) {
+    const per = { m: 1, yd: 0.9144, km: 1000, mi: 1609.344 }[unit];
+    const v = p.plannedMeters / per;
+    return `planned ${unit === "m" || unit === "yd" ? Math.round(v) : +v.toFixed(2)} ${unit}`;
+  }
+  return "planned to lap";
+}
+
 export function formatTimeOfDay(d: Date): string {
   return dateLabel(d, "HH:mm");
 }

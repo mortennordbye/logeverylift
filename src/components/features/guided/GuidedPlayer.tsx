@@ -49,6 +49,10 @@ export function GuidedPlayer({ session, initialSoundHint = true }: { session: Pl
     const first = session.steps[0];
     return (
       <div className="flex-1 flex flex-col gap-4 px-6 py-6" data-testid="player-ready">
+        {/* The bottom bar is hidden on the player, so the way back is here. */}
+        <a href={`/planned/${session.plannedSessionId}`} className="-ml-1 min-h-11 self-start inline-flex items-center text-base text-primary active:opacity-70">
+          Back
+        </a>
         <h1 className="text-2xl font-bold">{session.name}</h1>
         <p className="text-sm text-muted-foreground">
           {session.steps.length} steps. First: {first?.text}

@@ -19,7 +19,7 @@ export default async function ResultsPage({ params, searchParams }: { params: Pr
     ? { steps: v.results.rows.flatMap((r) => (r.result ? [r.result] : [])), sessionRpe: v.results.sessionRpe, distanceMeters: v.results.distanceMeters }
     : null;
   return (
-    <div className="h-[100dvh] bg-background flex flex-col">
+    <div className="h-[100dvh] pb-nav-safe bg-background flex flex-col">
       <div className="flex items-center px-4 pt-6 pb-2 shrink-0">
         <BackLink fallback={{ href: `/planned/${id}`, label: "Session" }} />
       </div>

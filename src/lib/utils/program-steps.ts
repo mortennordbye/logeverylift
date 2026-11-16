@@ -15,12 +15,17 @@
  */
 
 import type { StepKind } from "@/db/schema/programs";
+import type { ProgramWorkout } from "@/lib/program-workouts";
+import { plannedRows, type PlannedRow } from "@/lib/utils/step-results";
+import { DEFAULT_UNITS, type Units } from "@/lib/utils/units";
+import { flattenWorkout, type PlayStep } from "@/lib/utils/workout-player";
 import {
   parseWorkout,
   type Workout,
   type WorkoutNode,
   type WorkoutSport,
   type WorkoutStep,
+  type ThresholdValues,
   type WorkoutTarget,
 } from "@/lib/utils/workout-steps";
 
@@ -360,3 +365,22 @@ export function plainSetsToWorkout(sets: PlainEnduranceSet[], meta: { sport: Wor
     });
   return { v: 1, sport: meta.sport, name: meta.name.trim().slice(0, 80) || "Session", ...(meta.poolLengthM != null && { poolLengthM: meta.poolLengthM }), steps: steps.length ? steps : [{ type: "work", end: { type: "lap" } }] };
 }
+
+/** Each structured exercise's play steps and planned rows, keys prefixed when there are several (one guided run, docs/plans/one-program-model.md). */
+export type ProgramPlay = { pw: ProgramWorkout; play: PlayStep[]; rows: PlannedRow[] };
+
+/** Each structured exercise's play steps and planned rows, keys prefixed when there are several. */
+const SPORT_WORD = { swim: "Swim", bike: "Ride", run: "Run" } as const;
+
+export function programPlay(all: ProgramWorkout[], anchors: ThresholdValues, units: Units = DEFAULT_UNITS): ProgramPlay[] {
+  const multi = all.length > 1;
+  const key = (e: number, k: string) => (multi ? `e${e + 1}:${k}` : k);
+  // With more than one sport in the session (a brick), each step says which leg it is.
+  const sports = new Set(all.map((p) => p.sport)).size > 1;
+  return all.map((pw, e) => ({
+    pw,
+    play: flattenWorkout(pw.workout).map((p) => ({ ...p, key: key(e, p.key) })),
+    rows: plannedRows(pw.workout, anchors, units).map((r) => ({ ...r, key: key(e, r.key), ...(sports && { text: `${SPORT_WORD[pw.sport]} · ${r.text}` }) })),
+  }));
+}
+

@@ -8,8 +8,9 @@
 
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { BackLink } from "@/components/ui/BackLink";
-import { PlanSheetPanel, SHEET_CANCEL } from "@/components/features/PlanSheetPanel";
+import { PlanSheetPanel } from "@/components/features/PlanSheetPanel";
 import { saveExerciseSteps } from "@/lib/actions/program-steps";
+import { formatSessionLength, loadText } from "@/lib/utils/format";
 import { callAction } from "@/lib/utils/stale-bundle";
 import { workoutPlannedLoad } from "@/lib/utils/step-results";
 import type { Units } from "@/lib/utils/units";
@@ -167,11 +168,11 @@ export function StepsEditor({
   const totals = useMemo(() => {
     if (!check.ok) return null;
     const est = estimateWorkout(check.workout, thresholds);
-    const load = workoutPlannedLoad(check.workout, thresholds).load;
+    const load = workoutPlannedLoad(check.workout, thresholds);
     const parts: string[] = [];
-    if (est.durationSeconds > 0) parts.push(`${est.durationComplete ? "" : "at least "}${minutesText(est.durationSeconds)}`);
+    if (est.durationSeconds > 0) parts.push(`${est.durationComplete ? "" : "at least "}${formatSessionLength(est.durationSeconds)}`);
     if (est.distanceMeters > 0) parts.push(`${est.distanceComplete ? "" : "at least "}${distanceText(est.distanceMeters, sport, units)}`);
-    if (load > 0) parts.push(`load about ${Math.round(load)}`);
+    if (load.load > 0) parts.push(loadText(load));
     return parts.join(" · ");
   }, [check, thresholds, sport, units]);
 
@@ -200,7 +201,9 @@ export function StepsEditor({
   const addBlock = () => {
     const work: WorkoutStep = sport === "swim" ? { type: "work", end: { type: "distance", meters: 100 } } : { type: "work", end: { type: "time", seconds: 180 } };
     const easy: WorkoutStep = sport === "swim" ? { type: "rest", end: { type: "time", seconds: 15 } } : { type: "recovery", end: { type: "time", seconds: 120 } };
-    change({ ...workout, steps: [...workout.steps, { type: "repeat", count: 4, steps: [work, easy] }] });
+    // Before a closing cool-down, where a main set goes.
+    const at = workout.steps.at(-1)?.type === "cooldown" ? workout.steps.length - 1 : workout.steps.length;
+    change({ ...workout, steps: [...workout.steps.slice(0, at), { type: "repeat", count: 4, steps: [work, easy] }, ...workout.steps.slice(at)] });
   };
 
   const editingStep = editing ? stepAt(workout, editing) : null;
@@ -298,7 +301,7 @@ export function StepsEditor({
           type="button"
           onClick={save}
           disabled={!dirty || saving}
-          className="min-h-12 rounded-2xl bg-primary px-4 py-3 text-base font-semibold text-primary-foreground active:opacity-80 disabled:opacity-40"
+          className={`min-h-12 rounded-2xl px-4 py-3 text-base font-semibold active:opacity-80 ${dirty ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}
         >
           {saving ? "Saving" : dirty ? "Save steps" : "Saved"}
         </button>
@@ -328,16 +331,10 @@ export function StepsEditor({
   );
 }
 
-function minutesText(seconds: number): string {
-  const h = Math.floor(seconds / 3600);
-  const m = Math.round((seconds % 3600) / 60);
-  return h > 0 ? `${h} h ${m} min` : `${m} min`;
-}
-
 function distanceText(meters: number, sport: Sport, units: Units): string {
   if (sport === "swim") return units.swim === "yd" ? `${Math.round(meters / 0.9144)} yd` : `${Math.round(meters)} m`;
   if (units.distance === "mi") return `${(meters / 1609.344).toFixed(1)} mi`;
-  return meters < 1000 ? `${Math.round(meters)} m` : `${(meters / 1000).toFixed(1)} km`;
+  return meters < 1000 ? `${Math.round(meters)} m` : `${+(meters / 1000).toFixed(2)} km`;
 }
 
 function endText(step: WorkoutStep, sport: Sport, units: Units): string {
@@ -392,7 +389,7 @@ function BlockCard({
     <div className="rounded-2xl border border-border p-2 flex flex-col gap-1.5" data-testid="step-block">
       <div className="flex items-center justify-between gap-2 px-1">
         <span className="text-base font-semibold tabular-nums" data-testid="block-rounds">
-          {block.count} ×{sendOff ? <span className="text-sm font-normal text-muted-foreground">{` on ${Math.floor(sendOff / 60)}.${String(sendOff % 60).padStart(2, "0")}`}</span> : null}
+          {block.count} ×{sendOff ? <span className="text-sm font-normal text-muted-foreground">{` on ${Math.floor(sendOff / 60)}:${String(sendOff % 60).padStart(2, "0")}`}</span> : null}
         </span>
         <span className="flex items-center gap-1">
           <button type="button" aria-label="One round less" disabled={block.count <= 2} onClick={() => onRounds(block.count - 1)} className="h-11 w-11 rounded-full bg-muted flex items-center justify-center disabled:opacity-30 active:opacity-70">
@@ -419,7 +416,7 @@ function BlockCard({
 }
 
 const chip = (on: boolean) => `min-h-11 rounded-full px-3.5 text-sm font-medium active:opacity-70 ${on ? "bg-primary text-primary-foreground" : "bg-muted"}`;
-const input = "h-11 w-full rounded-xl bg-muted px-3 text-base tabular-nums";
+const input = "h-11 w-full rounded-xl border border-border bg-background px-3 text-base text-foreground tabular-nums";
 
 function StepSheet({
   step,
@@ -460,7 +457,7 @@ function StepSheet({
           <button type="button" onClick={() => onDone(s)} disabled={!!problem} className="min-h-12 rounded-2xl bg-primary px-4 py-3 text-base font-semibold text-primary-foreground active:opacity-80 disabled:opacity-40">
             Done
           </button>
-          <button type="button" onClick={onDelete} className={`${SHEET_CANCEL} text-destructive`}>
+          <button type="button" onClick={onDelete} className="min-h-11 text-[15px] font-medium text-destructive active:opacity-70">
             Delete step
           </button>
         </>
@@ -529,7 +526,7 @@ function StepSheet({
 
       {sport !== "swim" && (
         <section className="flex flex-col gap-2">
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Cadence in rpm</h3>
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{sport === "run" ? "Cadence in steps per minute" : "Cadence in rpm"}</h3>
           <div className="grid grid-cols-2 gap-2">
             <input aria-label="Cadence from" inputMode="numeric" placeholder="From" className={input} value={s.cadence?.low ?? ""} onChange={(ev) => set({ cadence: ev.target.value ? { low: Number(ev.target.value) || 0, high: s.cadence?.high ?? Number(ev.target.value) } : undefined })} />
             <input aria-label="Cadence to" inputMode="numeric" placeholder="To" className={input} value={s.cadence?.high ?? ""} onChange={(ev) => set({ cadence: s.cadence || ev.target.value ? { low: s.cadence?.low ?? Number(ev.target.value), high: Number(ev.target.value) || 0 } : undefined })} />

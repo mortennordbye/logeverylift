@@ -6,7 +6,8 @@
  *                           run intervals (today), a swim with send-offs
  *                           (tomorrow), a bike with power and an HR cap, and a
  *                           brick (ride then run, one program). Weekday cycle
- *                           from this Monday.
+ *                           from this Monday. Also a run with plain sets and
+ *                           a long name, not in the cycle.
  *   steps-lift@demo.local   strength only: the same screens before and after,
  *                           to check nothing changed for a lifter.
  *
@@ -195,6 +196,17 @@ async function main() {
     { exercise: "Bike", workout: BRICK_BIKE },
     { exercise: "Run", workout: BRICK_RUN },
   ]);
+  // Plain sets, as programs made before steps hold them, with a long name for 320 px.
+  await rev.planWrite(triCtx, async (w) => {
+    const [p] = await w.tx.insert(s.programs).values({ userId: tri, name: "Long Sunday run along the river and back again" }).returning({ id: s.programs.id });
+    w.create({ type: "program", id: p.id });
+    const [pe] = await w.tx.insert(s.programExercises).values({ programId: p.id, exerciseId: await sportExercise("Run"), orderIndex: 0, progressionAdvance: "manual" }).returning({ id: s.programExercises.id });
+    await w.tx.insert(s.programSets).values([
+      { programExerciseId: pe.id, setNumber: 1, distanceMeters: 3000, targetHeartRateZone: 1, restTimeSeconds: 0 },
+      { programExerciseId: pe.id, setNumber: 2, distanceMeters: 14000, targetHeartRateZone: 2, restTimeSeconds: 0 },
+      { programExerciseId: pe.id, setNumber: 3, durationSeconds: 600, targetHeartRateZone: 1, restTimeSeconds: 0 },
+    ]);
+  });
   const dow = (d: string) => dowOf(d);
   await weekdayCycle(
     triCtx,

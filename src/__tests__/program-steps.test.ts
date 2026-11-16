@@ -194,3 +194,15 @@ describe("plainSetsToWorkout", () => {
     expect(parseWorkout(w).ok).toBe(true);
   });
 });
+
+describe("programPlay (one-program-model journey review)", () => {
+  it("names the leg of each step in a brick, and keys steps by exercise", async () => {
+    const { programPlay } = await import("@/lib/utils/program-steps");
+    const ride: Workout = { v: 1, sport: "bike", name: "B", steps: [{ type: "work", end: { type: "time", seconds: 3600 } }] };
+    const run: Workout = { v: 1, sport: "run", name: "B", steps: [{ type: "work", end: { type: "time", seconds: 1200 } }] };
+    const plays = programPlay([{ programExerciseId: 1, sport: "bike", workout: ride }, { programExerciseId: 2, sport: "run", workout: run }], {});
+    expect(plays.flatMap((p) => p.rows.map((r) => [r.key, r.text]))).toEqual([["e1:n1", "Ride · 1 h"], ["e2:n1", "Run · 20 min"]]);
+    const single = programPlay([{ programExerciseId: 1, sport: "run", workout: run }], {});
+    expect(single[0].rows[0]).toMatchObject({ key: "n1", text: "20 min" });
+  });
+});

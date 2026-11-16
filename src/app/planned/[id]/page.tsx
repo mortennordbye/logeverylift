@@ -2,7 +2,7 @@ import { SavedRunLink } from "@/components/features/guided/SavedRunLink";
 import { STEP_WORD } from "@/components/features/guided/types";
 import { enduranceEnabledFor } from "@/lib/endurance";
 import { distanceLabel, plannedSessionView } from "@/lib/planned-view";
-import { formatTime } from "@/lib/utils/format";
+import { formatSessionLength } from "@/lib/utils/format";
 import { shortDay } from "@/lib/utils/seasons";
 import { THRESHOLD_LABEL } from "@/lib/utils/thresholds";
 import { requireSession } from "@/lib/utils/session";
@@ -44,7 +44,7 @@ export default async function PlannedSessionPage({ params }: { params: Promise<{
           {workout.name}
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
-          {estimate.durationSeconds > 0 ? `${estimate.durationComplete ? "" : "at least "}${formatTime(estimate.durationSeconds)}` : "time open"}
+          {estimate.durationSeconds > 0 ? `${estimate.durationComplete ? "" : "at least "}${formatSessionLength(estimate.durationSeconds)}` : "time open"}
           {estimate.distanceMeters > 0 ? ` · ${estimate.distanceComplete ? "" : "at least "}${distanceLabel(estimate.distanceMeters, workout.sport, units)}` : ""}
           {` · load about ${Math.round(v.plannedLoad.load)}${v.plannedLoad.partial ? " (estimate)" : ""}`}
         </p>

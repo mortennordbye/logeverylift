@@ -28,26 +28,14 @@ import { appSessionLoads } from "@/lib/training-load";
 import { getUserSettings, userToday } from "@/lib/user-settings";
 import { toDateStr } from "@/lib/utils/cycle-position";
 import type { PlannedStepSnapshot } from "@/lib/utils/program-steps";
+import { programPlay, type ProgramPlay } from "@/lib/utils/program-steps";
 import { compareStep, plannedRows, resultTotals, stepResultsSchema, workoutPlannedLoad, type PlannedRow, type StepResult } from "@/lib/utils/step-results";
-import { DEFAULT_UNITS, type Units } from "@/lib/utils/units";
 import { localDateStr } from "@/lib/utils/user-date";
-import { flattenWorkout, type PlayStep } from "@/lib/utils/workout-player";
 import type { ThresholdValues, WorkoutStep } from "@/lib/utils/workout-steps";
 import { rebuildPRsFrom } from "@/lib/workout-records";
 import { and, asc, desc, eq, inArray, isNotNull, or } from "drizzle-orm";
 
-export type ProgramPlay = { pw: ProgramWorkout; play: PlayStep[]; rows: PlannedRow[] };
-
-/** Each structured exercise's play steps and planned rows, keys prefixed when there are several. */
-export function programPlay(all: ProgramWorkout[], anchors: ThresholdValues, units: Units = DEFAULT_UNITS): ProgramPlay[] {
-  const multi = all.length > 1;
-  const key = (e: number, k: string) => (multi ? `e${e + 1}:${k}` : k);
-  return all.map((pw, e) => ({
-    pw,
-    play: flattenWorkout(pw.workout).map((p) => ({ ...p, key: key(e, p.key) })),
-    rows: plannedRows(pw.workout, anchors, units).map((r) => ({ ...r, key: key(e, r.key) })),
-  }));
-}
+export { programPlay, type ProgramPlay } from "@/lib/utils/program-steps";
 
 /** The planned session's structured exercises, or null when it runs none (or has a workout of its own). */
 export async function plannedProgramWorkouts(
