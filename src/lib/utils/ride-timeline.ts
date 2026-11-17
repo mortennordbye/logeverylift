@@ -31,6 +31,8 @@ export const EXTEND_STEP_S = 60;
 export const EXTEND_MAX_S = 3600;
 /** A ride still running this long after its planned end ends on its own (4.3). */
 export const AUTO_END_AFTER_MS = 2 * 60 * 60 * 1000;
+/** sendRideEvent's answer when another device sent an event first: refetch the ride and send again. */
+export const RIDE_CONFLICT = "The ride changed on another device";
 
 // ── The frozen plan ──────────────────────────────────────────────────────────
 
