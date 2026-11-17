@@ -52,6 +52,8 @@ import {
   fuelProducts,
   sweatTests,
   racePlans,
+  rideEvents,
+  rides,
 } from "@/db/schema";
 import { eq, getTableColumns, inArray, lt, or, sql } from "drizzle-orm";
 import type { PgTable } from "drizzle-orm/pg-core";
@@ -86,6 +88,8 @@ export async function collectUserData(userId: string) {
 
   const sessionRows = await db.select().from(workoutSessions).where(eq(workoutSessions.userId, userId));
   const sessionIds = sessionRows.map((s) => s.id);
+  const rideRows = await db.select().from(rides).where(eq(rides.userId, userId));
+  const rideIds = rideRows.map((r) => r.id);
 
   // plan-read: includes deleted (the export holds all of the user's data)
   const cycleRows = await db.select().from(trainingCycles).where(eq(trainingCycles.userId, userId));
@@ -116,6 +120,9 @@ export async function collectUserData(userId: string) {
     workout_sets: sessionIds.length
       ? await db.select().from(workoutSets).where(inArray(workoutSets.sessionId, sessionIds))
       : [],
+    // Bike rides in ride mode and what the rider did in them (docs/plans/bike-ride-logger.md, 4.3).
+    rides: rideRows,
+    ride_events: rideIds.length ? await db.select().from(rideEvents).where(inArray(rideEvents.rideId, rideIds)) : [],
     exercise_prs: await db.select().from(exercisePrs).where(eq(exercisePrs.userId, userId)),
     exercises: await db.select().from(exercises).where(eq(exercises.userId, userId)),
     exercise_notes: await db.select().from(exerciseNotes).where(eq(exerciseNotes.userId, userId)),

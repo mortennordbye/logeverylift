@@ -39,14 +39,18 @@ export default function PrivacyPage() {
         </li>
         <li>
           <strong>Structured sessions and planned versus done, if endurance features are on:</strong> the steps of
-          your swim, bike and run programs (repeats, targets as a share of your thresholds, cadence, stroke and
+          your swim, bike and run programs (repeats, targets as a share of your thresholds, ramps, cadence, stroke and
           equipment), and for each dated session its priority, whether it is part of a brick, whether you did it or
           missed it, an optional reason for a miss in your own words, and the Garmin activity you or your assistant
           picked for it. A session you change for one day only gets its own copy of the program. From this the app works
           out how much of each session you did and how many weeks you followed your plan. Each change is kept as a
           version you can restore. After a session, the result of each step is kept with your logged sets (its status,
           time, distance, extra time, an average you type in, effort, a note, and a copy of the step as planned with the
-          thresholds used), from the guided player or typed in by you or your assistant. From your logged sessions and thresholds
+          thresholds used), from the guided player or typed in by you or your assistant. For a bike ride the app also keeps
+          whether you rode indoors or outdoors, whether you ended before the last step, and per step your average power,
+          maximum heart rate, average cadence, average speed, climbing, any change you made to the target, and where each
+          number came from. In ride mode it keeps the ride&apos;s plan as it was at the start and each tap you make (start,
+          pause, skip, an extra minute, a target change, lap, end) with its time. From your logged sessions and thresholds
           the app also works out a training load and your fitness, fatigue and form; these are calculated when shown,
           not stored.
         </li>
