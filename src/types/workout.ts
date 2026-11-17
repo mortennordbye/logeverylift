@@ -103,10 +103,9 @@ export type SessionDetail = WorkoutSession & {
 export type TrainingCycle = typeof trainingCycles.$inferSelect;
 /**
  * A template slot. The endurance fields (docs/plans/workouts-and-compliance.md, 4.3)
- * are optional here: screens that build a slot by hand need not know them. The old
- * library workout (workoutId) is left out: slots run programs only.
+ * are optional here: screens that build a slot by hand need not know them.
  */
-export type TrainingCycleSlot = Omit<typeof trainingCycleSlots.$inferSelect, "workoutId" | "priority" | "brickWithNext"> &
+export type TrainingCycleSlot = Omit<typeof trainingCycleSlots.$inferSelect, "priority" | "brickWithNext"> &
   Partial<Pick<typeof trainingCycleSlots.$inferSelect, "priority" | "brickWithNext">>;
 
 export type TrainingCycleSlotWithProgram = TrainingCycleSlot & {

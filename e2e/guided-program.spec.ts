@@ -79,6 +79,10 @@ test("a program with steps: the workout screen starts the player, and each step 
   const entry = page.getByTestId("guided-entry").first();
   // The cool-down ends on the lap button, so the load counts what it can.
   await expect(entry).toContainText("load at least");
+  // The workout screen opens its session in the background. Wait for it before the
+  // fake clock goes in: a session opened after it would start on 1 January 1970, the
+  // save would not find it as today's, and the day would hold two sessions.
+  await expect.poll(async () => (await testDb().select().from(workoutSessions).where(eq(workoutSessions.userId, userId))).length).toBe(1);
   await page.clock.install();
   await entry.getByRole("link", { name: "Start guided" }).click();
   await expect(page).toHaveURL(new RegExp(`/planned/${plannedId}/play`));

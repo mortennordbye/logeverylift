@@ -29,10 +29,10 @@ when the brief was written.
 | 8 | [Garmin deep data](garmin-deep-data.md) | phase 1 merged to main (#208, #215) | yes | no |
 | 9 | [MCP access: scopes, revoke, instructions, resources](mcp-access.md) (endurance plan B2, B3) | done | data migration only | no |
 | 10 | [Home screen widgets](../home-widgets-audit.md) (audit, catalogue and build brief; section 6 is the brief, one PR) | phases 1a and 1b built (registry, edit mode, Recent PRs, Friends' activity, Garmin readiness); locked redesign and phase 2 widgets built (Streak, Body weight, Training load, Weekly sets, Race countdown); other phase 2 widgets todo | yes | yes (home start entries) |
-| 11 | [Back navigation](back-navigation.md) (Back goes where you came from) | built on `fix/back-navigation` | no | yes (set pages' Back) |
-| 12 | [Plan tab redesign](plan-tab-redesign.md) (Cycles becomes Plan; four packages) | built on `feat/plan-redesign`, waiting for the owner's local test | no | no |
-| 17 | [AI coach hub](ai-coach-hub.md) (one More row for AI; the built-in AI gives saved answers, a running plan changes through the user's own AI). Rows 13 to 16 are on the `docs/endurance-journeys` branch. | built on `feat/ai-coach-hub` | no | no |
-| 18 | [One program model](one-program-model.md) (structured endurance workouts move into programs; the workout library goes) | built: 1-5 and 6a on `feat/one-program-model`, 6b on `feat/one-program-6b` (later deploy) | yes | yes (set logging, drag-reorder) |
+| 11 | [Back navigation](back-navigation.md) (Back goes where you came from) | done (#238) | no | yes (set pages' Back) |
+| 12 | [Plan tab redesign](plan-tab-redesign.md) (Cycles becomes Plan; four packages) | done (#247) | no | no |
+| 17 | [AI coach hub](ai-coach-hub.md) (one More row for AI; the built-in AI gives saved answers, a running plan changes through the user's own AI). Rows 13 to 16 are on the `docs/endurance-journeys` branch. | done (#250) | no | no |
+| 18 | [One program model](one-program-model.md) (structured endurance workouts move into programs; the workout library goes) | done (1-5 and 6a in #251, 6b in #252) | yes | yes (set logging, drag-reorder) |
 
 Why this order:
 - 1 is small, has no schema change, and clears two BACKLOG items.

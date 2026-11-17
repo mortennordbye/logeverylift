@@ -1,6 +1,6 @@
 # One program model for strength and endurance
 
-Status: approved by the owner on 2026-11-16. Built: steps 1 to 5 and 6a on `feat/one-program-model`, step 6b on `feat/one-program-6b` (ships in a later deploy, after a backup). Added on the owner's request: the home Today card asks guided or by hand on a day with steps, and Endurance today lists only the other sessions.
+Status: approved by the owner on 2026-11-16. Done: steps 1 to 5 and 6a merged in PR #251, step 6b (the table drop) merged in PR #252 on 2026-11-17, after a database backup. Added on the owner's request: the home Today card asks guided or by hand on a day with steps, and Endurance today lists only the other sessions.
 Plan page with the pictures (before and after): https://claude.ai/artifact/Wt377iE9h2rCSxRTeNJcxv
 (version 2). This brief is the same plan in text, written to be picked up with no conversation
 history. Names marked *new* do not exist yet.
