@@ -11,7 +11,7 @@
  * results table of step 4 replaces it.
  */
 
-import { RideProfileChart } from "@/components/features/bike/RideProfileChart";
+import { RideProfileChart, zoneOpacity } from "@/components/features/bike/RideProfileChart";
 import { BackLink } from "@/components/ui/BackLink";
 import { useWorkoutSession } from "@/contexts/workout-session-context";
 import type { RideMode } from "@/db/schema/rides";
@@ -66,12 +66,9 @@ export function BikeExercise({
     setStarting(true);
     setError(null);
     const res = await callAction(startRide({ sessionId: session.sessionId, programExerciseId, mode, clientId: crypto.randomUUID() }));
-    if (res.success) {
-      router.replace(`${pathname}?ride=1`);
-    } else {
-      setError(res.error);
-      setStarting(false);
-    }
+    if (res.success) router.replace(`${pathname}?ride=1`);
+    else setError(res.error);
+    setStarting(false);
   }
 
   // Only the numbers the plan gives: no kJ without an FTP, no IF without power on every step.
@@ -108,7 +105,7 @@ export function BikeExercise({
             type="button"
             onClick={() => setMode(indoor ? "outdoor" : "indoor")}
             aria-label={`Change to ${MODE_NAME[indoor ? "outdoor" : "indoor"]}`}
-            className="min-h-11 px-3 text-sm text-brand active:opacity-70"
+            className="min-h-11 px-3 text-sm text-primary active:opacity-70"
           >
             Change
           </button>
@@ -129,7 +126,7 @@ export function BikeExercise({
               <>
                 <div className="mt-2 flex h-1.5 gap-0.5 overflow-hidden rounded-full" role="img" aria-label={`Planned time in zones, ${zones.map((z) => `Z${z.zone} ${z.m} min`).join(", ")}`}>
                   {zones.map((z) => (
-                    <i key={z.zone} className="bg-brand" style={{ flex: z.m, opacity: [0.3, 0.55, 0.95][Math.min(z.zone, 3) - 1] }} />
+                    <i key={z.zone} className="bg-brand" style={{ flex: z.m, opacity: zoneOpacity(z.zone) }} />
                   ))}
                 </div>
                 <div className="mt-1 flex justify-between text-[11px] text-muted-foreground tabular-nums">
@@ -148,7 +145,7 @@ export function BikeExercise({
         {indoor && data.ftp === null && (
           <div className="flex items-center justify-between gap-2 rounded-xl bg-muted pl-4 pr-2 min-h-12 text-sm" data-testid="no-ftp">
             <span className="text-muted-foreground">Set your FTP to see watts</span>
-            <Link href="/more/account/training-numbers" className="min-h-11 px-3 inline-flex items-center font-semibold text-brand whitespace-nowrap active:opacity-70">
+            <Link href="/more/account/training-numbers" className="min-h-11 px-3 inline-flex items-center font-semibold text-primary whitespace-nowrap active:opacity-70">
               Set FTP
             </Link>
           </div>
@@ -178,17 +175,29 @@ export function BikeExercise({
             {error}
           </p>
         )}
-        <button
-          type="button"
-          onClick={start}
-          disabled={starting}
-          className="min-h-12 rounded-2xl bg-brand-fill px-4 text-base font-semibold text-white active:opacity-80 disabled:opacity-50"
-        >
-          Start ride
-        </button>
-        <Link href={`${pathname}?hand=1`} className="min-h-11 inline-flex items-center justify-center text-sm font-medium text-brand active:opacity-70">
-          Log by hand
-        </Link>
+        {data.liveRide ? (
+          <>
+            <p className="text-sm text-center text-muted-foreground">Ride running</p>
+            <Link href={`${pathname}?ride=1`} className="min-h-12 rounded-2xl bg-brand-fill px-4 text-base font-semibold text-white inline-flex items-center justify-center active:opacity-80">
+              Resume
+            </Link>
+          </>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={start}
+              disabled={starting}
+              className="min-h-12 rounded-2xl bg-brand-fill px-4 text-base font-semibold text-white active:opacity-80 disabled:opacity-50"
+            >
+              Start ride
+            </button>
+            {/* Hidden while a ride runs (4.3). */}
+            <Link href={`${pathname}?hand=1`} className="min-h-11 inline-flex items-center justify-center text-sm font-medium text-primary active:opacity-70">
+              Log by hand
+            </Link>
+          </>
+        )}
       </div>
     </div>
   );

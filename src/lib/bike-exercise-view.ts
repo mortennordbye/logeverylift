@@ -9,6 +9,7 @@
 
 import { db } from "@/db";
 import { rides, workoutSessions, type RideMode } from "@/db/schema";
+import { getRide } from "@/lib/actions/rides";
 import { thresholdValues } from "@/lib/session-compliance";
 import { getUserSettings, userToday } from "@/lib/user-settings";
 import { bikeStepRows, defaultRideMode, plannedRideNumbers, rideChart, type BikeStepRow, type RideChart, type RideNumbers } from "@/lib/utils/bike-ride-view";
@@ -26,6 +27,8 @@ export type BikeExerciseData = {
   outdoor: BikeModeView;
   ftp: number | null;
   lthr: number | null;
+  /** The user's ride of this exercise is running or paused: the screen offers Resume, not Start ride. */
+  liveRide: boolean;
 };
 
 /** The mode of the user's last ride of this program exercise: Garmin's correction on the session first, else the ride's own. */
@@ -53,7 +56,14 @@ export async function bikeExerciseView(
   const tree = "workout" in built ? parseWorkout(built.workout) : null;
   if (!tree?.ok) return null;
 
-  const [thresholds, { units }, today, lastMode] = await Promise.all([thresholdValues(userId), getUserSettings(userId), userToday(userId), lastRideMode(userId, programExerciseId)]);
+  // getRide settles the active ride first, so one whose last step ran out is not live.
+  const [thresholds, { units }, today, lastMode, active] = await Promise.all([
+    thresholdValues(userId),
+    getUserSettings(userId),
+    userToday(userId),
+    lastRideMode(userId, programExerciseId),
+    getRide({}),
+  ]);
   const view = (mode: RideMode): BikeModeView => {
     const plan = buildRidePlan(tree.workout, rows.map((r) => r.id), thresholds, mode);
     return { numbers: plannedRideNumbers(plan), chart: rideChart(plan), rows: bikeStepRows(plan, units) };
@@ -65,5 +75,6 @@ export async function bikeExerciseView(
     outdoor: view("outdoor"),
     ftp: thresholds.ftp ?? null,
     lthr: thresholds.lthr_bike ?? null,
+    liveRide: active.success && active.data?.ride.programExerciseId === programExerciseId,
   };
 }

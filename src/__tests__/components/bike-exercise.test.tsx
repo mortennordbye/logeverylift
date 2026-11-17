@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { BikeExercise } from "@/components/features/bike/BikeExercise";
+import { zoneOpacity } from "@/components/features/bike/RideProfileChart";
 import type { BikeExerciseData } from "@/lib/bike-exercise-view";
 import { bikeStepRows, plannedRideNumbers, rideChart } from "@/lib/utils/bike-ride-view";
 import { buildRidePlan } from "@/lib/utils/ride-timeline";
@@ -29,12 +30,12 @@ const parsed = parseWorkout({
 if (!parsed.ok) throw new Error(JSON.stringify(parsed.errors));
 const workout = parsed.workout;
 
-function data(thresholds: ThresholdValues, defaultMode: "indoor" | "outdoor" = "indoor"): BikeExerciseData {
+function data(thresholds: ThresholdValues, defaultMode: "indoor" | "outdoor" = "indoor", liveRide = false): BikeExerciseData {
   const view = (mode: "indoor" | "outdoor") => {
     const plan = buildRidePlan(workout, [1, 2, 3], thresholds, mode);
     return { numbers: plannedRideNumbers(plan), chart: rideChart(plan), rows: bikeStepRows(plan) };
   };
-  return { defaultMode, indoor: view("indoor"), outdoor: view("outdoor"), ftp: thresholds.ftp ?? null, lthr: thresholds.lthr_bike ?? null };
+  return { defaultMode, indoor: view("indoor"), outdoor: view("outdoor"), ftp: thresholds.ftp ?? null, lthr: thresholds.lthr_bike ?? null, liveRide };
 }
 
 const targets = () => screen.getAllByTestId("ride-step-target").map((t) => t.textContent);
@@ -61,8 +62,8 @@ describe("BikeExercise", () => {
     expect(screen.getByTestId("ride-mode").textContent).toBe("Outdoor");
     expect(screen.queryByTestId("ride-profile")).toBeNull();
     expect(screen.getByTestId("ride-summary").textContent).toContain("LTHR 171");
-    expect(targets()).toEqual(["HR under 139", "HR 154-159", "Effort 2"]);
-    expect(screen.getByText("Z3 · 135-146 W with a power meter")).toBeTruthy();
+    expect(targets()).toEqual(["HR under 139", "HR 139-152", "Effort 2"]);
+    expect(screen.getByText("Z2-3 · 135-146 W with a power meter")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Change to Indoor trainer" }));
     expect(screen.getByTestId("ride-mode").textContent).toBe("Indoor trainer");
     expect(targets()).toEqual(["99 to 135 W", "135-146 W", "under 97 W"]);
@@ -79,7 +80,7 @@ describe("BikeExercise", () => {
 
   it("outdoors with no bike LTHR: effort targets", () => {
     render(<BikeExercise programId={1} programExerciseId={2} exerciseName="Bike" data={data({ ftp: 180 }, "outdoor")} />);
-    expect(targets()).toEqual(["Effort 2", "Effort 6", "Effort 2"]);
+    expect(targets()).toEqual(["Effort 2", "Effort 4", "Effort 2"]);
   });
 
   it("Start ride starts the ride in the chosen mode and opens ride mode; Log by hand opens the set list", async () => {
@@ -90,6 +91,8 @@ describe("BikeExercise", () => {
     fireEvent.click(screen.getByRole("button", { name: "Start ride" }));
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/programs/1/workout/exercises/2?ride=1"));
     expect(startRide).toHaveBeenCalledWith(expect.objectContaining({ sessionId: 7, programExerciseId: 2, mode: "outdoor" }));
+    // Not left busy: the button works again if the same screen stays.
+    await waitFor(() => expect((screen.getByRole("button", { name: "Start ride" }) as HTMLButtonElement).disabled).toBe(false));
   });
 
   it("shows the server's reason when the ride does not start", async () => {
@@ -98,5 +101,21 @@ describe("BikeExercise", () => {
     fireEvent.click(screen.getByRole("button", { name: "Start ride" }));
     expect((await screen.findByRole("alert")).textContent).toBe("A ride is already running");
     expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("with a ride running for this exercise: Ride running and Resume in place of Start ride", () => {
+    render(<BikeExercise programId={1} programExerciseId={2} exerciseName="Bike" data={data({ ftp: 180 }, "indoor", true)} />);
+    expect(screen.getByText("Ride running")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Resume" }).getAttribute("href")).toBe("/programs/1/workout/exercises/2?ride=1");
+    expect(screen.queryByRole("button", { name: "Start ride" })).toBeNull();
+    // 4.3: Log by hand is hidden while a ride runs.
+    expect(screen.queryByRole("link", { name: "Log by hand" })).toBeNull();
+  });
+
+  it("grades the accent by zone, one step per zone up to zone 5 and above", () => {
+    const o = [1, 2, 3, 4, 5, 6, 7].map(zoneOpacity);
+    for (let i = 1; i < 5; i++) expect(o[i]).toBeGreaterThan(o[i - 1]);
+    expect(o[5]).toBe(o[4]);
+    expect(o[6]).toBe(o[4]);
   });
 });

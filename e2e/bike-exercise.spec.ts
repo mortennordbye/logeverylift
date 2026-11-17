@@ -46,7 +46,7 @@ async function setup(parallelIndex: number, endurance: boolean) {
   return { userId, programId, peId: pe.id };
 }
 
-test("an endurance user's bike exercise shows the ride, switches mode and starts the ride", async ({ page }, testInfo) => {
+test("an endurance user's bike exercise shows the ride, switches mode, starts the ride and offers Resume", async ({ page }, testInfo) => {
   const { userId, programId, peId } = await setup(testInfo.parallelIndex, true);
   await page.goto(`/programs/${programId}/workout/exercises/${peId}`);
 
@@ -68,10 +68,13 @@ test("an endurance user's bike exercise shows the ride, switches mode and starts
   await expect(page.getByTestId("ride-step-target")).toHaveText(["99 to 135 W", "135-146 W", "under 97 W", "135-146 W", "101-135 W"]);
   await expect(page.getByTestId("ride-step").nth(1)).toContainText("Work · 1 of 2");
   await expect(page.getByTestId("ride-step").nth(1)).toContainText("Talk in short sentences");
+  await expect(page.getByTestId("ride-step").nth(1)).toContainText("Z2-3 · 85-95 rpm");
+
+  await expect(page.getByRole("link", { name: "Log by hand" })).toHaveAttribute("href", `/programs/${programId}/workout/exercises/${peId}?hand=1`);
 
   await page.getByRole("button", { name: "Change to Outdoor" }).click();
   await expect(page.getByTestId("ride-profile")).toHaveCount(0);
-  await expect(page.getByTestId("ride-step-target")).toHaveText(["HR under 139", "HR 154-159", "Effort 2", "HR 154-159", "HR 139-152"]);
+  await expect(page.getByTestId("ride-step-target")).toHaveText(["HR under 139", "HR 139-152", "Effort 2", "HR 139-152", "HR 139-152"]);
 
   // The workout layout opens the session in the background; Start ride needs it.
   const db = testDb();
@@ -82,15 +85,19 @@ test("an endurance user's bike exercise shows the ride, switches mode and starts
   expect(started.mode).toBe("outdoor");
   expect(started.status).toBe("running");
 
+  // While the ride runs the screen offers Resume, not Start ride or Log by hand (4.3).
+  await expect(page.getByRole("link", { name: "Resume" })).toHaveAttribute("href", `/programs/${programId}/workout/exercises/${peId}?ride=1`);
+  await expect(page.getByRole("button", { name: "Start ride" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Log by hand" })).toHaveCount(0);
+
   // The last ride's mode is the default next time (D6).
   await page.goto(`/programs/${programId}/workout/exercises/${peId}`);
   await expect(page.getByTestId("ride-mode")).toHaveText("Outdoor");
 
-  // Log by hand keeps today's set list.
-  await page.getByRole("link", { name: "Log by hand" }).click();
-  await expect(page).toHaveURL(new RegExp(`/exercises/${peId}\\?hand=1$`));
+  // ?hand=1 keeps today's set list.
+  await page.goto(`/programs/${programId}/workout/exercises/${peId}?hand=1`);
+  await expect(page.getByRole("button", { name: "Progression settings" })).toBeVisible();
   await expect(page.getByTestId("bike-exercise")).toHaveCount(0);
-  await expect(page.getByTestId("edit-steps")).toBeVisible();
 });
 
 test("a user without endurance features keeps the set list on a bike exercise", async ({ page }, testInfo) => {

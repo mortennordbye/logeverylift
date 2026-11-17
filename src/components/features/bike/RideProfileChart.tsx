@@ -2,15 +2,17 @@
  * The planned power profile of a ride (docs/plans/bike-ride-logger.md,
  * section 5): zone bands Z1 to Z4, a watt scale, the FTP line and one bar per
  * step. A range shows a cap to its high end, a ramp a slope, an "under"
- * target a dashed cap. One accent; the zone shows as its opacity.
+ * target a dashed cap. One accent; the zone shows as its opacity. The zone
+ * names sit in a gutter right of the plot, so no bar label covers them.
  * The layout comes from `rideChart` (src/lib/utils/bike-ride-view.ts).
  */
 
 import { CHART, type RideChart } from "@/lib/utils/bike-ride-view";
 
-/** Body opacity per power zone: easy quiet, the main work strong. */
-const ZONE_OPACITY = [0.3, 0.5, 0.95];
-const opacity = (zone: number) => ZONE_OPACITY[Math.min(zone, 3) - 1];
+/** Accent opacity per power zone, one step up per zone to zone 5 and above: easy quiet, hard strong. */
+const ZONE_OPACITY = [0.25, 0.42, 0.6, 0.78, 0.95];
+export const zoneOpacity = (zone: number) => ZONE_OPACITY[Math.min(Math.max(zone, 1), 5) - 1];
+const opacity = zoneOpacity;
 
 export function RideProfileChart({ chart, label }: { chart: RideChart; label: string }) {
   const { left, right, base, width, height } = CHART;
@@ -20,7 +22,7 @@ export function RideProfileChart({ chart, label }: { chart: RideChart; label: st
         <g key={b.zone}>
           <rect x={left} y={b.y} width={right - left} height={b.h} className="fill-foreground" fillOpacity={b.zone % 2 ? 0.03 : 0.07} />
           {b.h >= 6 && (
-            <text x={right - 2} y={b.y + Math.min(b.h / 2 + 2.5, b.h - 1)} textAnchor="end" fontSize={7} className="fill-muted-foreground">
+            <text x={width - 1} y={b.y + Math.min(b.h / 2 + 2.5, b.h - 1)} textAnchor="end" fontSize={7} className="fill-muted-foreground">
               Z{b.zone}
             </text>
           )}
