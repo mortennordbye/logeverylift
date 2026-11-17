@@ -40,7 +40,7 @@ import {
   type TemplateSlot,
 } from "@/lib/utils/planned-sessions";
 import { insertAutoSessions } from "@/lib/auto-sessions";
-import type { SessionPriority } from "@/db/schema/workouts";
+import type { SessionPriority } from "@/db/schema/session-priority";
 import type { Workout } from "@/lib/utils/workout-steps";
 import type { MissedSlot, TodaySession, TrainingCycleSlotWithProgram } from "@/types/workout";
 import { and, asc, eq, gt, gte, inArray, isNotNull, isNull, lte, ne, or, sql } from "drizzle-orm";

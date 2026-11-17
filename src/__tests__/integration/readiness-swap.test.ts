@@ -136,7 +136,6 @@ describe("makeSessionEasy (Server Action)", () => {
     expect(r).toEqual({ success: true, data: { id: session.id } });
     const row = await sessionRow(session.id);
     // The easy session is a one-day program of steps (docs/plans/one-program-model.md, decision 2).
-    expect(row.workout).toBeNull();
     expect(await easyProgram(row.programId)).toEqual({ name: "Easy bike (readiness)", forPlannedSessionId: session.id, steps: [["work", 50 * MIN]] });
     const [rev] = await db
       .select()
