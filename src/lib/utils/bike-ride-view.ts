@@ -90,7 +90,8 @@ export function plannedRideNumbers(plan: RidePlan): RideNumbers {
 
 // ── Power chart ──────────────────────────────────────────────────────────────
 
-export const CHART = { width: 260, height: 118, left: 24, right: 256, top: 0, base: 100 } as const;
+/** Plot from left to right; the gutter right of it holds the zone names. */
+export const CHART = { width: 260, height: 118, left: 24, right: 246, top: 0, base: 100 } as const;
 
 export type ChartBar = {
   key: string;
@@ -216,9 +217,8 @@ function zoneChip(step: WorkoutStep, ftp: number | null): string | null {
   if (step.target?.metric === "power" && step.target.zone !== undefined) return `Z${step.target.zone}`;
   const p = stepPct(step, ftp);
   if (!p) return null;
-  // A range that ends where a zone starts stays in the zone below.
   const lo = powerZone(p.low ?? 0);
-  const hi = Math.max(lo, powerZone(p.high! - 0.001));
+  const hi = Math.max(lo, powerZone(p.high!));
   return lo === hi ? `Z${lo}` : `Z${lo}-${hi}`;
 }
 

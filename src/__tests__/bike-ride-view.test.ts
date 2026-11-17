@@ -1,4 +1,4 @@
-import { bikeStepRows, defaultRideMode, plannedRideNumbers, rideChart, rideLengthText } from "@/lib/utils/bike-ride-view";
+import { CHART, bikeStepRows, defaultRideMode, plannedRideNumbers, rideChart, rideLengthText } from "@/lib/utils/bike-ride-view";
 import { buildRidePlan } from "@/lib/utils/ride-timeline";
 import { workoutPlannedLoad } from "@/lib/utils/step-results";
 import { parseWorkout, type Workout } from "@/lib/utils/workout-steps";
@@ -87,9 +87,9 @@ describe("bikeStepRows", () => {
     const rows = bikeStepRows(buildRidePlan(mockupRide(), setIds, thresholds, "indoor"));
     expect(rows.map((r) => [r.title, r.detail, r.target, r.time])).toEqual([
       ["Warm-up", "Ramp · 85-95 rpm", "99 to 135 W", "15 min"],
-      ["Work · 1 of 2", "Z3 · 85-95 rpm", "135-146 W", "15 min"],
+      ["Work · 1 of 2", "Z2-3 · 85-95 rpm", "135-146 W", "15 min"],
       ["Easy", "Z1", "under 97 W", "5 min"],
-      ["Work · 2 of 2", "Z3 · 85-95 rpm", "135-146 W", "15 min"],
+      ["Work · 2 of 2", "Z2-3 · 85-95 rpm", "135-146 W", "15 min"],
       ["Work", "Z2", "101-135 W", "15 min"],
     ]);
     expect(rows[1].note).toBe("Talk in short sentences");
@@ -99,9 +99,9 @@ describe("bikeStepRows", () => {
     const rows = bikeStepRows(buildRidePlan(mockupRide(), setIds, thresholds, "outdoor"));
     expect(rows.map((r) => [r.detail, r.target])).toEqual([
       ["Ramp · 99 to 135 W with a power meter", "HR under 139"],
-      ["Z3 · 135-146 W with a power meter", "HR 154-159"],
+      ["Z2-3 · 135-146 W with a power meter", "HR 139-152"],
       ["Z1 · under 97 W with a power meter", "Effort 2"],
-      ["Z3 · 135-146 W with a power meter", "HR 154-159"],
+      ["Z2-3 · 135-146 W with a power meter", "HR 139-152"],
       ["Z2 · 101-135 W with a power meter", "HR 139-152"],
     ]);
   });
@@ -123,7 +123,10 @@ describe("rideChart", () => {
     expect(c.yTicks.map((t) => t.label)).toEqual(["50", "100", "150"]);
     expect(c.xTicks.map((t) => t.label)).toEqual(["0", "15", "30", "45", "65 min"]);
     const last = c.bars[c.bars.length - 1];
-    expect(last.x + last.w).toBeLessThanOrEqual(256);
+    // The zone names keep a gutter right of the plot, clear of every bar and its label.
+    expect(last.x + last.w).toBeLessThanOrEqual(CHART.right);
+    expect(Math.max(...c.bars.filter((b) => b.label).map((b) => b.x + b.w / 2 + b.label!.length * 2.2))).toBeLessThan(CHART.right + 2);
+    expect(CHART.width - CHART.right).toBeGreaterThanOrEqual(12);
   });
   it("without an FTP the labels are in % FTP", () => {
     const c = rideChart(buildRidePlan(mockupRide(), setIds, {}, "indoor"));

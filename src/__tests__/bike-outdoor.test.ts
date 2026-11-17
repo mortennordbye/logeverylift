@@ -8,8 +8,8 @@ const time = (seconds: number) => ({ type: "time" as const, seconds });
 const work = (low: number, high: number, seconds = 900): WorkoutStep => ({ type: "work", end: time(seconds), target: { metric: "power", anchor: "ftp", low, high } });
 
 describe("powerZone", () => {
-  it("uses the zone table's low ends, with zones 6 and 7 above it", () => {
-    expect([54, 55, 74.9, 75, 89, 90, 104, 105, 120, 121, 150, 151].map(powerZone)).toEqual([1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7]);
+  it("uses the Coggan zones: a value on a zone's start belongs to the zone below", () => {
+    expect([54, 55, 55.5, 74.9, 75, 75.5, 89, 90, 104, 105, 120, 121, 150, 151].map(powerZone)).toEqual([1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 5, 6, 6, 7]);
   });
   it("takes the low end of a range, a zone or a ramp, and watts over the FTP", () => {
     expect(powerLowPct(work(75, 80), 180)).toBe(75);
@@ -27,6 +27,13 @@ describe("outdoorTarget", () => {
       expect(outdoorTarget(s, 900, withHr)).toEqual({ main: { low: null, high: 139, unit: "bpm", text: "HR under 139", missing: null }, second: null });
     }
   });
+  it("a warm-up or cool-down with a heart rate target keeps it", () => {
+    const hr: WorkoutStep = { type: "warmup", end: time(900), target: { metric: "hr", anchor: "lthr", zone: 2 } };
+    expect(outdoorTarget(hr, 900, withHr)?.main.text).toBe("HR 139-152");
+    expect(outdoorTarget({ ...hr, type: "cooldown", target: { metric: "hr", anchor: "absolute", low: 100, high: 125 } }, 900, withHr)?.main.text).toBe("HR 100-125");
+    // No LTHR: the heart rate target cannot resolve, so the warm-up effort.
+    expect(outdoorTarget(hr, 900, { ftp: 180 })?.main.text).toBe("Effort 2");
+  });
   it("recovery, zone 1 and free spin: effort 2", () => {
     const easy = { main: expect.objectContaining({ text: "Effort 2", unit: "RPE" }), second: null };
     expect(outdoorTarget({ type: "recovery", end: time(300), target: { metric: "power", anchor: "ftp", zone: 1 } }, 300, withHr)).toEqual(easy);
@@ -35,7 +42,9 @@ describe("outdoorTarget", () => {
   });
   it("work of 5 min or more in zone 2 to 4: the heart rate range of the same zone", () => {
     expect(outdoorTarget(work(60, 70), 900, withHr)?.main.text).toBe("HR 139-152");
-    expect(outdoorTarget(work(75, 80), 300, withHr)?.main.text).toBe("HR 154-159");
+    // 75% FTP is the top of zone 2 (Coggan), so 75-80% rides at the zone 2 heart rate.
+    expect(outdoorTarget(work(75, 80), 300, withHr)?.main.text).toBe("HR 139-152");
+    expect(outdoorTarget(work(76, 80), 300, withHr)?.main.text).toBe("HR 154-159");
     expect(outdoorTarget(work(95, 100), 600, withHr)).toEqual({ main: expect.objectContaining({ low: 161, high: 169, text: "HR 161-169" }), second: null });
   });
   it("work of 3 to 5 min in zone 2 to 4: the heart rate range and the effort as a second line", () => {
@@ -57,7 +66,7 @@ describe("outdoorTarget", () => {
   it("a written outdoor target wins when it resolves; a rest and an unknown zone get none", () => {
     const written: WorkoutStep = { ...work(75, 80), outdoor: { metric: "hr", anchor: "lthr", low: 83, high: 89 } };
     expect(outdoorTarget(written, 900, withHr)?.main.text).toBe("HR 142-152");
-    expect(outdoorTarget(written, 900, { ftp: 180 })?.main.text).toBe("Effort 6");
+    expect(outdoorTarget(written, 900, { ftp: 180 })?.main.text).toBe("Effort 4");
     expect(outdoorTarget({ ...work(75, 80), outdoor: { metric: "rpe", anchor: "absolute", low: 5, high: 6 } }, 900, withHr)?.main.text).toBe("Effort 5-6");
     expect(outdoorTarget({ type: "rest", end: time(60) }, 60, withHr)).toBeNull();
     expect(outdoorTarget({ type: "work", end: time(600), target: { metric: "cadence", anchor: "absolute", low: 90, high: 100 } }, 600, withHr)).toBeNull();

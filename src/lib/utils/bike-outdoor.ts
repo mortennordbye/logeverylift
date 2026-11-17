@@ -11,14 +11,15 @@ import { DEFAULT_UNITS, type Units } from "@/lib/utils/units";
 import { mainTarget, resolveTarget, type ResolvedTarget, type ThresholdValues, type WorkoutStep, type WorkoutTarget } from "@/lib/utils/workout-steps";
 
 /**
- * Coggan power zone (1-7) of a percent of FTP. The bounds are the zone table
- * of workout-steps.ts (zone 2 from 55, 3 from 75, 4 from 90, 5 from 105),
- * with zone 6 from 121 and zone 7 from 151.
+ * Coggan power zone (1-7) of a percent of FTP: zone 1 up to 55, 2 up to 75,
+ * 3 up to 90, 4 up to 105, 5 up to 120, 6 up to 150, 7 above. A value on a
+ * zone's start belongs to the zone below (75% FTP is zone 2), so the low and
+ * the high end of a range are read the same way.
  */
 export function powerZone(pctFtp: number): number {
-  const from = [55, 75, 90, 105, 121, 151];
+  const upTo = [55, 75, 90, 105, 120, 150];
   let z = 1;
-  for (const f of from) if (pctFtp >= f) z++;
+  for (const u of upTo) if (pctFtp > u) z++;
   return z;
 }
 
@@ -33,6 +34,14 @@ export function powerLowPct(step: Pick<WorkoutStep, "target" | "ramp">, ftp: num
   if (t.low === undefined) return null;
   if (t.anchor === "ftp") return t.low;
   return ftp ? (t.low / ftp) * 100 : null;
+}
+
+/** Power zone of the low end of a step's indoor target: a zone target's own zone, else powerZone of its low end. */
+export function powerLowZone(step: Pick<WorkoutStep, "target" | "ramp">, ftp: number | undefined): number | null {
+  const t = mainTarget(step);
+  if (t?.metric === "power" && t.zone !== undefined) return t.zone;
+  const pct = powerLowPct(step, ftp);
+  return pct === null ? null : powerZone(pct);
 }
 
 /** Friel bike heart rate zones in % LTHR, for zones 2 to 4, and the top of zone 1. */
@@ -71,7 +80,8 @@ export type OutdoorTarget = { main: ResolvedTarget; second: ResolvedTarget | nul
 /**
  * The outdoor target of one bike step. A written one wins when it resolves;
  * else it is derived from the zone of the indoor target's low end (4.2):
- * warm-up, cool-down and ramp get a heart rate cap at the top of zone 1;
+ * warm-up, cool-down and ramp get a heart rate cap at the top of zone 1
+ * (a warm-up or cool-down with a heart rate target keeps that target);
  * recovery, zone 1 and free spin effort 2; work of 5 min or more in zone 2
  * to 4 the heart rate range of that zone; under 3 min or zone 5 and above an
  * effort; 3 to 5 min the heart rate range with the effort as a second line.
@@ -88,9 +98,15 @@ export function outdoorTarget(step: WorkoutStep, seconds: number, thresholds: Th
   if (step.type === "rest") return null;
   const lthr = thresholds.lthr_bike;
   const cap = lthr ? hrCap(lthr) : effort(EFFORT[1]);
-  if (step.type === "warmup" || step.type === "cooldown" || step.ramp) return { main: cap, second: null };
-  const pct = powerLowPct(step, thresholds.ftp);
-  const zone = pct === null ? null : powerZone(pct);
+  if (step.type === "warmup" || step.type === "cooldown" || step.ramp) {
+    // A warm-up or cool-down already ridden by heart rate keeps its target.
+    if (step.target?.metric === "hr") {
+      const r = resolveTarget(step.target, "bike", thresholds, units);
+      if (!r.missing) return { main: { ...r, text: writtenText(step.target, r) }, second: null };
+    }
+    return { main: cap, second: null };
+  }
+  const zone = powerLowZone(step, thresholds.ftp);
   if (step.type === "recovery" || step.free || zone === 1) return { main: effort(EFFORT[1]), second: null };
   if (zone === null) return null;
   if (zone >= 5 || seconds < 180) return { main: effort(EFFORT[zone]), second: null };
