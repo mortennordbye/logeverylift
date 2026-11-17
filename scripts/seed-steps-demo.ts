@@ -10,6 +10,10 @@
  *                           a long name, not in the cycle.
  *   steps-lift@demo.local   strength only: the same screens before and after,
  *                           to check nothing changed for a lifter.
+ *   steps-ride@demo.local   endurance on, FTP 180 W and bike LTHR 171: the
+ *                           ride of the bike ride logger mockups
+ *                           (docs/plans/bike-ride-logger.md), today.
+ *   steps-noftp@demo.local  the same ride with no thresholds set.
  *
  * Dates are relative to the run day. Each run deletes the demo accounts (and
  * with them all their data) and makes them again. No other account is touched.
@@ -24,6 +28,8 @@ import type { Workout } from "../src/lib/utils/workout-steps";
 const DEMO_PASSWORD = "steps-demo-password";
 const TRI = "steps-tri@demo.local";
 const LIFT = "steps-lift@demo.local";
+const RIDE = "steps-ride@demo.local";
+const NOFTP = "steps-noftp@demo.local";
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "postgres"]);
 const DEMO_TZ = "Europe/Oslo";
 
@@ -86,6 +92,25 @@ const BIKE: Workout = {
   ],
 };
 
+/** The ride of the bike ride logger mockups: 65 min, planned IF 0.71 and load 55 at FTP 180. */
+const UPPER_ENDURANCE: Workout = {
+  v: 2,
+  sport: "bike",
+  name: "Bike · Upper endurance",
+  steps: [
+    { type: "warmup", end: { type: "time", seconds: 900 }, ramp: { anchor: "ftp", from: 55, to: 75 }, cadence: { low: 85, high: 95 } },
+    {
+      type: "repeat",
+      count: 2,
+      steps: [
+        { type: "work", end: { type: "time", seconds: 900 }, target: { metric: "power", anchor: "ftp", low: 75, high: 81 }, cadence: { low: 85, high: 95 }, note: "Talk in short sentences" },
+        { type: "recovery", end: { type: "time", seconds: 300 }, target: { metric: "power", anchor: "ftp", zone: 1 } },
+      ],
+    },
+    { type: "work", end: { type: "time", seconds: 900 }, target: { metric: "power", anchor: "ftp", low: 56, high: 75 } },
+  ],
+};
+
 const BRICK_BIKE: Workout = { v: 2, sport: "bike", name: "Brick", steps: [{ type: "work", end: { type: "time", seconds: 3600 }, target: { metric: "power", anchor: "ftp", low: 70, high: 78 } }] };
 const BRICK_RUN: Workout = { v: 2, sport: "run", name: "Brick", steps: [{ type: "work", end: { type: "time", seconds: 1200 }, target: { metric: "pace", anchor: "threshold_pace", low: 88, high: 92 } }] };
 
@@ -105,7 +130,7 @@ async function main() {
 
   type Ctx = { userId: string; writer: "user" };
 
-  const old = await db.select({ id: s.users.id }).from(s.users).where(inArray(s.users.email, [TRI, LIFT]));
+  const old = await db.select({ id: s.users.id }).from(s.users).where(inArray(s.users.email, [TRI, LIFT, RIDE, NOFTP]));
   if (old.length) {
     const ids = old.map((u) => u.id);
     await db.delete(s.planRevisions).where(inArray(s.planRevisions.userId, ids));
@@ -226,7 +251,24 @@ async function main() {
   const upper = await strengthProgram(liftCtx, "Upper A");
   await weekdayCycle(liftCtx, "Strength block", [{ dayOfWeek: dow(today), programId: upper }], mondayOf(today));
 
-  console.log(`Demo accounts ready (password "${DEMO_PASSWORD}"): ${TRI}, ${LIFT}`);
+  // ── steps-ride and steps-noftp ────────────────────────────────────────────
+  for (const [email, name, thresholds] of [
+    [RIDE, "Ride Demo", true],
+    [NOFTP, "No FTP Demo", false],
+  ] as const) {
+    const id = await makeUser(email, name, true);
+    const ctx: Ctx = { userId: id, writer: "user" };
+    if (thresholds) {
+      await db.insert(s.athleteThresholds).values([
+        { userId: id, kind: "ftp", value: 180, measuredOn: today, source: "manual" },
+        { userId: id, kind: "lthr_bike", value: 171, measuredOn: today, source: "manual" },
+      ]);
+    }
+    const ride = await stepProgram(ctx, UPPER_ENDURANCE.name, [{ exercise: "Bike", workout: UPPER_ENDURANCE }]);
+    await weekdayCycle(ctx, "Base · Week 1", [{ dayOfWeek: dow(today), programId: ride }], mondayOf(today));
+  }
+
+  console.log(`Demo accounts ready (password "${DEMO_PASSWORD}"): ${TRI}, ${LIFT}, ${RIDE}, ${NOFTP}`);
   process.exit(0);
 }
 
