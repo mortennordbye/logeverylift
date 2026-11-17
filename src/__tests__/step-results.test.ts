@@ -116,9 +116,11 @@ describe("results from a run, as planned, and totals", () => {
 });
 
 describe("workoutPlannedLoad", () => {
-  it("adds each step's estimate and marks a lap step partial", () => {
+  it("counts a ride with power on every timed step from its planned IF, and marks a lap step partial", () => {
     const p = workoutPlannedLoad(bike, anchors);
-    const expected = (900 / 3600) * 0.6 ** 2 * 100 + 3 * (600 / 3600) * 0.905 ** 2 * 100;
+    // Fourth-power mean over the timed steps, the rests at 0 (bike-ride-logger.md 4.6).
+    const intensityFactor = ((900 * 0.6 ** 4 + 3 * 600 * 0.905 ** 4) / 3600) ** 0.25;
+    const expected = 1 * intensityFactor ** 2 * 100;
     expect(p.load).toBeCloseTo(expected, 6);
     expect(p.partial).toBe(true);
   });
