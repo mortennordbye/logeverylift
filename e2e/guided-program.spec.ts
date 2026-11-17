@@ -9,7 +9,8 @@ import { expect, test } from "./fixtures/test";
 /**
  * The guided player on a program with structured steps
  * (docs/plans/one-program-model.md, step 3): today's planned session runs a
- * program whose ride is stored as program sets. The workout screen shows the
+ * program whose run is stored as program sets (a bike-only program opens ride
+ * mode instead, D14 in docs/plans/bike-ride-logger.md). The workout screen shows the
  * totals and "Start guided", the player runs the steps, and the results save
  * as one logged set per step, each with its status and a copy of its plan.
  */
@@ -21,14 +22,14 @@ function today(): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-const ride: Workout = {
+const run: Workout = {
   v: 2,
-  sport: "bike",
-  name: "Steps ride",
+  sport: "run",
+  name: "Steps run",
   steps: [
-    { type: "warmup", end: { type: "time", seconds: 5 }, target: { metric: "power", anchor: "ftp", low: 50, high: 70 } },
-    { type: "work", end: { type: "time", seconds: 6 }, target: { metric: "power", anchor: "ftp", low: 88, high: 93 } },
-    { type: "work", end: { type: "time", seconds: 600 }, target: { metric: "power", anchor: "ftp", low: 75, high: 80 } },
+    { type: "warmup", end: { type: "time", seconds: 5 }, target: { metric: "hr", anchor: "absolute", low: 125, high: 145 } },
+    { type: "work", end: { type: "time", seconds: 6 }, target: { metric: "hr", anchor: "absolute", low: 150, high: 160 } },
+    { type: "work", end: { type: "time", seconds: 600 }, target: { metric: "hr", anchor: "absolute", low: 140, high: 150 } },
     { type: "cooldown", end: { type: "lap" } },
   ],
 };
@@ -42,10 +43,10 @@ async function setup(parallelIndex: number) {
   await db.delete(athleteThresholds).where(eq(athleteThresholds.userId, userId));
   await db.update(users).set({ enduranceEnabled: true, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }).where(eq(users.id, userId));
   await db.insert(athleteThresholds).values({ userId, kind: "ftp", value: 250, measuredOn: today(), source: "manual" });
-  const [bike] = await db.select({ id: exercises.id }).from(exercises).where(and(eq(exercises.discipline, "bike"), isNull(exercises.userId))).orderBy(asc(exercises.id)).limit(1);
-  const [program] = await db.insert(programs).values({ userId, name: "Steps ride" }).returning();
-  const [pe] = await db.insert(programExercises).values({ programId: program.id, exerciseId: bike.id, orderIndex: 0, progressionAdvance: "manual" }).returning();
-  await db.insert(programSets).values(workoutToRows(ride).map((r) => ({ ...r, programExerciseId: pe.id, restTimeSeconds: 0 })));
+  const [runEx] = await db.select({ id: exercises.id }).from(exercises).where(and(eq(exercises.discipline, "run"), isNull(exercises.userId))).orderBy(asc(exercises.id)).limit(1);
+  const [program] = await db.insert(programs).values({ userId, name: "Steps run" }).returning();
+  const [pe] = await db.insert(programExercises).values({ programId: program.id, exerciseId: runEx.id, orderIndex: 0, progressionAdvance: "manual" }).returning();
+  await db.insert(programSets).values(workoutToRows(run).map((r) => ({ ...r, programExerciseId: pe.id, restTimeSeconds: 0 })));
   const [cycle] = await db
     .insert(trainingCycles)
     .values({ userId, name: "Tri block", durationWeeks: 4, status: "active", startDate: today(), sessionsGeneratedAt: new Date() })
@@ -90,7 +91,7 @@ test("a program with steps: the workout screen starts the player, and each step 
   await expect(page.getByTestId("player-ready")).toBeVisible();
   await page.getByRole("button", { name: "Start", exact: true }).click();
   await expect(page.getByTestId("player-step-count")).toHaveText("Step 1 of 4");
-  await expect(page.getByTestId("player-target")).toHaveText("125-175 W");
+  await expect(page.getByTestId("player-target")).toHaveText("125-145 bpm");
   await page.clock.runFor(5_500);
   await expect(page.getByTestId("player-step-count")).toHaveText("Step 2 of 4");
   await page.clock.runFor(6_500);
@@ -115,7 +116,7 @@ test("a program with steps: the workout screen starts the player, and each step 
   expect(sets[0].rpe).toBe(7);
 
   await page.goto("/week");
-  const week = page.getByTestId("week-session").filter({ hasText: "Steps ride" });
+  const week = page.getByTestId("week-session").filter({ hasText: "Steps run" });
   await expect(week).toContainText("done 00:1");
 });
 
