@@ -33,7 +33,7 @@ when the brief was written.
 | 12 | [Plan tab redesign](plan-tab-redesign.md) (Cycles becomes Plan; four packages) | done (#247) | no | no |
 | 17 | [AI coach hub](ai-coach-hub.md) (one More row for AI; the built-in AI gives saved answers, a running plan changes through the user's own AI). Rows 13 to 16 are on the `docs/endurance-journeys` branch. | done (#250) | no | no |
 | 18 | [One program model](one-program-model.md) (structured endurance workouts move into programs; the workout library goes) | done (1-5 and 6a in #251, 6b in #252) | yes | yes (set logging, drag-reorder) |
-| 19 | [Bike ride logger](bike-ride-logger.md) (the bike exercise plans, runs and logs a ride: modes, ride mode, push, Garmin fill, cycling numbers; nine steps, no owner input needed) | steps 0 and 1 built on `feat/bike-ride-logger` | yes | yes (timers, set logging) |
+| 19 | [Bike ride logger](bike-ride-logger.md) (the bike exercise plans, runs and logs a ride: modes, ride mode, push, Garmin fill, cycling numbers; nine steps, no owner input needed) | steps 0 to 2 built on `feat/bike-ride-logger` | yes | yes (timers, set logging) |
 
 Why this order:
 - 1 is small, has no schema change, and clears two BACKLOG items.
