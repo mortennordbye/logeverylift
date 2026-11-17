@@ -79,6 +79,11 @@ describe("workoutHash", () => {
     expect(workoutHash(workout)).toBe(workoutHash(JSON.parse(JSON.stringify(workout))));
     expect(workoutHash({ ...workout, steps: workout.steps.slice(1) })).not.toBe(workoutHash(workout));
   });
+
+  it("leaves the schema version out, so a run started before the version 2 deploy still restores", () => {
+    const w = { v: 1, sport: "run", name: "Run", steps: [{ type: "work", end: { type: "lap" } }] };
+    expect(workoutHash([{ ...w, v: 2 }])).toBe(workoutHash([w]));
+  });
 });
 
 describe("player events", () => {
