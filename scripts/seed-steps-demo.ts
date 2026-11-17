@@ -14,6 +14,8 @@
  *                           ride of the bike ride logger mockups
  *                           (docs/plans/bike-ride-logger.md), today.
  *   steps-noftp@demo.local  the same ride with no thresholds set.
+ *   steps-hand@demo.local   the same ride with FTP and LTHR, for "Log by hand"
+ *                           (a ride logged without ride mode).
  *
  * Dates are relative to the run day. Each run deletes the demo accounts (and
  * with them all their data) and makes them again. No other account is touched.
@@ -30,6 +32,7 @@ const TRI = "steps-tri@demo.local";
 const LIFT = "steps-lift@demo.local";
 const RIDE = "steps-ride@demo.local";
 const NOFTP = "steps-noftp@demo.local";
+const HAND = "steps-hand@demo.local";
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "postgres"]);
 const DEMO_TZ = "Europe/Oslo";
 
@@ -130,7 +133,7 @@ async function main() {
 
   type Ctx = { userId: string; writer: "user" };
 
-  const old = await db.select({ id: s.users.id }).from(s.users).where(inArray(s.users.email, [TRI, LIFT, RIDE, NOFTP]));
+  const old = await db.select({ id: s.users.id }).from(s.users).where(inArray(s.users.email, [TRI, LIFT, RIDE, NOFTP, HAND]));
   if (old.length) {
     const ids = old.map((u) => u.id);
     await db.delete(s.planRevisions).where(inArray(s.planRevisions.userId, ids));
@@ -251,10 +254,11 @@ async function main() {
   const upper = await strengthProgram(liftCtx, "Upper A");
   await weekdayCycle(liftCtx, "Strength block", [{ dayOfWeek: dow(today), programId: upper }], mondayOf(today));
 
-  // ── steps-ride and steps-noftp ────────────────────────────────────────────
+  // ── steps-ride, steps-noftp and steps-hand ────────────────────────────────
   for (const [email, name, thresholds] of [
     [RIDE, "Ride Demo", true],
     [NOFTP, "No FTP Demo", false],
+    [HAND, "Hand Demo", true],
   ] as const) {
     const id = await makeUser(email, name, true);
     const ctx: Ctx = { userId: id, writer: "user" };
@@ -268,7 +272,7 @@ async function main() {
     await weekdayCycle(ctx, "Base · Week 1", [{ dayOfWeek: dow(today), programId: ride }], mondayOf(today));
   }
 
-  console.log(`Demo accounts ready (password "${DEMO_PASSWORD}"): ${TRI}, ${LIFT}, ${RIDE}, ${NOFTP}`);
+  console.log(`Demo accounts ready (password "${DEMO_PASSWORD}"): ${TRI}, ${LIFT}, ${RIDE}, ${NOFTP}, ${HAND}`);
   process.exit(0);
 }
 

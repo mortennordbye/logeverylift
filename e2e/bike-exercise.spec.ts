@@ -71,7 +71,7 @@ test("an endurance user's bike exercise shows the ride, switches mode, starts th
   await expect(page.getByTestId("ride-step").nth(1)).toContainText("Talk in short sentences");
   await expect(page.getByTestId("ride-step").nth(1)).toContainText("Z2-3 · 85-95 rpm");
 
-  await expect(page.getByRole("link", { name: "Log by hand" })).toHaveAttribute("href", `/programs/${programId}/workout/exercises/${peId}?hand=1`);
+  await expect(page.getByRole("link", { name: "Log by hand" })).toHaveAttribute("href", new RegExp(`/programs/${programId}/workout/exercises/${peId}\\?hand=1&mode=(indoor|outdoor)$`));
 
   await page.getByRole("button", { name: "Change to Outdoor" }).click();
   await expect(page.getByTestId("ride-profile")).toHaveCount(0);
@@ -98,10 +98,10 @@ test("an endurance user's bike exercise shows the ride, switches mode, starts th
   await page.goto(`/programs/${programId}/workout/exercises/${peId}`);
   await expect(page.getByTestId("ride-mode").filter({ visible: true })).toHaveText("Outdoor");
 
-  // ?hand=1 keeps today's set list.
+  // ?hand=1 while the ride runs: the bike screen with Resume, no results table (4.3).
   await page.goto(`/programs/${programId}/workout/exercises/${peId}?hand=1`);
-  await expect(page.getByRole("button", { name: "Progression settings" })).toBeVisible();
-  await expect(page.getByTestId("bike-exercise")).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Resume" })).toBeVisible();
+  await expect(page.getByTestId("ride-results")).toHaveCount(0);
 });
 
 test("a user without endurance features keeps the set list on a bike exercise", async ({ page }, testInfo) => {
