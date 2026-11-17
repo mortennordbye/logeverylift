@@ -223,7 +223,7 @@ function zoneChip(step: WorkoutStep, ftp: number | null): string | null {
 }
 
 /** Watts of a step: "99 to 135 W", "135-145 W", "under 97 W"; null without watts. */
-function wattsText(s: RidePlanStep): string | null {
+export function wattsText(s: Pick<RidePlanStep, "power" | "step">): string | null {
   const p = s.power;
   if (!p) return null;
   if (s.step.ramp && !s.step.target) return `${p.from} to ${p.to} W`;

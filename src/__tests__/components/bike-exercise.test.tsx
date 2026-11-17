@@ -35,7 +35,7 @@ function data(thresholds: ThresholdValues, defaultMode: "indoor" | "outdoor" = "
     const plan = buildRidePlan(workout, [1, 2, 3], thresholds, mode);
     return { numbers: plannedRideNumbers(plan), chart: rideChart(plan), rows: bikeStepRows(plan) };
   };
-  return { defaultMode, indoor: view("indoor"), outdoor: view("outdoor"), ftp: thresholds.ftp ?? null, lthr: thresholds.lthr_bike ?? null, liveRide };
+  return { defaultMode, indoor: view("indoor"), outdoor: view("outdoor"), ftp: thresholds.ftp ?? null, lthr: thresholds.lthr_bike ?? null, liveRide, doneRide: null };
 }
 
 const targets = () => screen.getAllByTestId("ride-step-target").map((t) => t.textContent);

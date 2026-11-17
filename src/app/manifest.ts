@@ -30,7 +30,9 @@ export default function manifest(): MetadataRoute.Manifest {
     display: "standalone", // Runs like a native app
     background_color: "#ffffff",
     theme_color: "#000000",
-    orientation: "portrait-primary", // Best for workout logging
+    // Any, so ride mode can turn to landscape on a trainer mount; every other
+    // screen covers landscape with "Rotate your phone" (globals.css).
+    orientation: "any",
     categories: ["health", "fitness", "lifestyle"],
     icons: [
       {

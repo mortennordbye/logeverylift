@@ -6,12 +6,13 @@
  * plan, not a set list. Mode row with Change, the planned power chart and
  * numbers, one row per step, and "Start ride" pinned at the bottom.
  *
- * Start ride starts the server ride and opens ride mode (`?ride=1`, built in
- * step 3). "Log by hand" opens today's set list (`?hand=1`) until the
- * results table of step 4 replaces it.
+ * Start ride starts the server ride and opens ride mode (`?ride=1`). "Log by
+ * hand" opens today's set list (`?hand=1`) until the results table of step 4
+ * replaces it. After a ride the bar says "Ride done".
  */
 
 import { RideProfileChart, zoneOpacity } from "@/components/features/bike/RideProfileChart";
+import { armRide } from "@/components/features/bike/useRide";
 import { BackLink } from "@/components/ui/BackLink";
 import { useWorkoutSession } from "@/contexts/workout-session-context";
 import type { RideMode } from "@/db/schema/rides";
@@ -31,11 +32,14 @@ export function BikeExercise({
   programExerciseId,
   exerciseName,
   data,
+  onlyExercise = true,
 }: {
   programId: number;
   programExerciseId: number;
   exerciseName: string;
   data: BikeExerciseData;
+  /** The program holds this exercise only: Done after a ride goes home, else back to the workout. */
+  onlyExercise?: boolean;
 }) {
   const [mode, setMode] = useState<RideMode>(data.defaultMode);
   const [starting, setStarting] = useState(false);
@@ -65,6 +69,8 @@ export function BikeExercise({
     }
     setStarting(true);
     setError(null);
+    // Inside the tap: sound and the screen wake lock need a user gesture (iOS).
+    armRide();
     const res = await callAction(startRide({ sessionId: session.sessionId, programExerciseId, mode, clientId: crypto.randomUUID() }));
     if (res.success) router.replace(`${pathname}?ride=1`);
     else setError(res.error);
@@ -178,8 +184,28 @@ export function BikeExercise({
         {data.liveRide ? (
           <>
             <p className="text-sm text-center text-muted-foreground">Ride running</p>
-            <Link href={`${pathname}?ride=1`} className="min-h-12 rounded-2xl bg-brand-fill px-4 text-base font-semibold text-white inline-flex items-center justify-center active:opacity-80">
+            <Link
+              href={`${pathname}?ride=1`}
+              onClick={() => armRide()}
+              className="min-h-12 rounded-2xl bg-brand-fill px-4 text-base font-semibold text-white inline-flex items-center justify-center active:opacity-80"
+            >
               Resume
+            </Link>
+          </>
+        ) : data.doneRide ? (
+          <>
+            <p className="text-sm text-center text-muted-foreground" data-testid="ride-done-line">
+              {data.doneRide.endedEarly ? "Ride ended early" : "Ride done"}
+            </p>
+            {/* A ride that ended while the app was closed: ride mode saves its last steps and finishes the workout. */}
+            <Link
+              href={onlyExercise && data.doneRide.sessionOpen ? `${pathname}?ride=1` : onlyExercise ? "/" : `/programs/${programId}/workout`}
+              className="min-h-12 rounded-2xl bg-brand-fill px-4 text-base font-semibold text-white inline-flex items-center justify-center active:opacity-80"
+            >
+              {onlyExercise && data.doneRide.sessionOpen ? "Save the ride" : "Done"}
+            </Link>
+            <Link href={`${pathname}?hand=1`} className="min-h-11 inline-flex items-center justify-center text-sm font-medium text-primary active:opacity-70">
+              Log by hand
             </Link>
           </>
         ) : (
