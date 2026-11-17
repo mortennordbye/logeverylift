@@ -264,7 +264,7 @@ Without a bike LTHR, heart rate targets become effort targets (Z2 4, Z3 6, Z4 7)
 | Step | Status |
 |---|---|
 | 0 Groundwork | done on `feat/bike-ride-logger` (no PR of its own) |
-| 1 One ride model | todo |
+| 1 One ride model | done on `feat/bike-ride-logger` (no PR of its own) |
 | 2 Bike exercise screen | todo |
 | 3 Ride mode | todo |
 | 4 Results and numbers | todo |
@@ -401,3 +401,12 @@ Without a bike LTHR, heart rate targets become effort targets (Z2 4, Z3 6, Z4 7)
 - Step 0, `workout_sessions.ended_early`: the column only. The finish flow (step 3) writes it; `startRide` writes `ride_mode`.
 - Step 0, weekly sync: a ramp or free step keeps its target; the sync writes no zone on it.
 - Step 0, ownership: `startRide` needs the bike exercise to be in the program of the open workout session.
+- Step 1, rest on a plain set: a rest of 5 s or more after a set becomes a `rest` step after it (the step model has no rest on a step, and the workout screen would run the row's rest too). The rest after the last set is dropped. The work row keeps its id, anchor and role; its own rest is set to 0.
+- Step 1, warm-up: `plainSetsToWorkout` now keeps a warm-up set as a `warmup` step, also for "Edit as steps".
+- Step 1, one place for all writers: `settleStepRows` (`src/lib/program-steps-db.ts`) ends every set write. It turns a bike slot whose sets are all plain into steps for an endurance user, then runs the step check. The app's slot writes, set add, update and delete, import, `edit_program_exercise`, the triathlon plan, a copied share and a one-day copy all call it. A plain set added to a slot that already holds steps is still refused by the check. Restore is the one writer that may bring plain sets back.
+- Step 1, safe paths: the admin seed data (`src/lib/actions/admin.ts`) and `addWarmupSets` write only strength sets; the demo seed scripts run outside the app.
+- Step 1, after a restore: the move never writes a program twice (it skips a program with a "Bike sets became steps" revision), so a restore of the old sets stays until the next edit of that slot.
+- Step 1, restore across the move: a restore that turns a step back into a plain set takes the zone and rest from the restored revision; only the sync's scaled time or distance stays current (`restoredSetValues`).
+- Step 1, open workout: the move skips a program with a workout in progress and does it at the next boot.
+- Step 1, endurance turned on later: `setUserEndurance` runs the move for that user at once.
+- Step 1, bike sheet with no distance: `LogRunModal` logs a ride on its time alone (no distance sent); the set editors open a new ride on Time.
