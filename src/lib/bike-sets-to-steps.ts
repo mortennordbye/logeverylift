@@ -9,14 +9,15 @@
  * endurance features on. Idempotent: a program with no plain bike sets is not
  * read again, and a program this move already wrote is never moved twice, so a
  * restore of its old sets stays. A program with a workout in progress waits
- * for the next run.
+ * for the next run; one left open over 10 hours is abandoned and does not
+ * hold it back. Sets no step can hold stay plain, with a log line.
  */
 
 import { db } from "@/db";
 import { exercises, planRevisions, programExercises, programSets, programs, users } from "@/db/schema";
 import { liveProgramExercises, liveProgramSets, livePrograms } from "@/lib/plan-live";
-import { openWorkoutOn, planWrite } from "@/lib/plan-revisions";
-import { bikeSetsToSteps } from "@/lib/program-steps-db";
+import { planWrite } from "@/lib/plan-revisions";
+import { recentOpenWorkoutOn, settleStepRows } from "@/lib/program-steps-db";
 import { and, eq, isNull, notExists } from "drizzle-orm";
 
 export const BIKE_STEPS_REASON = "Bike sets became steps";
@@ -58,14 +59,14 @@ export async function migrateBikeSetsToSteps(opts: { userId?: string } = {}): Pr
   for (const { programId, userId } of candidates) {
     try {
       const { result } = await planWrite({ userId, writer: "sync", reason: BIKE_STEPS_REASON }, async (w) => {
-        if (await openWorkoutOn(w.tx, userId, [programId])) return false;
+        if (await recentOpenWorkoutOn(w.tx, userId, programId)) return false;
         await w.touch({ type: "program", id: programId });
         const slots = await w.tx
           .select({ id: programExercises.id })
           .from(programExercises)
           .innerJoin(exercises, eq(exercises.id, programExercises.exerciseId))
           .where(and(eq(programExercises.programId, programId), liveProgramExercises, eq(exercises.discipline, "bike")));
-        for (const s of slots) await bikeSetsToSteps(w.tx, s.id);
+        for (const s of slots) await settleStepRows(w.tx, s.id);
         return true;
       });
       counts[result ? "moved" : "waiting"]++;

@@ -1092,8 +1092,11 @@ export async function updateProgramSet(
         return { kind: "applied", ps } as const;
       }
       const [ps] = await w.tx.update(programSets).set(updates).where(eq(programSets.id, id)).returning();
-      await settleStepRows(w.tx, check.programExerciseId);
-      return { kind: "applied", ps } as const;
+      // A bike slot may have become steps: return the row as it is now.
+      if (!(await settleStepRows(w.tx, check.programExerciseId))) return { kind: "applied", ps } as const;
+      // plan-read: includes deleted (re-reads the row this write just changed)
+      const [after] = await w.tx.select().from(programSets).where(eq(programSets.id, id));
+      return { kind: "applied", ps: after } as const;
     });
     if (result.kind === "conflict") {
       return {

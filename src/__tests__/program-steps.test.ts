@@ -227,15 +227,16 @@ describe("plainSetsToStepRows (bike-ride-logger, step 1)", () => {
     expect(out.rows.map((r) => [r.setNumber, r.from, r.stepKind, r.durationSeconds, r.targets])).toEqual([
       [1, 1, "warmup", 900, [{ metric: "hr", anchor: "lthr", zone: 2 }]],
       [2, null, "rest", 60, null],
-      // A rest under 5 s is no step.
       [3, 2, "work", 900, [{ metric: "hr", anchor: "lthr", zone: 3 }]],
-      [4, 3, "work", 300, [{ metric: "hr", anchor: "lthr", zone: 4 }]],
+      // A rest under 5 s rounds up to the 5 s a step needs.
+      [4, null, "rest", 5, null],
+      [5, 3, "work", 300, [{ metric: "hr", anchor: "lthr", zone: 4 }]],
     ]);
   });
 
   it("returns the schema problem for a set no step can hold", async () => {
     const { plainSetsToStepRows } = await import("@/lib/utils/program-steps");
-    const out = plainSetsToStepRows([plain(1, { durationSeconds: 2 })], { sport: "bike", name: "Ride" });
+    const out = plainSetsToStepRows([plain(1, { durationSeconds: 13 * 3600 })], { sport: "bike", name: "Ride" });
     expect("error" in out && out.error).toMatch(/seconds/);
   });
 });

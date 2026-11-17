@@ -20,6 +20,7 @@ import { plannedRows, type PlannedRow } from "@/lib/utils/step-results";
 import { DEFAULT_UNITS, type Units } from "@/lib/utils/units";
 import { flattenWorkout, type PlayStep } from "@/lib/utils/workout-player";
 import {
+  WORKOUT_LIMITS,
   parseWorkout,
   type Workout,
   type WorkoutNode,
@@ -358,14 +359,17 @@ export type PlainEnduranceSet = {
   targetHeartRateZone: number | null;
   sessionRole: string | null;
   setType?: string | null;
+  peakDurationSeconds?: number | null;
+  peakDistanceMeters?: number | null;
 };
 
 /**
  * Older plain endurance sets as a step tree (docs/plans/one-program-model.md,
  * step 4): each set becomes one step, a warm-up set a warm-up step, a work
  * rep or zone 4-5 a work step, zone 1 an easy step, the rest steady work. Its
- * zone becomes an HR zone target on LTHR (bike and run). A set with a distance ends on it, else on
- * its time, else on the lap button. Rest after a set stays on the set.
+ * zone becomes an HR zone target on LTHR (bike and run). A set ends on the
+ * end its weekly-sync anchor scales (time or distance), else on its distance,
+ * else on its time, else on the lap button. Rest after a set stays on the set.
  */
 export function plainSetsToWorkout(sets: PlainEnduranceSet[], meta: { sport: WorkoutSport; name: string; poolLengthM?: number | null }): Workout {
   const steps: WorkoutStep[] = [...sets]
@@ -373,12 +377,14 @@ export function plainSetsToWorkout(sets: PlainEnduranceSet[], meta: { sport: Wor
     .map((s) => {
       const zone = s.targetHeartRateZone;
       const type: WorkoutStep["type"] = s.setType === "warmup" ? "warmup" : s.sessionRole === "work" || (zone ?? 0) >= 4 ? "work" : zone === 1 ? "recovery" : "work";
-      const end: WorkoutStep["end"] =
-        s.distanceMeters != null && s.distanceMeters > 0
-          ? { type: "distance", meters: s.distanceMeters }
-          : s.durationSeconds != null && s.durationSeconds > 0
-            ? { type: "time", seconds: s.durationSeconds }
-            : { type: "lap" };
+      const hasDistance = s.distanceMeters != null && s.distanceMeters > 0;
+      const hasTime = s.durationSeconds != null && s.durationSeconds > 0;
+      const onTime = hasTime && (!hasDistance || (s.peakDurationSeconds != null && s.peakDistanceMeters == null));
+      const end: WorkoutStep["end"] = onTime
+        ? { type: "time", seconds: s.durationSeconds! }
+        : hasDistance
+          ? { type: "distance", meters: s.distanceMeters! }
+          : { type: "lap" };
       const target: WorkoutTarget | undefined = zone != null && meta.sport !== "swim" ? { metric: "hr", anchor: "lthr", zone } : undefined;
       return { type, end, ...(target && { target }) };
     });
@@ -389,23 +395,30 @@ export function plainSetsToWorkout(sets: PlainEnduranceSet[], meta: { sport: Wor
  * Plain bike sets as the step rows of the one-time move
  * (docs/plans/bike-ride-logger.md, D3): plainSetsToWorkout, and a rest after
  * a set becomes a rest step after it, because no step reader reads a step
- * row's own rest. The last set's rest is dropped, and so is a rest under the
- * 5 s a step needs. `from` is the setNumber of the plain set a row came from
+ * row's own rest. The last set's rest is dropped. A time or distance under a
+ * step's minimum (5 s, 10 m) is raised to it, a rest too. `from` is the setNumber of the plain set a row came from
  * (null on a rest step). The error is the schema check's first problems.
  */
 export function plainSetsToStepRows(
   sets: (PlainEnduranceSet & { restTimeSeconds: number })[],
   meta: { sport: WorkoutSport; name: string },
 ): { rows: (StepFields & { setNumber: number; from: number | null })[] } | { error: string } {
-  const sorted = [...sets].sort((a, b) => a.setNumber - b.setNumber);
+  const { seconds, meters } = WORKOUT_LIMITS;
+  const sorted = [...sets]
+    .sort((a, b) => a.setNumber - b.setNumber)
+    .map((s) => ({
+      ...s,
+      durationSeconds: s.durationSeconds != null && s.durationSeconds > 0 ? Math.max(seconds.min, s.durationSeconds) : s.durationSeconds,
+      distanceMeters: s.distanceMeters != null && s.distanceMeters > 0 ? Math.max(meters.min, s.distanceMeters) : s.distanceMeters,
+    }));
   const steps = plainSetsToWorkout(sorted, meta).steps;
   const nodes: WorkoutNode[] = [];
   const from: (number | null)[] = [];
   for (const [i, s] of sorted.entries()) {
     nodes.push(steps[i]);
     from.push(s.setNumber);
-    if (i < sorted.length - 1 && s.restTimeSeconds >= 5) {
-      nodes.push({ type: "rest", end: { type: "time", seconds: s.restTimeSeconds } });
+    if (i < sorted.length - 1 && s.restTimeSeconds > 0) {
+      nodes.push({ type: "rest", end: { type: "time", seconds: Math.max(seconds.min, s.restTimeSeconds) } });
       from.push(null);
     }
   }

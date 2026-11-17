@@ -5,7 +5,7 @@
  */
 import { db } from "@/db";
 import { athleteProfiles, exercises, planRevisions, programExercises, programSets, programShares, programs, trainingCycleSlots, trainingCycles, workoutSessions } from "@/db/schema";
-import { addProgramSet, exportProgram, importProgram } from "@/lib/actions/programs";
+import { addProgramSet, exportProgram, importProgram, reorderProgramSets, updateProgramSet } from "@/lib/actions/programs";
 import { copySharedProgram } from "@/lib/actions/program-shares";
 import { setUserEndurance } from "@/lib/actions/admin";
 import { BIKE_STEPS_REASON, migrateBikeSetsToSteps } from "@/lib/bike-sets-to-steps";
@@ -14,6 +14,7 @@ import { syncPeriodizedTargets } from "@/lib/periodization-sync";
 import { restoreRevision } from "@/lib/plan-revisions";
 import { createTriathlonPlan } from "@/lib/triathlon-plan";
 import { addDays, toDateStr } from "@/lib/utils/cycle-position";
+import { cycleLoad, intervalPhaseRecipe } from "@/lib/utils/periodization";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { createExercise, createProgram, createSession, createUser } from "./factories";
@@ -133,8 +134,96 @@ describe("migrateBikeSetsToSteps", () => {
     expect(await migrateBikeSetsToSteps()).toEqual({ moved: 0, waiting: 1, failed: 0 });
     expect((await liveSets(slots[0].programExerciseId)).every((r) => r.stepKind == null)).toBe(true);
 
+    // A write during the workout leaves the slot plain too: one policy.
+    const res = await updateProgramSet({ id: slots[0].setIds[2], durationSeconds: 360 });
+    expect(res.success).toBe(true);
+    expect((await liveSets(slots[0].programExerciseId)).every((r) => r.stepKind == null)).toBe(true);
+
     await db.update(workoutSessions).set({ isCompleted: true }).where(eq(workoutSessions.id, session.id));
     expect(await migrateBikeSetsToSteps()).toEqual({ moved: 1, waiting: 0, failed: 0 });
+  });
+
+  it("an abandoned workout older than 10 hours does not hold the move back", async () => {
+    const { program, slots } = await createProgram(me, [{ exerciseId: bike, sets: plainRide }]);
+    await createSession(me, program.id, { startTime: new Date(Date.now() - 11 * 3600 * 1000) });
+    expect(await migrateBikeSetsToSteps()).toEqual({ moved: 1, waiting: 0, failed: 0 });
+    expect((await liveSets(slots[0].programExerciseId))[0].stepKind).toBe("warmup");
+  });
+
+  it("a set with time and distance keeps the anchor it ramps on, and its role", async () => {
+    const { slots } = await createProgram(me, [
+      { exerciseId: bike, sets: [{ targetReps: null, weightKg: null, durationSeconds: 3600, distanceMeters: 30000, sessionRole: "work", peakDurationSeconds: 3600, restTimeSeconds: 0 }] },
+    ]);
+    await migrateBikeSetsToSteps();
+    const [row] = await liveSets(slots[0].programExerciseId);
+    expect([row.stepKind, row.durationSeconds, row.distanceMeters, row.peakDurationSeconds, row.sessionRole]).toEqual(["work", 3600, null, 3600, "work"]);
+  });
+
+  it("clamps a set under the step minimum, and leaves a slot no step can hold plain without failing", async () => {
+    const short = await createProgram(me, [{ exerciseId: bike, sets: [{ targetReps: null, weightKg: null, durationSeconds: 3, restTimeSeconds: 0 }] }]);
+    const long = await createProgram(me, [{ exerciseId: bike, sets: [{ targetReps: null, weightKg: null, durationSeconds: 13 * 3600, restTimeSeconds: 0 }] }]);
+    expect((await migrateBikeSetsToSteps()).failed).toBe(0);
+    expect((await liveSets(short.slots[0].programExerciseId)).map((r) => [r.stepKind, r.durationSeconds])).toEqual([["work", 5]]);
+    expect((await liveSets(long.slots[0].programExerciseId))[0].stepKind).toBeNull();
+    // A later write to that slot still works and keeps it plain.
+    const res = await updateProgramSet({ id: long.slots[0].setIds[0], durationSeconds: 13 * 3600 + 60 });
+    expect(res.success, !res.success ? res.error : "").toBe(true);
+    expect((await liveSets(long.slots[0].programExerciseId))[0].stepKind).toBeNull();
+  });
+
+  it("a rest edit on a moved slot lands on the rest step after the set, never on the set", async () => {
+    const { slots } = await createProgram(me, [{ exerciseId: bike, sets: plainRide }]);
+    const pe = slots[0].programExerciseId;
+    await migrateBikeSetsToSteps();
+    const [warm, , work, , cool] = await liveSets(pe);
+
+    const edited = await updateProgramSet({ id: work.id, restTimeSeconds: 90 });
+    expect(edited.success).toBe(true);
+    // The last set had no rest step: one is added after it.
+    expect((await updateProgramSet({ id: cool.id, restTimeSeconds: 45 })).success).toBe(true);
+    const rows = await liveSets(pe);
+    expect(rows.map((r) => [r.setNumber, r.stepKind, r.durationSeconds, r.restTimeSeconds])).toEqual([
+      [1, "warmup", 600, 0],
+      [2, "rest", 60, 0],
+      [3, "work", 900, 0],
+      [4, "rest", 90, 0],
+      [5, "recovery", 300, 0],
+      [6, "rest", 45, 0],
+    ]);
+    expect(rows[0].id).toBe(warm.id);
+  });
+
+  it("a drag on a plain slot that moves it, then the screen's rest writes, leaves no rest on a step", async () => {
+    const { slots } = await createProgram(me, [{ exerciseId: bike, sets: plainRide }]);
+    const pe = slots[0].programExerciseId;
+    const [a, b, c] = slots[0].setIds;
+    // The screen still shows plain sets: it sends the new order, then the rests it moved.
+    expect((await reorderProgramSets(pe, [b, a, c])).success).toBe(true);
+    expect((await updateProgramSet({ id: b, restTimeSeconds: 30 })).success).toBe(true);
+    const rows = await liveSets(pe);
+    expect(rows.every((r) => r.stepKind != null && r.restTimeSeconds === 0)).toBe(true);
+    const after = rows.findIndex((r) => r.id === b);
+    expect([rows[after + 1].stepKind, rows[after + 1].durationSeconds]).toEqual(["rest", 30]);
+  });
+
+  it("the step editor's save over plain sets carries no rest on a bike step", async () => {
+    const { slots } = await createProgram(me, [{ exerciseId: bike, sets: plainRide }]);
+    const pe = slots[0].programExerciseId;
+    // A workout keeps the slot plain, as on a screen opened before the move.
+    await createSession(me, (await db.select({ id: programExercises.programId }).from(programExercises).where(eq(programExercises.id, pe)))[0].id);
+    const { saveExerciseSteps } = await import("@/lib/actions/program-steps");
+    const res = await saveExerciseSteps({
+      programExerciseId: pe,
+      workout: { v: 2, sport: "bike", name: "Ride", steps: [{ type: "work", end: { type: "time", seconds: 600 } }, { type: "work", end: { type: "time", seconds: 600 } }] },
+    });
+    expect(res.success, !res.success ? res.error : "").toBe(true);
+    expect((await liveSets(pe)).map((r) => r.restTimeSeconds)).toEqual([0, 0]);
+  });
+
+  it("updateProgramSet returns the row as it is after a move", async () => {
+    const { slots } = await createProgram(me, [{ exerciseId: bike, sets: plainRide }]);
+    const res = await updateProgramSet({ id: slots[0].setIds[1], durationSeconds: 1200 });
+    expect(res.success && [res.data.stepKind, res.data.setNumber, res.data.durationSeconds]).toEqual(["work", 3, 1200]);
   });
 
   it("the weekly sync still moves a moved zone target", async () => {
@@ -148,6 +237,11 @@ describe("migrateBikeSetsToSteps", () => {
     expect(work.stepKind).toBe("work");
     expect((work.targets as { zone: number }[])[0].zone).not.toBe(3);
     expect(work.targetHeartRateZone).toBeNull();
+    // The phase's rest goes to the rest step after the work step, never onto the step itself.
+    const recipe = intervalPhaseRecipe(cycleLoad({ goal: "build", athleteLevel: "intermediate" }, 6, 8).phase);
+    const rows = await liveSets(slots[0].programExerciseId);
+    expect(rows.every((r) => r.restTimeSeconds === 0)).toBe(true);
+    expect([rows[3].stepKind, rows[3].durationSeconds]).toEqual(["rest", recipe.restSeconds]);
   });
 
   it("runs for a user when an admin turns endurance on", async () => {

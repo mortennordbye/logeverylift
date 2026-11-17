@@ -6,7 +6,7 @@
  */
 
 import { db } from "@/db";
-import { garminDailyMetrics, programExercises, programSets, trainingCycleSlots, trainingCycles, workoutSessions, workoutSets } from "@/db/schema";
+import { exercises, garminDailyMetrics, programExercises, programSets, trainingCycleSlots, trainingCycles, workoutSessions, workoutSets } from "@/db/schema";
 import { userToday } from "@/lib/user-settings";
 import { enduranceEnabledFor } from "@/lib/endurance";
 import { liveCycles, liveProgramExercises, liveProgramSets, livePrograms } from "@/lib/plan-live";
@@ -28,7 +28,7 @@ import {
   type TrainingGoal,
   type WearableSignals,
 } from "@/lib/utils/periodization";
-import { and, asc, eq, gte, inArray, isNotNull, or, sql } from "drizzle-orm";
+import { and, asc, eq, gt, gte, inArray, isNotNull, or, sql } from "drizzle-orm";
 
 /**
  * A set is periodized when it carries either peak anchor. Shared by the sync and
@@ -315,10 +315,14 @@ export async function syncPeriodizedTargets(
         targets: programSets.targets,
         ramp: programSets.ramp,
         free: programSets.free,
+        setNumber: programSets.setNumber,
+        programExerciseId: programSets.programExerciseId,
+        discipline: exercises.discipline,
         programId: programExercises.programId,
       })
       .from(programSets)
       .innerJoin(programExercises, eq(programSets.programExerciseId, programExercises.id))
+      .innerJoin(exercises, eq(exercises.id, programExercises.exerciseId))
       .where(
         and(
           inArray(programExercises.programId, programIds),
@@ -345,7 +349,21 @@ export async function syncPeriodizedTargets(
           // Phase-aware: the quality session's hard reps swap zone/recovery by phase.
           // A transition phase leaves them alone (owner decision 2).
           if (ps.sessionRole === "work" && phase !== "transition") {
-            update.restTimeSeconds = recipe.restSeconds;
+            if (ps.stepKind != null && ps.discipline === "bike") {
+              // A bike step has no rest of its own (docs/plans/bike-ride-logger.md,
+              // step 1): the phase's rest goes to the rest step right after it.
+              const [next] = await tx
+                .select({ id: programSets.id, stepKind: programSets.stepKind, blockId: programSets.blockId })
+                .from(programSets)
+                .where(and(eq(programSets.programExerciseId, ps.programExerciseId), gt(programSets.setNumber, ps.setNumber), liveProgramSets))
+                .orderBy(asc(programSets.setNumber))
+                .limit(1);
+              if (next?.stepKind === "rest" && next.blockId == null && recipe.restSeconds >= 5) {
+                await tx.update(programSets).set({ durationSeconds: recipe.restSeconds }).where(eq(programSets.id, next.id));
+              }
+            } else {
+              update.restTimeSeconds = recipe.restSeconds;
+            }
             // A step's own target wins over the old zone field (decision 3):
             // a zone target takes the phase's zone, a percent or pace target
             // was set on purpose and stays (docs/plans/one-program-model.md, decision 4).
