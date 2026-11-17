@@ -235,6 +235,13 @@ export const programSets = pgTable("program_sets", {
   sendOffSeconds: integer("send_off_seconds"),
   // A short cue shown with the step ("high elbow", "build each 25").
   note: text("note"),
+  // Bike steps (docs/plans/bike-ride-logger.md, step 0). A ramp
+  // ({anchor, from, to}) is the main target in place of `targets`; a free
+  // step has no target; the outdoor target is for an outdoor ride. Checked by
+  // the step schema in workout-steps.ts.
+  ramp: jsonb("ramp"),
+  free: boolean("free").notNull().default(false),
+  outdoorTarget: jsonb("outdoor_target"),
   // Soft delete, as on programs. A logged set keeps pointing at a deleted set.
   deletedAt: timestamp("deleted_at"),
 });

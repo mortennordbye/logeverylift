@@ -162,6 +162,9 @@ function setValues(programExerciseId: number, s: SetInput) {
     equipment: s.equipment ?? null,
     sendOffSeconds: s.sendOffSeconds ?? null,
     note: s.note ?? null,
+    ramp: s.ramp ?? null,
+    free: s.free ?? false,
+    outdoorTarget: s.outdoorTarget ?? null,
   };
 }
 
@@ -178,6 +181,8 @@ function setsFromWorkout(input: unknown): { sets: SetInput[] } | { error: string
       targets: (r.targets as SetInput["targets"]) ?? null,
       stroke: (r.stroke as SetInput["stroke"]) ?? null,
       equipment: (r.equipment as SetInput["equipment"]) ?? null,
+      ramp: (r.ramp as SetInput["ramp"]) ?? null,
+      outdoorTarget: (r.outdoorTarget as SetInput["outdoorTarget"]) ?? null,
     })),
   };
 }

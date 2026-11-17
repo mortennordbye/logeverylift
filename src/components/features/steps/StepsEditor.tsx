@@ -19,6 +19,7 @@ import {
   SWIM_STROKES,
   estimateWorkout,
   parseWorkout,
+  resolveStepTarget,
   resolveTarget,
   type ThresholdValues,
   type Workout,
@@ -354,7 +355,7 @@ function endText(step: WorkoutStep, sport: Sport, units: Units): string {
 }
 
 function targetText(step: WorkoutStep, sport: Sport, thresholds: ThresholdValues, units: Units): string | null {
-  const parts = [step.target, step.target2].filter((t): t is WorkoutTarget => !!t).map((t) => resolveTarget(t, sport, thresholds, units).text);
+  const parts = [resolveStepTarget(step, sport, thresholds, units)?.text, step.target2 && resolveTarget(step.target2, sport, thresholds, units).text].filter((t): t is string => !!t);
   return parts.length ? parts.join(" · ") : null;
 }
 
@@ -444,15 +445,16 @@ function StepSheet({
   onDelete: () => void;
 }) {
   const [s, setS] = useState<WorkoutStep>(step);
-  const choice = choiceOf(s.target);
+  // A ramp or a free spin (written by the assistant) is none of the choices.
+  const choice = s.ramp || s.free ? null : choiceOf(s.target);
   const yards = sport === "swim" && units.swim === "yd";
   const miles = sport !== "swim" && units.distance === "mi";
   const distUnit = sport === "swim" ? (yards ? "yd" : "m") : miles ? "mi" : "km";
   const toMeters = (v: number) => (sport === "swim" ? (yards ? v * 0.9144 : v) : miles ? v * 1609.344 : v * 1000);
   const fromMeters = (m: number) => (sport === "swim" ? (yards ? Math.round(m / 0.9144) : Math.round(m)) : miles ? +(m / 1609.344).toFixed(2) : +(m / 1000).toFixed(2));
   const set = (patch: Partial<WorkoutStep>) => setS((x) => ({ ...x, ...patch }));
-  const target = s.target ? resolveTarget(s.target, sport, thresholds, units) : null;
-  const one = parseWorkout({ v: 1, sport, name: "Step", steps: inBlock ? [{ type: "repeat", count: 2, steps: [s] }] : [s] });
+  const target = resolveStepTarget(s, sport, thresholds, units);
+  const one = parseWorkout({ v: 2, sport, name: "Step", steps: inBlock ? [{ type: "repeat", count: 2, steps: [s] }] : [s] });
   const problem = one.ok ? null : plainProblem(one.errors[0]);
 
   return (
@@ -519,7 +521,7 @@ function StepSheet({
         <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Target</h3>
         <div className="flex flex-wrap gap-2">
           {CHOICES[sport].map((c) => (
-            <button key={c.id} type="button" aria-pressed={choice === c.id} onClick={() => set({ target: defaultTarget(c.id), ...(c.id === "none" && { target2: undefined }) })} className={chip(choice === c.id)}>
+            <button key={c.id} type="button" aria-pressed={choice === c.id} onClick={() => set({ target: defaultTarget(c.id), ramp: undefined, free: undefined, ...(c.id === "none" && { target2: undefined }) })} className={chip(choice === c.id)}>
               {c.label}
             </button>
           ))}

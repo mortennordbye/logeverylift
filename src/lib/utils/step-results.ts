@@ -11,7 +11,8 @@ import { DEFAULT_UNITS, type Units } from "@/lib/utils/units";
 import {
   describeWorkout,
   estimateWorkout,
-  resolveTarget,
+  mainTarget,
+  resolveStepTarget,
   type ResolvedTarget,
   type ThresholdValues,
   type Workout,
@@ -66,7 +67,7 @@ export function plannedRows(workout: Workout, anchors: ThresholdValues, units: U
       text: describeWorkout(one, units),
       plannedSeconds: est.durationComplete && est.durationSeconds > 0 ? est.durationSeconds : null,
       plannedMeters: step.end.type === "distance" ? step.end.meters : est.distanceComplete && est.distanceMeters > 0 ? est.distanceMeters : null,
-      target: step.target ? resolveTarget(step.target, workout.sport, anchors, units) : null,
+      target: resolveStepTarget(step, workout.sport, anchors, units),
     };
   });
 }
@@ -76,7 +77,7 @@ export function workoutPlannedLoad(workout: Workout, anchors: ThresholdValues): 
   const steps: PlannedStep[] = flattenWorkout(workout).map((p) => {
     const step = p.step as WorkoutStep;
     const est = estimateWorkout({ ...workout, steps: [step] }, anchors);
-    return { type: step.type, seconds: est.durationComplete ? est.durationSeconds : null, target: step.target };
+    return { type: step.type, seconds: est.durationComplete ? est.durationSeconds : null, target: mainTarget(step) };
   });
   return plannedLoad(workout.sport, steps, loadAnchors(anchors));
 }

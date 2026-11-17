@@ -17,7 +17,8 @@ import { getUserSettings, userToday } from "@/lib/user-settings";
 import { toDateStr } from "@/lib/utils/cycle-position";
 import { formatSessionLength, loadText } from "@/lib/utils/format";
 import { workoutPlannedLoad } from "@/lib/utils/step-results";
-import { describeWorkout, estimateWorkout, resolveTarget, type WorkoutTarget } from "@/lib/utils/workout-steps";
+import { stepOfRow, type StepRow } from "@/lib/utils/program-steps";
+import { describeWorkout, estimateWorkout, resolveStepTarget, resolveTarget } from "@/lib/utils/workout-steps";
 import { and, asc, eq, isNotNull, sql } from "drizzle-orm";
 
 export type ProgramGuided = { totals: string; href: string | null };
@@ -76,8 +77,10 @@ export async function stepLabels(userId: string, programExerciseId: number): Pro
   const out: Record<number, StepLabel> = {};
   for (const { set } of rows) {
     const of = set.blockId != null ? rounds.get(set.blockId) : undefined;
-    const targets = Array.isArray(set.targets) ? (set.targets as WorkoutTarget[]) : [];
-    const text = targets.map((t) => resolveTarget(t, sport, anchors, units).text).filter(Boolean);
+    // The indoor targets: the main one (a target or a ramp) and its cap.
+    const step = stepOfRow(set as StepRow);
+    const main = step && resolveStepTarget(step, sport, anchors, units);
+    const text = [main?.text, step?.target2 && resolveTarget(step.target2, sport, anchors, units).text].filter((t): t is string => !!t);
     out[set.id] = { title: `${KIND_WORD[set.stepKind!]}${of ? ` · ${set.blockRound}/${of}` : ""}`, target: text.length ? text.join(" · ") : null };
   }
   return out;

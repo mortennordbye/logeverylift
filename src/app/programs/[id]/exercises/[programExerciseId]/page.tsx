@@ -49,7 +49,7 @@ export default async function ProgramExerciseDetailPage({ params, searchParams }
     const meta = { sport, name: program.name, poolLengthM: pe.poolLengthM };
     let initial: Workout;
     if (plain) initial = plainSetsToWorkout(pe.programSets, meta);
-    else if (pe.programSets.length === 0) initial = { v: 1, ...meta, poolLengthM: pe.poolLengthM ?? (sport === "swim" ? 25 : undefined), steps: [{ type: "work", end: sport === "swim" ? { type: "distance", meters: 100 } : { type: "time", seconds: 1800 } }] };
+    else if (pe.programSets.length === 0) initial = { v: 2, ...meta, poolLengthM: pe.poolLengthM ?? (sport === "swim" ? 25 : undefined), steps: [{ type: "work", end: sport === "swim" ? { type: "distance", meters: 100 } : { type: "time", seconds: 1800 } }] };
     else {
       const built = buildWorkout(pe.programSets as StepRow[], meta);
       initial = "workout" in built ? built.workout : plainSetsToWorkout([], meta);

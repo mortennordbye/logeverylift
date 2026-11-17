@@ -38,7 +38,7 @@ function toolsFor(userId: string) {
 }
 
 const intervals: Workout = {
-  v: 1,
+  v: 2,
   sport: "run",
   name: "Threshold",
   steps: [
@@ -221,7 +221,7 @@ describe("a structured program session in compliance (step 2)", () => {
     try {
       const run = await createExercise({ name: `Run ${Math.random()}`, category: "cardio", discipline: "run" });
       const timed: Workout = {
-        v: 1,
+        v: 2,
         sport: "run",
         name: "Threshold",
         steps: [
@@ -229,7 +229,7 @@ describe("a structured program session in compliance (step 2)", () => {
           { type: "repeat", count: 4, steps: [{ type: "work", end: { type: "time", seconds: 240 }, target: { metric: "hr", anchor: "lthr", zone: 4 } }, { type: "recovery", end: { type: "time", seconds: 120 } }] },
         ],
       };
-      const steady: Workout = { v: 1, sport: "run", name: "Easy", steps: [{ type: "work", end: { type: "time", seconds: 2700 }, target: { metric: "hr", anchor: "lthr", zone: 2 } }] };
+      const steady: Workout = { v: 2, sport: "run", name: "Easy", steps: [{ type: "work", end: { type: "time", seconds: 2700 }, target: { metric: "hr", anchor: "lthr", zone: 2 } }] };
       const asSets = (w: Workout) => workoutToRows(w).map((r) => ({ ...r, targetReps: null, weightKg: null, restTimeSeconds: 0 }));
       const hardP = await createProgram(user, [{ exerciseId: run.id, sets: asSets(timed) }]);
       const easyP = await createProgram(user, [{ exerciseId: run.id, sets: asSets(steady) }]);
@@ -258,7 +258,7 @@ describe("a structured program session in compliance (step 2)", () => {
 
 describe("logging a structured program session (step 3)", () => {
   const timed: Workout = {
-    v: 1,
+    v: 2,
     sport: "run",
     name: "Threshold",
     steps: [
@@ -448,7 +448,7 @@ describe("saving steps from the editor (step 4)", () => {
     ]);
     const pe = slots[0].programExerciseId;
     const tree: Workout = {
-      v: 1,
+      v: 2,
       sport: "run",
       name: "Long",
       steps: [
@@ -492,7 +492,7 @@ describe("one-day programs (step 5)", () => {
       const { workoutToRows } = await import("@/lib/utils/program-steps");
       const run = await createExercise({ name: `Run ${Math.random()}`, category: "cardio", discipline: "run" });
       const lift = await createExercise();
-      const w: Workout = { v: 1, sport: "run", name: "Easy", steps: [{ type: "work", end: { type: "time", seconds: 1800 } }] };
+      const w: Workout = { v: 2, sport: "run", name: "Easy", steps: [{ type: "work", end: { type: "time", seconds: 1800 } }] };
       const runP = await createProgram(user, [{ exerciseId: run.id, sets: workoutToRows(w).map((r) => ({ ...r, targetReps: null, weightKg: null, restTimeSeconds: 0 })) }]);
       const mixed = await createProgram(user, [{ exerciseId: lift.id, sets: [{}] }, { exerciseId: run.id, sets: [{ targetReps: null, weightKg: null, durationSeconds: 600 }] }]);
       const [c] = await db.insert(trainingCycles).values({ userId: user, name: "Block", durationWeeks: 1, status: "active", startDate: "2026-11-02" }).returning();

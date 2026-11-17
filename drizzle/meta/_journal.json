@@ -680,6 +680,13 @@
       "when": 1794821979010,
       "tag": "0096_drop_structured_workouts",
       "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "7",
+      "when": 1794947211283,
+      "tag": "0097_bike_ride_groundwork",
+      "breakpoints": true
     }
   ]
 }

@@ -216,6 +216,9 @@ const SET_FIELDS: Record<string, string> = {
   equipment: "equipment",
   sendOffSeconds: "send-off",
   note: "step note",
+  ramp: "ramp",
+  free: "free spin",
+  outdoorTarget: "outdoor target",
 };
 
 const UNITS: Record<string, string> = {
@@ -377,7 +380,7 @@ function fieldLines(prefix: string, labels: Record<string, string>, before: Row,
   const out: string[] = [];
   for (const [field, label] of Object.entries(labels)) {
     if (sameValue(before[field], after[field])) continue;
-    if (field === "notes" || field === "endMessage" || field === "targets" || field === "equipment" || field === "note") {
+    if (field === "notes" || field === "endMessage" || field === "targets" || field === "equipment" || field === "note" || field === "ramp" || field === "outdoorTarget") {
       out.push(`${prefix}${label} changed`);
       continue;
     }
@@ -653,6 +656,8 @@ export function syncOwnedSetFields(set: Row): string[] {
     // old zone field (docs/plans/one-program-model.md, decision 4).
     const targets = set.stepKind != null && Array.isArray(set.targets) ? (set.targets as { zone?: number }[]) : null;
     if (targets?.length) out.push(...(targets[0].zone !== undefined ? ["targets"] : []), "restTimeSeconds");
+    // A ramp or a free spin keeps its target (docs/plans/bike-ride-logger.md, step 0).
+    else if (set.stepKind != null && (set.ramp != null || set.free === true)) out.push("restTimeSeconds");
     else out.push("targetHeartRateZone", "restTimeSeconds");
   }
   return out;

@@ -26,6 +26,7 @@ import {
   type WorkoutSport,
   type WorkoutStep,
   type ThresholdValues,
+  type WorkoutRamp,
   type WorkoutTarget,
 } from "@/lib/utils/workout-steps";
 
@@ -46,6 +47,10 @@ export type StepRow = {
   equipment: string[] | null;
   sendOffSeconds: number | null;
   note: string | null;
+  // Bike only (docs/plans/bike-ride-logger.md, step 0).
+  ramp: unknown;
+  free: boolean;
+  outdoorTarget: unknown;
 };
 
 /** The step fields of a row, as written: everything StepRow has except id and setNumber. */
@@ -66,6 +71,9 @@ export const EMPTY_STEP_FIELDS: StepFields = {
   equipment: null,
   sendOffSeconds: null,
   note: null,
+  ramp: null,
+  free: false,
+  outdoorTarget: null,
 };
 
 /** The program_sets columns that make a row a step, for every path that copies sets field by field. */
@@ -81,6 +89,9 @@ export const STEP_FIELD_KEYS = [
   "equipment",
   "sendOffSeconds",
   "note",
+  "ramp",
+  "free",
+  "outdoorTarget",
 ] as const satisfies readonly (keyof StepFields)[];
 
 /** The step columns of a row (the end columns are copied with the set's own fields). */
@@ -124,6 +135,9 @@ function rowStep(r: StepRow): { step: WorkoutStep } | { problem: string } {
     ...(r.stroke != null && { stroke: r.stroke as WorkoutStep["stroke"] }),
     ...(r.equipment != null && r.equipment.length > 0 && { equipment: r.equipment as WorkoutStep["equipment"] }),
     ...(r.note != null && { note: r.note }),
+    ...(r.ramp != null && { ramp: r.ramp as WorkoutRamp }),
+    ...(r.free && { free: true as const }),
+    ...(r.outdoorTarget != null && { outdoor: r.outdoorTarget as WorkoutTarget }),
   };
   if ((r.cadenceLow == null) !== (r.cadenceHigh == null)) return { problem: "give both cadence bounds" };
   return { step };
@@ -142,7 +156,8 @@ export function stepOfRow(r: StepRow): WorkoutStep | null {
  * with, so a later edit, the weekly sync or a retest never changes it.
  */
 export type PlannedStepSnapshot = {
-  v: 1;
+  // 2 from the bike ride logger: the step can hold ramp, free and outdoor.
+  v: 1 | 2;
   sport: WorkoutSport;
   step: WorkoutStep;
   blockId: number | null;
@@ -242,7 +257,7 @@ export function buildWorkout(
   if (problems.length) return { problems };
   return {
     workout: {
-      v: 1,
+      v: 2,
       sport: meta.sport,
       name: meta.name.trim().slice(0, 80) || "Session",
       ...(meta.description ? { description: meta.description.slice(0, 1000) } : {}),
@@ -317,6 +332,9 @@ export function workoutToRows(w: Workout): (StepFields & { setNumber: number })[
     equipment: s.equipment ?? null,
     sendOffSeconds: s.sendOffSeconds ?? null,
     note: s.note ?? null,
+    ramp: s.ramp ?? null,
+    free: s.free ?? false,
+    outdoorTarget: s.outdoor ?? null,
   });
   let block = 0;
   for (const n of w.steps) {
@@ -363,7 +381,7 @@ export function plainSetsToWorkout(sets: PlainEnduranceSet[], meta: { sport: Wor
       const target: WorkoutTarget | undefined = zone != null && meta.sport !== "swim" ? { metric: "hr", anchor: "lthr", zone } : undefined;
       return { type, end, ...(target && { target }) };
     });
-  return { v: 1, sport: meta.sport, name: meta.name.trim().slice(0, 80) || "Session", ...(meta.poolLengthM != null && { poolLengthM: meta.poolLengthM }), steps: steps.length ? steps : [{ type: "work", end: { type: "lap" } }] };
+  return { v: 2, sport: meta.sport, name: meta.name.trim().slice(0, 80) || "Session", ...(meta.poolLengthM != null && { poolLengthM: meta.poolLengthM }), steps: steps.length ? steps : [{ type: "work", end: { type: "lap" } }] };
 }
 
 /** Each structured exercise's play steps and planned rows, keys prefixed when there are several (one guided run, docs/plans/one-program-model.md). */

@@ -74,7 +74,7 @@ export async function plannedStepSnapshot(ex: Executor, programSetId: number, us
   const step = stepOfRow(row.set as StepRow);
   if (!step) return null;
   const { thresholdValues } = await import("@/lib/session-compliance");
-  return { v: 1, sport: row.discipline, step, blockId: row.set.blockId, blockRound: row.set.blockRound, thresholds: await thresholdValues(userId) };
+  return { v: 2, sport: row.discipline, step, blockId: row.set.blockId, blockRound: row.set.blockRound, thresholds: await thresholdValues(userId) };
 }
 
 /**

@@ -78,6 +78,11 @@ export const workoutSessions = pgTable("workout_sessions", {
   // retry never writes twice.
   pausedSeconds: integer("paused_seconds"),
   clientKey: text("client_key"),
+  // Bike rides (docs/plans/bike-ride-logger.md, 4.3): the ride ended before
+  // its last step, so a key planned session is not done; and the mode it was
+  // ridden in.
+  endedEarly: boolean("ended_early").notNull().default(false),
+  rideMode: text("ride_mode", { enum: ["indoor", "outdoor"] }),
 }, (t) => [
   index("idx_ws_user_completed_start").on(t.userId, t.isCompleted, t.startTime),
   index("idx_ws_planned").on(t.plannedSessionId),

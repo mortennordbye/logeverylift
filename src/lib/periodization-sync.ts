@@ -313,6 +313,8 @@ export async function syncPeriodizedTargets(
         sessionRole: programSets.sessionRole,
         stepKind: programSets.stepKind,
         targets: programSets.targets,
+        ramp: programSets.ramp,
+        free: programSets.free,
         programId: programExercises.programId,
       })
       .from(programSets)
@@ -350,6 +352,9 @@ export async function syncPeriodizedTargets(
             const targets = ps.stepKind != null && Array.isArray(ps.targets) ? (ps.targets as { zone?: number }[]) : null;
             if (targets?.length) {
               if (targets[0].zone !== undefined) update.targets = [{ ...targets[0], zone: recipe.zone }, ...targets.slice(1)];
+            } else if (ps.stepKind != null && (ps.ramp != null || ps.free)) {
+              // A ramp or a free spin is the step's target, set on purpose
+              // (docs/plans/bike-ride-logger.md, step 0): it stays.
             } else {
               update.targetHeartRateZone = recipe.zone;
             }

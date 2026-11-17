@@ -22,7 +22,7 @@ function today(): string {
 }
 
 const ride: Workout = {
-  v: 1,
+  v: 2,
   sport: "bike",
   name: "Steps ride",
   steps: [

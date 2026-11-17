@@ -38,7 +38,7 @@ function assertLocal() {
 assertLocal();
 
 const RUN_INTERVALS: Workout = {
-  v: 1,
+  v: 2,
   sport: "run",
   name: "Run · Threshold",
   steps: [
@@ -56,7 +56,7 @@ const RUN_INTERVALS: Workout = {
 };
 
 const SWIM: Workout = {
-  v: 1,
+  v: 2,
   sport: "swim",
   name: "Swim · CSS",
   poolLengthM: 25,
@@ -69,7 +69,7 @@ const SWIM: Workout = {
 };
 
 const BIKE: Workout = {
-  v: 1,
+  v: 2,
   sport: "bike",
   name: "Bike · Sweet spot",
   steps: [
@@ -86,8 +86,8 @@ const BIKE: Workout = {
   ],
 };
 
-const BRICK_BIKE: Workout = { v: 1, sport: "bike", name: "Brick", steps: [{ type: "work", end: { type: "time", seconds: 3600 }, target: { metric: "power", anchor: "ftp", low: 70, high: 78 } }] };
-const BRICK_RUN: Workout = { v: 1, sport: "run", name: "Brick", steps: [{ type: "work", end: { type: "time", seconds: 1200 }, target: { metric: "pace", anchor: "threshold_pace", low: 88, high: 92 } }] };
+const BRICK_BIKE: Workout = { v: 2, sport: "bike", name: "Brick", steps: [{ type: "work", end: { type: "time", seconds: 3600 }, target: { metric: "power", anchor: "ftp", low: 70, high: 78 } }] };
+const BRICK_RUN: Workout = { v: 2, sport: "run", name: "Brick", steps: [{ type: "work", end: { type: "time", seconds: 1200 }, target: { metric: "pace", anchor: "threshold_pace", low: 88, high: 92 } }] };
 
 async function main() {
   const { auth } = await import("../src/lib/auth");

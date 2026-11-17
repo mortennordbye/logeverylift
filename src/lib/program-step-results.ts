@@ -140,7 +140,7 @@ export async function saveProgramStepResults(userId: string, input: SaveStepResu
     return play.map((p, i) => {
       const r: StepResult = results.get(p.key) ?? { key: p.key, status: "not_done" };
       const row = rows[i];
-      const snapshot: PlannedStepSnapshot = { v: 1, sport: pw.sport, step: p.step as WorkoutStep, blockId: row.blockId, blockRound: row.blockRound, thresholds: anchors };
+      const snapshot: PlannedStepSnapshot = { v: 2, sport: pw.sport, step: p.step as WorkoutStep, blockId: row.blockId, blockRound: row.blockRound, thresholds: anchors };
       const done = r.status === "done" || r.status === "partial";
       const rpe = r.rpe ?? input.sessionRpe ?? null;
       return {
@@ -308,7 +308,7 @@ export async function getProgramStepResults(userId: string, plannedSessionId: nu
     const sameShape = play.length === mine.length;
     return mine.map(({ set }, i) => {
       const snap = set.plannedStep as PlannedStepSnapshot;
-      const [planned] = plannedRows({ v: 1, sport: snap.sport, name: "step", steps: [snap.step] }, (snap.thresholds ?? {}) as ThresholdValues, units);
+      const [planned] = plannedRows({ v: 2, sport: snap.sport, name: "step", steps: [snap.step] }, (snap.thresholds ?? {}) as ThresholdValues, units);
       const key = sameShape ? play[i].key : `x${set.id}`;
       const p: PlannedRow = { ...planned, key, round: sameShape ? play[i].round : null };
       const result: StepResult | null = set.stepStatus

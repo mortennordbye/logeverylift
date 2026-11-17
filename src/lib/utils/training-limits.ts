@@ -13,7 +13,7 @@ import { addDaysStr, dowOf, mondayOf } from "@/lib/utils/planned-sessions";
 import { effectivePriorities } from "@/lib/utils/session-compliance";
 import { shortDay } from "@/lib/utils/seasons";
 import { STRENGTH_GOAL_LABEL, strengthDefault, type StrengthPhase } from "@/lib/utils/strength-goal";
-import { hardTarget, paceTargetSpeed, type ThresholdValues, type Workout, type WorkoutTarget } from "@/lib/utils/workout-steps";
+import { hardTarget, paceTargetSpeed, rowMainTarget, type ThresholdValues, type Workout, type WorkoutTarget } from "@/lib/utils/workout-steps";
 
 export const LIMIT_RULES = [
   "long_run_cap",
@@ -167,6 +167,7 @@ export type IntensitySet = {
   stepKind?: string | null;
   blockId?: number | null;
   targets?: unknown;
+  ramp?: unknown;
 };
 
 /**
@@ -181,7 +182,7 @@ export function isHardSession(sets: IntensitySet[], thresholds: ThresholdValues 
     if (s.stepKind != null) {
       if (s.stepKind !== "work") return false;
       if (s.blockId != null) return true;
-      const main = Array.isArray(s.targets) ? (s.targets[0] as WorkoutTarget | undefined) : undefined;
+      const main = rowMainTarget(s);
       return main !== undefined && hardTarget(main, s.discipline, thresholds);
     }
     return s.sessionRole === "work" || (s.targetHeartRateZone != null && s.targetHeartRateZone >= 4);
@@ -632,7 +633,7 @@ export function easyWorkout(sport: "swim" | "bike" | "run", plannedSeconds: numb
   const planned = plannedSeconds && plannedSeconds > 0 ? plannedSeconds : EASY_MAX_SECONDS;
   const seconds = Math.round(Math.max(5 * 60, Math.min(planned, EASY_MAX_SECONDS)));
   return {
-    v: 1,
+    v: 2,
     sport,
     name: `Easy ${sport} (readiness)`,
     steps: [{ type: "work", end: { type: "time", seconds }, target: { metric: "hr", anchor: "max_hr", low: 60, high: 70 } }],
@@ -800,6 +801,7 @@ export type LoadSet = {
   // Endurance steps (docs/plans/one-program-model.md, 2).
   stepKind?: "warmup" | "work" | "recovery" | "cooldown" | "rest" | null;
   targets?: unknown;
+  ramp?: unknown;
   endsOnLap?: boolean;
 };
 
@@ -815,7 +817,7 @@ function stepOf(
   anchors: { runThresholdSpeed?: number | null; swimCss?: number | null },
 ): { type: "warmup" | "work" | "recovery" | "cooldown" | "rest"; seconds: number | null; target?: WorkoutTarget } {
   const type = s.stepKind!;
-  const target = Array.isArray(s.targets) ? (s.targets[0] as WorkoutTarget | undefined) : undefined;
+  const target = rowMainTarget(s);
   let seconds = !s.endsOnLap && s.durationSeconds && s.durationSeconds > 0 ? s.durationSeconds : null;
   if (seconds == null && !s.endsOnLap && s.distanceMeters && s.distanceMeters > 0) {
     const thresholds: ThresholdValues = {

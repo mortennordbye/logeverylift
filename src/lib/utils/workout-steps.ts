@@ -26,6 +26,8 @@ export const TARGET_METRICS = ["power", "hr", "pace", "cadence", "rpe"] as const
 export const TARGET_ANCHORS = ["ftp", "lthr", "max_hr", "threshold_pace", "css", "absolute"] as const;
 export const SWIM_STROKES = ["free", "back", "breast", "fly", "im", "choice", "kick", "pull", "drill"] as const;
 export const SWIM_EQUIPMENT = ["pull_buoy", "paddles", "fins", "kickboard", "snorkel"] as const;
+/** FTP test rides a bike workout can be (docs/plans/bike-ride-logger.md, 4.9). */
+export const RIDE_TESTS = ["ramp", "20min"] as const;
 
 export type WorkoutSport = (typeof WORKOUT_SPORTS)[number];
 
@@ -97,6 +99,13 @@ const targetSchema = z.strictObject({
 const rangeSchema = z.strictObject({ low: z.number(), high: z.number() });
 
 /**
+ * A bike power target that moves evenly from `from` to `to` over the step
+ * (docs/plans/bike-ride-logger.md, step 0), in % FTP or watts. It is the
+ * step's main target, in place of `target`.
+ */
+const rampSchema = z.strictObject({ anchor: z.enum(["ftp", "absolute"]), from: z.number(), to: z.number() });
+
+/**
  * The step fields of a program set (docs/plans/one-program-model.md, 1.1), as
  * an input shape. Shapes only: the ranges and the rules across steps are
  * checked on the whole exercise by checkStepRows (src/lib/utils/program-steps.ts).
@@ -114,6 +123,9 @@ export const programStepFieldsSchema = z.object({
   equipment: z.array(z.enum(SWIM_EQUIPMENT)).max(SWIM_EQUIPMENT.length).nullable().optional(),
   sendOffSeconds: z.number().int().min(WORKOUT_LIMITS.sendOffSeconds.min).max(WORKOUT_LIMITS.sendOffSeconds.max).nullable().optional(),
   note: z.string().trim().min(1).max(WORKOUT_LIMITS.note).nullable().optional(),
+  ramp: rampSchema.nullable().optional(),
+  free: z.boolean().optional(),
+  outdoorTarget: targetSchema.nullable().optional(),
 });
 
 const stepSchema = z.strictObject({
@@ -128,6 +140,11 @@ const stepSchema = z.strictObject({
   stroke: z.enum(SWIM_STROKES).optional(),
   equipment: z.array(z.enum(SWIM_EQUIPMENT)).max(SWIM_EQUIPMENT.length).optional(),
   note: z.string().trim().min(1).max(WORKOUT_LIMITS.note).optional(),
+  // Bike only (docs/plans/bike-ride-logger.md, step 0): a ramp in place of the
+  // target, a free spin with no target, and the target for an outdoor ride.
+  ramp: rampSchema.optional(),
+  free: z.literal(true).optional(),
+  outdoor: targetSchema.optional(),
 });
 
 const repeatSchema = z.strictObject({
@@ -140,11 +157,14 @@ const repeatSchema = z.strictObject({
 const nodeSchema = z.discriminatedUnion("type", [stepSchema, repeatSchema]);
 
 const baseWorkoutSchema = z.strictObject({
-  v: z.literal(1),
+  // Version 2 added ramp, free, outdoor and test. A version 1 tree is still
+  // read, and comes back as version 2.
+  v: z.union([z.literal(1), z.literal(2)]).transform((): 2 => 2),
   sport: z.enum(WORKOUT_SPORTS),
   name: z.string().trim().min(1).max(WORKOUT_LIMITS.name),
   description: z.string().trim().max(WORKOUT_LIMITS.description).optional(),
   poolLengthM: z.number().min(WORKOUT_LIMITS.poolLengthM.min).max(WORKOUT_LIMITS.poolLengthM.max).optional(),
+  test: z.enum(RIDE_TESTS).optional(),
   steps: z.array(nodeSchema).min(1).max(WORKOUT_LIMITS.nodes),
 });
 
@@ -152,7 +172,24 @@ export type WorkoutStep = z.infer<typeof stepSchema>;
 export type WorkoutRepeat = z.infer<typeof repeatSchema>;
 export type WorkoutNode = z.infer<typeof nodeSchema>;
 export type WorkoutTarget = z.infer<typeof targetSchema>;
+export type WorkoutRamp = z.infer<typeof rampSchema>;
 export type Workout = z.infer<typeof baseWorkoutSchema>;
+
+/** A ramp as one power range, its ends in order, for the readers that need one range. */
+export function rampTarget(r: WorkoutRamp): WorkoutTarget {
+  return { metric: "power", anchor: r.anchor, low: Math.min(r.from, r.to), high: Math.max(r.from, r.to) };
+}
+
+/** A step's main target: its target, else its ramp as one range. */
+export function mainTarget(s: Pick<WorkoutStep, "target" | "ramp">): WorkoutTarget | undefined {
+  return s.target ?? (s.ramp ? rampTarget(s.ramp) : undefined);
+}
+
+/** The same for a stored step row: its first target, else its ramp. */
+export function rowMainTarget(r: { targets?: unknown; ramp?: unknown }): WorkoutTarget | undefined {
+  const first = Array.isArray(r.targets) ? (r.targets[0] as WorkoutTarget | undefined) : undefined;
+  return first ?? (r.ramp != null ? rampTarget(r.ramp as WorkoutRamp) : undefined);
+}
 
 type Issue = { path: (string | number)[]; message: string };
 
@@ -205,11 +242,24 @@ function isWholeLengths(meters: number, pool: number): boolean {
 function stepIssues(step: WorkoutStep, w: Workout, inRepeat: WorkoutRepeat | null): Issue[] {
   const out: Issue[] = [];
   if (step.target) for (const i of targetIssues(step.target, w.sport)) out.push({ path: ["target", ...i.path], message: i.message });
+  // A ramp takes no cap: program_sets.targets holds the target and its cap.
   if (step.target2) {
     if (!step.target) out.push({ path: ["target2"], message: "a second target needs a first one" });
     else if (step.target2.metric === step.target.metric) out.push({ path: ["target2", "metric"], message: "the second target must use another metric" });
     for (const i of targetIssues(step.target2, w.sport)) out.push({ path: ["target2", ...i.path], message: i.message });
   }
+  for (const f of ["ramp", "free", "outdoor"] as const) {
+    if (step[f] !== undefined && w.sport !== "bike") out.push({ path: [f], message: `${f} is only for bike steps` });
+  }
+  if (step.ramp) {
+    if (step.target) out.push({ path: ["ramp"], message: "give a target or a ramp, not both" });
+    const range = TARGET_RANGE[`power:${step.ramp.anchor}`];
+    for (const f of ["from", "to"] as const) {
+      if (step.ramp[f] < range.min || step.ramp[f] > range.max) out.push({ path: ["ramp", f], message: `must be ${range.min}-${range.max} ${range.unit}` });
+    }
+  }
+  if (step.free && (step.target || step.target2 || step.ramp)) out.push({ path: ["free"], message: "a free step has no target" });
+  if (step.outdoor) for (const i of targetIssues(step.outdoor, w.sport)) out.push({ path: ["outdoor", ...i.path], message: i.message });
   if (step.cadence) {
     if (w.sport === "swim") out.push({ path: ["cadence"], message: "cadence is only for bike and run" });
     const r = TARGET_RANGE["cadence:absolute"];
@@ -241,6 +291,7 @@ const workoutSchema = baseWorkoutSchema.superRefine((w, ctx) => {
   const add = (path: Issue["path"], message: string) => ctx.addIssue({ code: "custom", path, message });
 
   if (w.poolLengthM !== undefined && w.sport !== "swim") add(["poolLengthM"], "only for swims");
+  if (w.test !== undefined && w.sport !== "bike") add(["test"], "only for bike workouts");
   if (new TextEncoder().encode(JSON.stringify(w)).length > WORKOUT_LIMITS.jsonBytes) add([], `the workout is larger than ${WORKOUT_LIMITS.jsonBytes / 1024} KB`);
 
   let expanded = 0;
@@ -425,6 +476,27 @@ export function resolveTarget(t: WorkoutTarget, sport: WorkoutSport, thresholds:
   return { low, high, unit, text, missing: null };
 }
 
+/**
+ * A step's main target in the user's numbers. A ramp gives its range, with
+ * its ends in the ride's order: "90 to 135 W", or "ramp 50 to 75% FTP"
+ * without an FTP.
+ */
+export function resolveStepTarget(s: Pick<WorkoutStep, "target" | "ramp">, sport: WorkoutSport, thresholds: ThresholdValues, units: Units = DEFAULT_UNITS): ResolvedTarget | null {
+  const main = mainTarget(s);
+  if (!main) return null;
+  const r = resolveTarget(main, sport, thresholds, units);
+  if (!s.ramp || s.target) return r;
+  if (r.missing) return { ...r, text: `${rampLabel(s.ramp)} (no ${r.missing} set)` };
+  const ftp = s.ramp.anchor === "ftp" ? thresholds.ftp! : null;
+  const w = (p: number) => Math.round(ftp ? (ftp * p) / 100 : p);
+  return { ...r, text: `${w(s.ramp.from)} to ${w(s.ramp.to)} W` };
+}
+
+/** "ramp 50 to 75% FTP", "ramp 100 to 200 W". */
+function rampLabel(r: WorkoutRamp): string {
+  return `ramp ${r.from} to ${r.to}${r.anchor === "ftp" ? "% FTP" : " W"}`;
+}
+
 export type ResolvedStep = WorkoutStep & { resolved: ResolvedTarget | null };
 export type ResolvedNode = ResolvedStep | (Omit<WorkoutRepeat, "steps"> & { steps: ResolvedStep[] });
 
@@ -432,7 +504,7 @@ export type ResolvedNode = ResolvedStep | (Omit<WorkoutRepeat, "steps"> & { step
 export function resolveWorkout(w: Workout, thresholds: ThresholdValues, units: Units = DEFAULT_UNITS): { steps: ResolvedNode[]; missingAnchors: ThresholdKind[] } {
   const missing = new Set<ThresholdKind>();
   const one = (s: WorkoutStep): ResolvedStep => {
-    const resolved = s.target ? resolveTarget(s.target, w.sport, thresholds, units) : null;
+    const resolved = resolveStepTarget(s, w.sport, thresholds, units);
     if (resolved?.missing) missing.add(resolved.missing);
     return { ...s, resolved };
   };
@@ -522,6 +594,8 @@ function stepText(s: WorkoutStep, sport: WorkoutSport, units: Units): string {
   if (STEP_WORD[s.type]) parts.push(STEP_WORD[s.type]);
   if (s.stroke && s.stroke !== "free") parts.push(s.stroke);
   if (s.target) parts.push(targetLabel(s.target, sport, units));
+  else if (s.ramp) parts.push(rampLabel(s.ramp));
+  else if (s.free) parts.push("free");
   if (s.sendOffSeconds !== undefined) parts.push(`on ${minSec(s.sendOffSeconds)}`);
   return parts.join(" ");
 }
@@ -570,6 +644,9 @@ export function hardTarget(t: WorkoutTarget, sport: WorkoutSport, thresholds: Th
  * (owner decision 2 in docs/plans/ai-coach.md).
  */
 export function isHardWorkout(w: Workout, thresholds: ThresholdValues = {}): boolean {
-  const hardStep = (s: WorkoutStep) => s.type === "work" && s.target !== undefined && hardTarget(s.target, w.sport, thresholds);
+  const hardStep = (s: WorkoutStep) => {
+    const main = mainTarget(s);
+    return s.type === "work" && main !== undefined && hardTarget(main, w.sport, thresholds);
+  };
   return w.steps.some((n) => (n.type === "repeat" ? n.steps.some((s) => s.type === "work") : hardStep(n)));
 }
