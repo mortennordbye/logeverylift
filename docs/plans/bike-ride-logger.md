@@ -1,6 +1,6 @@
 # Bike ride logger
 
-Status: approved by the owner on 2026-11-17. Not started.
+Status: approved by the owner on 2026-11-17. Step 0 built on `feat/bike-ride-logger`; all steps merge together at the end (owner, 2026-11-17).
 Plan page with the pictures (before and after, version 5): https://claude.ai/artifact/LYBSeNnydrNp54KiLMDkYH.
 A copy of the page is in the repo: `docs/design/bike-ride-logger.html` (open it in a browser).
 This brief is the same plan in text, written to be built from start to end by an agent with no
@@ -263,7 +263,7 @@ Without a bike LTHR, heart rate targets become effort targets (Z2 4, Z3 6, Z4 7)
 
 | Step | Status |
 |---|---|
-| 0 Groundwork | todo |
+| 0 Groundwork | done on `feat/bike-ride-logger` (no PR of its own) |
 | 1 One ride model | todo |
 | 2 Bike exercise screen | todo |
 | 3 Ride mode | todo |
@@ -387,3 +387,16 @@ Without a bike LTHR, heart rate targets become effort targets (Z2 4, Z3 6, Z4 7)
 ## 9. Choices made during the build
 
 (Add one line per choice: step, what was open, what you chose, why.)
+
+- Step 0, version: the workout schema reads `v` 1 and 2 and always gives back 2; new planned-step snapshots are written as `v` 2. An older tree from the assistant or an export still reads.
+- Step 0, a ramp with a cap: refused (a second target needs a `target`). `program_sets.targets` holds a target and its cap, and a ramp leaves no place for the cap.
+- Step 0, `test` storage: `test` is in the model only. Its column on `program_exercises` and the copy paths come with the step that first writes it (5 or 8), so no copy path carries an unused column.
+- Step 0, undo of a skip: the event list had none, so a new kind `unskip` cancels the latest skip and the step goes on as if never skipped. Undo of ±5 W and +1 min is the opposite event, as written.
+- Step 0, heartbeat: not a `ride_events` row. It sets `rides.heartbeat_at`, so it takes no sequence number and never makes another device conflict.
+- Step 0, step status: lap on a timed step saves it as partial; End ride saves the current step as partial, or leaves it out when no second was ridden.
+- Step 0, planned end for the auto end: start, plus the planned time of the timed steps and the extensions, plus the pauses already over. An open pause counts, so a ride left paused also ends.
+- Step 0, a client time outside the ride: the event is kept at the server's time, not refused, so a queued event is never lost.
+- Step 0, outdoor targets in the frozen plan: only a written outdoor target for now. The derived one (4.2) is added to the plan by the step that first shows it.
+- Step 0, `workout_sessions.ended_early`: the column only. The finish flow (step 3) writes it; `startRide` writes `ride_mode`.
+- Step 0, weekly sync: a ramp or free step keeps its target; the sync writes no zone on it.
+- Step 0, ownership: `startRide` needs the bike exercise to be in the program of the open workout session.
