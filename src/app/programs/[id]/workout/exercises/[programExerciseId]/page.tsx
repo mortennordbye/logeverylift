@@ -2,20 +2,25 @@
  * Workout Exercise Sets Page
  */
 
+import { BikeExercise } from "@/components/features/bike/BikeExercise";
 import { WorkoutSetsClient } from "@/components/features/WorkoutSetsClient";
+import { bikeExerciseView } from "@/lib/bike-exercise-view";
+import { enduranceEnabledFor } from "@/lib/endurance";
 import { getProgramWithExercises } from "@/lib/actions/programs";
 import { syncActiveCyclePeriodization } from "@/lib/actions/training-cycles";
 import { getProgressiveSuggestions } from "@/lib/actions/workout-sets";
 import { stepLabels } from "@/lib/program-steps-view";
+import type { StepRow } from "@/lib/utils/program-steps";
 import { requireSession } from "@/lib/utils/session";
 import { notFound } from "next/navigation";
 
 type Props = {
   params: Promise<{ id: string; programExerciseId: string }>;
+  searchParams: Promise<{ hand?: string; ride?: string }>;
 };
 
-export default async function WorkoutExerciseSetsPage({ params }: Props) {
-  const { id, programExerciseId } = await params;
+export default async function WorkoutExerciseSetsPage({ params, searchParams }: Props) {
+  const [{ id, programExerciseId }, { hand }] = await Promise.all([params, searchParams]);
   const programId = Number(id);
   const peId = Number(programExerciseId);
   if (isNaN(programId) || isNaN(peId)) notFound();
@@ -34,6 +39,14 @@ export default async function WorkoutExerciseSetsPage({ params }: Props) {
   const program = result.data;
   const pe = program.programExercises.find((e) => e.id === peId);
   if (!pe) notFound();
+
+  // A bike exercise of an endurance user is a ride (docs/plans/bike-ride-logger.md,
+  // step 2). "Log by hand" (?hand=1) keeps today's set list until step 4.
+  // Ride mode (?ride=1) is built in step 3; until then it shows the ride too.
+  if (pe.exercise.discipline === "bike" && hand !== "1" && (await enduranceEnabledFor(user.id))) {
+    const bike = await bikeExerciseView(user.id, peId, pe.exercise.name, pe.programSets as (StepRow & { id: number })[]);
+    if (bike) return <BikeExercise programId={programId} programExerciseId={peId} exerciseName={pe.exercise.name} data={bike} />;
+  }
 
   const suggestions = suggestionsResult.success ? suggestionsResult.data : {};
 
