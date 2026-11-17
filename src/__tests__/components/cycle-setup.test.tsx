@@ -253,7 +253,6 @@ const slot = (s: Record<string, unknown>) => ({
   notes: null,
   programId: null,
   program: null,
-  workoutId: null,
   autoComplete: false,
   priority: null,
   brickWithNext: false,

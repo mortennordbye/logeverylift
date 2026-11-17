@@ -103,12 +103,6 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** Package C6, or an owner request. Sick periods also need a read of deleted rows (a `deleted` option on `listIllness`).
 - **Touchpoints:** `src/components/features/CycleCalendarClient.tsx`, `src/components/features/SessionAnswers.tsx`, `src/components/features/IllnessSheet.tsx` (`SickPeriods`), `src/lib/illness.ts` (`listIllness`), `src/lib/validators/planned-sessions.ts` (`plannedSessionOpSchema`), `src/lib/actions/workouts-compliance.ts`.
 
-### Home week strip for workout sessions
-- **What:** A dated session that runs a structured workout, not a program, does not count on the home screen's week strip. Package C6 added the "Endurance today" card on home and the week view (`/week`), which show them; the strip still reads C2's program-only home read.
-- **Why deferred:** The strip is part of the lifter's home card, which C6 kept unchanged (`docs/plans/endurance-app.md`, 4.1). The week view covers the endurance user.
-- **Unblocked by:** An owner request. Count workout sessions in `homeWeekPlanned` for endurance users only, and keep the lifter characterization tests green.
-- **Touchpoints:** `src/lib/home/core.ts` (`loadHomeCore` reads `homeWeekPlanned` into `weekPlanned`), `src/components/features/home/widgets/week/View.tsx` (the strip), `src/lib/home-week.ts`, `src/components/features/guided/EnduranceTodayCard.tsx`.
-
 ### Guided player: start offline from a cold app
 - **What:** The guided player needs its page opened online once: one server render loads the workout, the targets and the units. After that it runs, and keeps its result, offline. A phone with no network that opens the app cold cannot start a session.
 - **Why deferred:** Decision 7 in `docs/plans/endurance-app.md` (section 17). Caching the page and its data for offline start needs a service worker strategy for these routes and a test that runs offline.
