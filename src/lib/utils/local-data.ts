@@ -8,14 +8,23 @@ import { resetUserSettings } from "@/contexts/user-settings-context";
  */
 const DEVICE_PREFERENCES = ["theme", "accentColor", "customAccentHex", "uiScale"];
 
-/** Writes from the offline queue that haven't reached the server yet. */
+/** Writes from the offline queue that haven't reached the server yet, ride mode's taps included. */
 export function unsyncedChangeCount(): number {
+  let n = 0;
   try {
     const queue = JSON.parse(localStorage.getItem("pendingMutationQueue") ?? "[]");
-    return Array.isArray(queue) ? queue.length : 0;
+    if (Array.isArray(queue)) n += queue.length;
   } catch {
-    return 0;
+    // A broken queue counts as empty.
   }
+  try {
+    // Ride id to taps (src/components/features/bike/useRide.ts).
+    const rides = JSON.parse(localStorage.getItem("rideEventQueue") ?? "{}");
+    if (rides && typeof rides === "object") for (const q of Object.values(rides)) if (Array.isArray(q)) n += q.length;
+  } catch {
+    // Same.
+  }
+  return n;
 }
 
 /** Remove the signed-in user's data from this browser: localStorage and the service worker's caches. */

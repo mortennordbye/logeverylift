@@ -79,6 +79,9 @@ export const createWorkoutSessionSchema = z.object({
  * - 7: Moderate effort
  * - 5-6: Easy, many reps left
  */
+/** The result fields of a set whose source is kept (`workout_sets.sources`). */
+export const RESULT_FIELDS = ["durationSeconds", "distanceMeters", "avgPower", "avgHr", "maxHr", "avgCadence", "avgSpeed", "climbM", "measuredValue"] as const;
+
 export const logWorkoutSetSchema = z.object({
   sessionId: z.number().int().positive("Session ID must be a positive integer"),
   exerciseId: z
@@ -141,7 +144,7 @@ export const logWorkoutSetSchema = z.object({
   stepStatus: z.enum(["done", "partial", "skipped"]).optional(),
   targetOffsetW: z.number().int().min(-NUDGE_CAP_W).max(NUDGE_CAP_W).optional(),
   extendedSeconds: z.number().int().min(0).max(EXTEND_MAX_S).optional(),
-  sources: z.record(z.string().max(32), z.enum(RESULT_SOURCES)).optional(),
+  sources: z.partialRecord(z.enum(RESULT_FIELDS), z.enum(RESULT_SOURCES)).optional(),
 });
 
 /** A correction to a set in a finished session, made from history. */

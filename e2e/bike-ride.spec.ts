@@ -72,6 +72,10 @@ test.beforeEach(async ({ page }) => {
   await page.clock.install({ time: Date.now() });
 });
 
+/** When the test tapped Start ride, and how far `advance` has moved the ride, per user. */
+const startTap = new Map<string, number>();
+const shifted = new Map<string, number>();
+
 /** Stop the page clock: from now on only `advance` and `runFor` move it. */
 async function freeze(page: Page) {
   const now = await page.evaluate(() => Date.now());
@@ -98,6 +102,7 @@ async function advance(page: Page, userId: string, seconds: number) {
     .update(rideEvents)
     .set({ at: sql`${rideEvents.at} - ${shift}`, clientAt: sql`${rideEvents.clientAt} - ${shift}` })
     .where(sql`${rideEvents.rideId} in ${mine}`);
+  shifted.set(userId, (shifted.get(userId) ?? 0) + seconds);
   await page.clock.runFor(seconds * 1000);
 }
 
@@ -108,6 +113,8 @@ async function startRide(page: Page, s: { userId: string; programId: number; peI
   await expect(page.getByTestId("bike-exercise").filter({ visible: true })).toBeVisible();
   if ((await page.getByTestId("ride-mode").filter({ visible: true }).textContent()) === "Outdoor") await page.getByRole("button", { name: "Change to Indoor trainer" }).click();
   await expect.poll(async () => (await testDb().select().from(workoutSessions).where(eq(workoutSessions.userId, s.userId))).length).toBe(1);
+  startTap.set(s.userId, Date.now());
+  shifted.set(s.userId, 0);
   await page.getByRole("button", { name: "Start ride" }).click();
   await expect(page.getByTestId("ride-screen")).toBeVisible();
   await expect(page.getByTestId("ride-header")).toContainText("Indoor · step 1 of 5");
@@ -115,6 +122,22 @@ async function startRide(page: Page, s: { userId: string; programId: number; peI
 }
 
 const header = (page: Page) => page.getByTestId("ride-header");
+
+/**
+ * The step clock shows the seconds left to `stepEndS` (seconds into the ride)
+ * as the server counts them now, within a second or two: the stored ride
+ * gives the start, and real time runs on.
+ */
+async function expectClock(page: Page, userId: string, stepEndS: number) {
+  await expect
+    .poll(async () => {
+      const text = (await page.getByTestId("ride-clock").textContent()) ?? "";
+      const [m, sec] = text.split(":").map(Number);
+      const ridden = (Date.now() - startTap.get(userId)!) / 1000 + (shifted.get(userId) ?? 0);
+      return Math.abs(m * 60 + sec - (stepEndS - ridden));
+    })
+    .toBeLessThanOrEqual(2);
+}
 
 async function holdToSkip(page: Page, step: number) {
   const button = page.getByRole("button", { name: `Hold to skip step ${step}` });
@@ -254,17 +277,18 @@ test("a reload mid-ride resumes at the right second", async ({ page }, testInfo)
   await startRide(page, s);
   await advance(page, s.userId, 60 + 50);
   await expect(page.getByTestId("ride-step-title")).toHaveText("Work");
-  await expect(page.getByTestId("ride-clock")).toHaveText(/^1:(0\d|10)$/);
-
+  // The clock runs again, so the screen follows real time as the server does.
   await page.clock.resume();
+  await expectClock(page, s.userId, 180);
+
   await page.reload();
   // Opened without a tap: sound and the wake lock need one, so it asks.
   await expect(page.getByTestId("ride-prompt")).toBeVisible();
-  await expect(page.getByTestId("ride-clock")).toHaveText(/^1:(0\d|10)$/);
+  await expectClock(page, s.userId, 180);
   await page.getByRole("button", { name: "Resume" }).click();
   await expect(page.getByTestId("ride-screen")).toBeVisible();
   await expect(header(page)).toContainText("step 2 of 5");
-  await expect(page.getByTestId("ride-clock")).toHaveText(/^1:(0\d|10)$/);
+  await expectClock(page, s.userId, 180);
   await expect.poll(async () => (await savedSteps(s.userId)).map((r) => [r.programSetId, r.stepStatus, r.durationSeconds])).toEqual([[s.setIds[0], "done", 60]]);
 });
 
@@ -301,4 +325,15 @@ test("offline: taps and ended steps wait on the phone and send when it is online
   // The server agrees with the phone: step 3 runs.
   await expect.poll(async () => (await db.select().from(rides).where(and(eq(rides.id, ride.id), eq(rides.status, "running")))).length).toBe(1);
   await expect(page.getByTestId("ride-step-title")).toHaveText("Easy");
+
+  // Offline again: a pause waits while heartbeat ticks pass, and is stored at
+  // the time it was tapped, not at the replay or a heartbeat.
+  await context.setOffline(true);
+  await page.getByRole("button", { name: "Pause" }).click();
+  await expect(page.getByTestId("ride-paused")).toBeVisible();
+  await page.clock.runFor(12_000);
+  await context.setOffline(false);
+  await expect.poll(async () => (await db.select().from(rideEvents).where(and(eq(rideEvents.rideId, ride.id), eq(rideEvents.kind, "pause")))).length).toBe(1);
+  const [pause] = await db.select().from(rideEvents).where(and(eq(rideEvents.rideId, ride.id), eq(rideEvents.kind, "pause")));
+  expect(Math.abs(pause.at.getTime() - pause.clientAt!.getTime())).toBeLessThan(1000);
 });

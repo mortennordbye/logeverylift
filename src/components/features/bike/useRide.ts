@@ -32,6 +32,12 @@ export const HEARTBEAT_MS = 10_000;
 export const RIDE_RETRY_MS = 30_000;
 /** Opened by a tap within this long (Start ride, Resume): no Resume prompt. */
 const ARMED_MS = 30_000;
+/** A step back of the clock smaller than this is held (latency), a larger one applies. */
+const HOLD_BACK_MS = 2_000;
+/** A reply moves the clock only when it is a better measure, or the clocks differ by more than this. */
+const OFFSET_SLACK_MS = 500;
+/** Answers that mean the server will never take the tap: it leaves the queue. Any other failure keeps it. */
+const REFUSED_FOR_GOOD = new Set(["The ride has ended", "Not found", "Invalid input"]);
 
 export const RIDE_QUEUE_KEY = "rideEventQueue";
 export const RIDE_SAVED_KEY = "rideSavedSteps";
@@ -67,14 +73,34 @@ export function readQueuedEvents(rideId: number): QueuedRideEvent[] {
   return Array.isArray(q) ? q : [];
 }
 
+/**
+ * Write this tab's queue, read-modify-write: taps another tab of the same
+ * ride stored since stay, unless this tab sent them (`gone`). Returns the
+ * merged queue, in the order the taps happened.
+ */
+function writeQueue(rideId: number, mine: QueuedRideEvent[], gone: Set<string>): QueuedRideEvent[] {
+  const ids = new Set(mine.map((q) => q.clientId));
+  const others = readQueuedEvents(rideId).filter((q) => !ids.has(q.clientId) && !gone.has(q.clientId));
+  const merged = [...mine, ...others].sort((a, b) => a.clientAt - b.clientAt);
+  writeEntry(RIDE_QUEUE_KEY, rideId, merged.length ? merged : null);
+  return merged;
+}
+
 // ── Taps that arm the ride: audio and the wake lock need a user gesture ─────
 
 let armedAt = 0;
 let lock: WakeLockHandle | null = null;
+/** False once the screen may sleep again: a lock that arrives after that is let go at once. */
+let wanted = false;
 
 async function keepAwake(): Promise<boolean> {
   if (!wakeLockSupported()) return false;
+  wanted = true;
   const handle = await requestWakeLock();
+  if (!wanted) {
+    if (handle) void handle.release().catch(() => undefined);
+    return false;
+  }
   const old = lock;
   lock = handle;
   if (old && old !== handle) void old.release().catch(() => undefined);
@@ -82,6 +108,7 @@ async function keepAwake(): Promise<boolean> {
 }
 
 function letSleep() {
+  wanted = false;
   const l = lock;
   lock = null;
   if (l) void l.release().catch(() => undefined);
@@ -95,6 +122,12 @@ export function armRide(): boolean {
   return sound;
 }
 
+/** Start ride failed: nothing to keep the screen on for. */
+export function disarmRide() {
+  armedAt = 0;
+  letSleep();
+}
+
 /** Not cleared on read: React runs a mount effect twice in development. A reload clears it. */
 function armedJustNow(): boolean {
   return armedAt > 0 && Date.now() - armedAt < ARMED_MS;
@@ -106,12 +139,14 @@ function newClientId(): string {
 
 const isLive = (t: Pick<RideTimeline, "status">) => t.status === "running" || t.status === "paused";
 
-export function useRide(opts: { initial: RideView; saveStep: (r: RideStepResult) => void }) {
+export function useRide(opts: { initial: RideView; saveStep: (r: RideStepResult) => void; unsaveStep: (programSetId: number) => void }) {
   const { initial } = opts;
   const rideId = initial.ride.id;
   const saveStep = useRef(opts.saveStep);
+  const unsaveStep = useRef(opts.unsaveStep);
   useEffect(() => {
     saveStep.current = opts.saveStep;
+    unsaveStep.current = opts.unsaveStep;
   });
 
   const [view, setView] = useState<RideView>(initial);
@@ -120,9 +155,13 @@ export function useRide(opts: { initial: RideView; saveStep: (r: RideStepResult)
   const queueRef = useRef<QueuedRideEvent[]>([]);
   // Server time minus this phone's time. The first render uses the server's
   // own time, so the server HTML and the first client render agree.
-  const [offset, setOffset] = useState(0);
   const offsetRef = useRef(0);
-  const [clientNow, setClientNow] = useState(initial.serverNow);
+  // Server time now. It never goes back: a reply that moves the offset back
+  // holds the clock until it catches up, so a step never shows a second twice.
+  const [serverNowState, setServerNow] = useState(initial.serverNow);
+  const floorRef = useRef(0);
+  /** The round trip of the reply the offset came from: a quicker reply is a better measure. */
+  const bestRtt = useRef(Infinity);
   const [ready, setReady] = useState(false);
   /** Opened on a running ride without a tap (a reload, the app reopened): Resume or End at the last step. */
   const [prompt, setPrompt] = useState(false);
@@ -133,7 +172,7 @@ export function useRide(opts: { initial: RideView; saveStep: (r: RideStepResult)
   const savedRef = useRef<Record<string, string>>({});
   const mounted = useRef(true);
 
-  const serverNow = ready ? clientNow + offset : initial.serverNow;
+  const serverNow = ready ? serverNowState : initial.serverNow;
   const events = useMemo(() => withQueued(view, queue, serverNow), [view, queue, serverNow]);
   const timeline = useMemo(
     () => rideTimeline(view.plan, events, serverNow, { heartbeatAt: view.ride.heartbeatAt }),
@@ -144,35 +183,61 @@ export function useRide(opts: { initial: RideView; saveStep: (r: RideStepResult)
     timelineRef.current = timeline;
   });
 
+  /**
+   * Server time now by this phone's clock. A small step back (a reply's
+   * latency) holds the clock until it catches up, so a step never shows a
+   * second twice; a large one is a real correction and applies.
+   */
+  const tickNow = useCallback(() => {
+    const raw = Date.now() + offsetRef.current;
+    const t = raw < floorRef.current && floorRef.current - raw < HOLD_BACK_MS ? floorRef.current : raw;
+    floorRef.current = t;
+    setServerNow(t);
+    return t;
+  }, []);
+
+  /** Set the queue; `gone` are taps the server has (or refused), which leave the stored queue too. */
   const setQueued = useCallback(
-    (next: QueuedRideEvent[]) => {
-      queueRef.current = next;
-      setQueue(next);
-      writeEntry(RIDE_QUEUE_KEY, rideId, next.length ? next : null);
+    (next: QueuedRideEvent[], gone: string[] = []) => {
+      const merged = writeQueue(rideId, next, new Set(gone));
+      queueRef.current = merged;
+      setQueue(merged);
     },
     [rideId],
   );
 
-  /** Take a reply: its ride and the clock offset. An older reply than what is on screen only moves the clock. */
+  /**
+   * Take a reply: its ride and the clock offset. `sentAt` is when the request
+   * left: the server's time sits about half the round trip before the answer.
+   * The offset moves only for a quicker round trip than the best so far, or
+   * when the clocks differ by more than the slack. An older reply than what
+   * is on screen only moves the clock.
+   */
   const applyView = useCallback(
-    (v: RideView) => {
+    (v: RideView, sentAt?: number) => {
       if (v.ride.id !== rideId || !mounted.current) return;
-      const off = v.serverNow - Date.now();
-      offsetRef.current = off;
-      setOffset(off);
-      setClientNow(Date.now());
+      const got = Date.now();
+      const rtt = sentAt === undefined ? Infinity : got - sentAt;
+      const off = v.serverNow - (sentAt === undefined ? got : (sentAt + got) / 2);
+      if (rtt < bestRtt.current || Math.abs(off - offsetRef.current) > Math.max(OFFSET_SLACK_MS, Number.isFinite(rtt) ? rtt : 0)) {
+        if (rtt < bestRtt.current) bestRtt.current = rtt;
+        offsetRef.current = off;
+      }
+      tickNow();
       if (v.ride.seq < viewRef.current.ride.seq) return;
       viewRef.current = v;
       setView(v);
       const stored = new Set(v.events.map((e) => e.clientId));
-      if (queueRef.current.some((q) => stored.has(q.clientId))) setQueued(queueRef.current.filter((q) => !stored.has(q.clientId)));
+      const done = queueRef.current.filter((q) => stored.has(q.clientId)).map((q) => q.clientId);
+      if (done.length) setQueued(queueRef.current.filter((q) => !stored.has(q.clientId)), done);
     },
-    [rideId, setQueued],
+    [rideId, setQueued, tickNow],
   );
 
   const refetch = useCallback(async () => {
+    const sentAt = Date.now();
     const r = await callAction(getRide({ rideId }));
-    if (r.success && r.data) applyView(r.data);
+    if (r.success && r.data) applyView(r.data, sentAt);
     return r;
   }, [rideId, applyView]);
 
@@ -193,29 +258,32 @@ export function useRide(opts: { initial: RideView; saveStep: (r: RideStepResult)
           setUnsent(true);
           break;
         }
+        const sentAt = Date.now();
         const res = await callAction(
           sendRideEvent({ rideId, clientId: q.clientId, kind: q.kind, value: q.value, clientAt: q.clientAt, expectedSeq: viewRef.current.ride.seq }),
         );
         if (res.success) {
-          applyView(res.data);
-          setQueued(queueRef.current.filter((x) => x.clientId !== q.clientId));
+          applyView(res.data, sentAt);
+          setQueued(queueRef.current.filter((x) => x.clientId !== q.clientId), [q.clientId]);
           conflicts = 0;
           continue;
         }
-        // Offline, cut off, or a stale bundle (callAction reloads for the new
-        // one): it stays queued, and the next page or try sends it.
-        if (failedInTransit(res)) {
-          setUnsent(true);
-          break;
-        }
         // Another device sent an event first: read the ride and send again.
-        if (res.error === RIDE_CONFLICT && conflicts++ < 3) {
+        if (!failedInTransit(res) && res.error === RIDE_CONFLICT && conflicts++ < 3) {
           await refetch();
           continue;
         }
         // The server refused it for good (the ride has ended): show the ride as it has it.
-        setQueued(queueRef.current.filter((x) => x.clientId !== q.clientId));
-        await refetch();
+        if (!failedInTransit(res) && REFUSED_FOR_GOOD.has(res.error)) {
+          setQueued(queueRef.current.filter((x) => x.clientId !== q.clientId), [q.clientId]);
+          await refetch();
+          continue;
+        }
+        // Offline, cut off, a stale bundle (callAction reloads for the new
+        // one), a server error or conflicts that go on: it stays queued, and
+        // the next try or page sends it.
+        setUnsent(true);
+        break;
       }
     } finally {
       flushing.current = false;
@@ -231,8 +299,7 @@ export function useRide(opts: { initial: RideView; saveStep: (r: RideStepResult)
     const off = initial.serverNow - Date.now();
     offsetRef.current = off;
     setQueue(queued);
-    setOffset(off);
-    setClientNow(Date.now());
+    tickNow();
     setOnline(typeof navigator === "undefined" || navigator.onLine !== false);
     setPrompt(initial.ride.status === "running" && !armedJustNow());
     setReady(true);
@@ -253,19 +320,25 @@ export function useRide(opts: { initial: RideView; saveStep: (r: RideStepResult)
   // Repaint while the ride runs.
   useEffect(() => {
     if (!ready || !live) return;
-    const id = setInterval(() => setClientNow(Date.now()), RIDE_TICK_MS);
+    const id = setInterval(tickNow, RIDE_TICK_MS);
     return () => clearInterval(id);
-  }, [ready, live]);
+  }, [ready, live, tickNow]);
 
   // Heartbeat while visible, which also brings another device's taps.
   useEffect(() => {
     if (!ready || !live) return;
     const beat = async () => {
       if (document.visibilityState !== "visible") return;
+      // Queued taps first: the server never places an event before its last
+      // heartbeat, so a heartbeat ahead of them would move them to now.
+      if (queueRef.current.length) {
+        void flush();
+        return;
+      }
+      const sentAt = Date.now();
       const r = await callAction(sendRideEvent({ rideId, clientId: newClientId(), kind: "heartbeat", expectedSeq: viewRef.current.ride.seq }));
-      if (r.success) applyView(r.data);
+      if (r.success) applyView(r.data, sentAt);
       else if (!failedInTransit(r)) await refetch();
-      if (queueRef.current.length) void flush();
     };
     const id = setInterval(() => void beat(), HEARTBEAT_MS);
     return () => clearInterval(id);
@@ -295,7 +368,7 @@ export function useRide(opts: { initial: RideView; saveStep: (r: RideStepResult)
   useEffect(() => {
     const resync = () => {
       if (document.visibilityState !== "visible") return;
-      setClientNow(Date.now());
+      tickNow();
       void refetch().then(() => flush());
       if (lock && isLive(timelineRef.current)) void keepAwake();
     };
@@ -305,25 +378,36 @@ export function useRide(opts: { initial: RideView; saveStep: (r: RideStepResult)
       document.removeEventListener("visibilitychange", resync);
       window.removeEventListener("pageshow", resync);
     };
-  }, [refetch, flush]);
+  }, [refetch, flush, tickNow]);
 
   // Save each step when it ends, once: again only when its values change (an
   // undo, another device). The upsert on session and program set makes a
   // second save from a reload or another phone the same row.
+  // A saved step that is no longer ended (an undone skip) loses its row: it
+  // saves again when it ends.
   useEffect(() => {
     if (!ready) return;
     const due = stepsToSave(timeline.steps, savedRef.current);
-    if (!due.length) return;
+    const ended = new Set(timeline.steps.map((r) => String(r.programSetId)));
+    const stale = Object.keys(savedRef.current).filter((id) => !ended.has(id));
+    if (!due.length && !stale.length) return;
+    const next = { ...savedRef.current };
+    for (const id of stale) {
+      unsaveStep.current(Number(id));
+      delete next[id];
+    }
     for (const r of due) {
       saveStep.current(r);
-      savedRef.current = { ...savedRef.current, [r.programSetId]: stepSignature(r) };
+      next[r.programSetId] = stepSignature(r);
     }
+    savedRef.current = next;
     writeEntry(RIDE_SAVED_KEY, rideId, savedRef.current, true);
   }, [ready, timeline.steps, rideId]);
 
   // Cues: a sound at each step change, and at 3, 2 and 1 seconds left.
   const lastIndex = useRef<number | null>(null);
-  const lastCount = useRef<number | null>(null);
+  /** The counts already played, as "step:seconds": each beeps once. */
+  const counted = useRef(new Set<string>());
   const cue = useCallback((kind: "count" | "change" | "work") => {
     setSoundOff(!playCue(kind));
     if (kind !== "count") haptics.tap();
@@ -337,8 +421,11 @@ export function useRide(opts: { initial: RideView; saveStep: (r: RideStepResult)
     }
     lastIndex.current = idx;
     const rem = timeline.status === "running" ? (cur?.remainingSeconds ?? null) : null;
-    if (rem !== null && rem >= 1 && rem <= 3 && rem !== lastCount.current && !prompt) cue("count");
-    lastCount.current = rem;
+    const key = `${idx}:${cur?.startedAt}:${rem}`;
+    if (rem !== null && rem >= 1 && rem <= 3 && !counted.current.has(key) && !prompt) {
+      counted.current.add(key);
+      cue("count");
+    }
   }, [ready, timeline, view.plan.steps, cue, prompt]);
 
   useEffect(() => {
@@ -348,12 +435,12 @@ export function useRide(opts: { initial: RideView; saveStep: (r: RideStepResult)
   /** Queue a tap and send it. */
   const tap = useCallback(
     (kind: RideTap, value?: number, clientAt?: number) => {
-      const at = Math.round(clientAt ?? Date.now() + offsetRef.current);
+      const at = Math.round(clientAt ?? tickNow());
       setQueued([...queueRef.current, { clientId: newClientId(), kind, ...(value !== undefined && { value }), clientAt: at }]);
-      setClientNow(Date.now());
+      tickNow();
       void flush();
     },
-    [setQueued, flush],
+    [setQueued, flush, tickNow],
   );
 
   const actions = useMemo(

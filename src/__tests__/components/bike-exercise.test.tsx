@@ -16,6 +16,9 @@ vi.mock("@/components/ui/BackLink", () => ({ BackLink: () => <span>Workout</span
 vi.mock("@/contexts/workout-session-context", () => ({ useWorkoutSession: () => ({ sessionId: 7 }) }));
 const startRide = vi.fn();
 vi.mock("@/lib/actions/rides", () => ({ startRide: (d: unknown) => startRide(d) }));
+vi.mock("@/lib/audio-cues", () => ({ playCue: () => true, unlockAudio: () => true }));
+const release = vi.fn();
+vi.mock("@/lib/wake-lock", () => ({ wakeLockSupported: () => true, requestWakeLock: async () => ({ release }) }));
 
 const parsed = parseWorkout({
   v: 2,
@@ -43,6 +46,7 @@ const targets = () => screen.getAllByTestId("ride-step-target").map((t) => t.tex
 beforeEach(() => {
   replace.mockReset();
   startRide.mockReset();
+  release.mockReset().mockResolvedValue(undefined);
 });
 
 describe("BikeExercise", () => {
@@ -101,6 +105,8 @@ describe("BikeExercise", () => {
     fireEvent.click(screen.getByRole("button", { name: "Start ride" }));
     expect((await screen.findByRole("alert")).textContent).toBe("A ride is already running");
     expect(replace).not.toHaveBeenCalled();
+    // The wake lock asked for in the tap is let go: no ride keeps the screen on.
+    await waitFor(() => expect(release).toHaveBeenCalled());
   });
 
   it("with a ride running for this exercise: Ride running and Resume in place of Start ride", () => {

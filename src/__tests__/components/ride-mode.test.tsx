@@ -23,9 +23,10 @@ const replace = vi.fn();
 const refresh = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ replace, refresh }), usePathname: () => "/programs/1/workout/exercises/2" }));
 const logWithRetry = vi.fn();
+const unlogWithRetry = vi.fn();
 const enqueue = vi.fn();
 vi.mock("@/contexts/pending-queue-context", () => ({
-  useWorkoutSetWriter: () => ({ logWithRetry }),
+  useWorkoutSetWriter: () => ({ logWithRetry, unlogWithRetry }),
   usePendingQueue: () => ({ enqueue }),
 }));
 const clearActiveWorkout = vi.fn();
@@ -116,7 +117,7 @@ beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(T0);
   localStorage.clear();
-  for (const f of [playCue, replace, refresh, logWithRetry, enqueue, clearActiveWorkout, sendRideEvent, getRide, completeWorkoutSession]) f.mockReset();
+  for (const f of [unlogWithRetry, playCue, replace, refresh, logWithRetry, enqueue, clearActiveWorkout, sendRideEvent, getRide, completeWorkoutSession]) f.mockReset();
   playCue.mockReturnValue(true);
   requestWakeLock.mockReset().mockResolvedValue({ release: async () => undefined });
   logWithRetry.mockResolvedValue({ success: true });
@@ -285,15 +286,6 @@ describe("RideMode", () => {
     expect(text("ride-header")).not.toContain("Saved on this phone");
   });
 
-  it("a stale bundle keeps the tap queued for the next page", async () => {
-    await open(700);
-    sendRideEvent.mockRejectedValueOnce(Object.assign(new Error('Server Action "x" was not found on the server'), { name: "UnrecognizedActionError" }));
-    fireEvent.click(screen.getByRole("button", { name: "Pause" }));
-    await advance(0);
-    expect(JSON.parse(localStorage.getItem(RIDE_QUEUE_KEY)!)["5"]).toEqual([expect.objectContaining({ kind: "pause" })]);
-    expect(text("ride-header")).toContain("Saved on this phone");
-  });
-
   it("opened on a running ride without a tap (a reload): Resume or End at the last step", async () => {
     T = T0 + 10 * 3_600_000;
     await open(700, { armed: false });
@@ -314,5 +306,137 @@ describe("RideMode", () => {
     expect(screen.getByText("Ride ended early")).toBeTruthy();
     // The step that ran is left out: only the warm-up is saved.
     expect(logWithRetry.mock.calls.map(([d]) => [d.programSetId, d.stepStatus])).toEqual([[11, "done"]]);
+  });
+
+  it("a heartbeat waits while taps are queued: the queued tap is sent first, at its own time", async () => {
+    await open(700);
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "visible" });
+    Object.defineProperty(navigator, "onLine", { configurable: true, get: () => false });
+    fireEvent.click(screen.getByRole("button", { name: "Pause" }));
+    await advance(0);
+    Object.defineProperty(navigator, "onLine", { configurable: true, get: () => true });
+    // Back online with no online event: the heartbeat tick finds the queue.
+    await advance(10_000);
+    const kinds = sendRideEvent.mock.calls.map(([d]) => d.kind);
+    expect(kinds[0]).toBe("pause");
+    expect(sent()).toEqual([expect.objectContaining({ kind: "pause", clientAt: T + 700_000 })]);
+  });
+
+  it("a server error keeps the tap queued; only a refusal for good drops it", async () => {
+    await open(700);
+    sendRideEvent.mockResolvedValueOnce({ success: false, error: "Failed to save the ride" });
+    fireEvent.click(screen.getByRole("button", { name: "Pause" }));
+    await advance(0);
+    expect(JSON.parse(localStorage.getItem(RIDE_QUEUE_KEY)!)["5"]).toEqual([expect.objectContaining({ kind: "pause" })]);
+    expect(text("ride-header")).toContain("Saved on this phone");
+    expect(screen.getByTestId("ride-paused")).toBeTruthy();
+
+    // Four conflicts in a row: still kept.
+    sendRideEvent.mockResolvedValue({ success: false, error: "The ride changed on another device" });
+    await advance(30_000);
+    expect(JSON.parse(localStorage.getItem(RIDE_QUEUE_KEY)!)["5"]).toHaveLength(1);
+
+    // The ride has ended: dropped.
+    sendRideEvent.mockResolvedValue({ success: false, error: "The ride has ended" });
+    await advance(30_000);
+    expect(localStorage.getItem(RIDE_QUEUE_KEY)).toBeNull();
+  });
+
+  it("the clock never steps back when a slow reply moves the offset, and each count beeps once", async () => {
+    await open(596);
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "visible" });
+    // A reply that took 2 s says the server is 1 s behind this phone.
+    getRide.mockImplementationOnce(async () => {
+      const v = view();
+      await new Promise((r) => setTimeout(r, 2_000));
+      return { success: true, data: { ...v, serverNow: v.serverNow - 1_000 } };
+    });
+    act(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    const seen: string[] = [];
+    for (let i = 0; i < 16; i++) {
+      await advance(250);
+      seen.push(text("ride-clock")!);
+    }
+    const secs = seen.map((c) => Number(c.split(":")[1]) + Number(c.split(":")[0]) * 60);
+    // Remaining time only goes down within the step (then the next step starts at 15:00).
+    const warm = secs.filter((x) => x < 100);
+    expect(warm).toEqual([...warm].sort((a, b) => b - a));
+    const counts = playCue.mock.calls.filter(([k]) => k === "count");
+    expect(counts).toHaveLength(3);
+  });
+
+  it("Undo of a skip on the last step brings the ride back before it is finished", async () => {
+    await open(1700);
+    expect(text("ride-step-title")).toBe("Easy");
+    const hold = screen.getByRole("button", { name: "Hold to skip step 3" });
+    fireEvent.pointerDown(hold);
+    await advance(600);
+    expect(screen.getByTestId("ride-done")).toBeTruthy();
+    expect(text("ride-toast")).toBe("SkippedUndo");
+    expect(completeWorkoutSession).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    await advance(0);
+    expect(text("ride-step-title")).toBe("Easy");
+    expect(sent().map((d) => d.kind)).toEqual(["skip", "unskip"]);
+    await advance(6_000);
+    expect(completeWorkoutSession).not.toHaveBeenCalled();
+  });
+
+  it("without an undo, the ride finishes 5 s after a skip of the last step", async () => {
+    await open(1700);
+    const hold = screen.getByRole("button", { name: "Hold to skip step 3" });
+    fireEvent.pointerDown(hold);
+    await advance(600);
+    expect(completeWorkoutSession).not.toHaveBeenCalled();
+    await advance(5_000);
+    expect(completeWorkoutSession).toHaveBeenCalled();
+    expect(replace).toHaveBeenCalledWith("/programs/1/workout/exercises/2");
+  });
+
+  it("a skip taken back on another device removes the skipped row this phone saved", async () => {
+    await open(700);
+    const hold = screen.getByRole("button", { name: "Hold to skip step 2" });
+    fireEvent.pointerDown(hold);
+    await advance(600);
+    expect(logWithRetry).toHaveBeenCalledWith(expect.objectContaining({ programSetId: 12, stepStatus: "skipped" }));
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    await advance(0);
+    expect(unlogWithRetry).toHaveBeenCalledWith({ sessionId: 7, exerciseId: 3, setNumber: 2, programSetId: 12 });
+  });
+
+  it("hold to skip stops when the finger slides off the button", async () => {
+    await open(700);
+    const hold = screen.getByRole("button", { name: "Hold to skip step 2" });
+    hold.getBoundingClientRect = () => ({ left: 0, top: 0, right: 100, bottom: 50, width: 100, height: 50, x: 0, y: 0, toJSON: () => ({}) });
+    fireEvent.pointerDown(hold);
+    // jsdom has no PointerEvent with coordinates: a mouse event of the same name carries them.
+    act(() => {
+      hold.dispatchEvent(new MouseEvent("pointermove", { bubbles: true, clientX: 300, clientY: 25 }));
+    });
+    await advance(1000);
+    expect(text("ride-step-title")).toBe("Work");
+  });
+
+  it("two tabs: a write keeps the other tab's queued taps", async () => {
+    await open(700);
+    localStorage.setItem(RIDE_QUEUE_KEY, JSON.stringify({ 5: [{ clientId: "other-tab", kind: "nudge", value: 5, clientAt: T + 699_000 }] }));
+    Object.defineProperty(navigator, "onLine", { configurable: true, get: () => false });
+    fireEvent.click(screen.getByRole("button", { name: "Pause" }));
+    await advance(0);
+    const stored = JSON.parse(localStorage.getItem(RIDE_QUEUE_KEY)!)["5"].map((q: { clientId: string }) => q.clientId);
+    expect(stored).toContain("other-tab");
+    expect(stored).toHaveLength(2);
+  });
+  // Last: a stale bundle marks this module's page as reloading for good.
+  it("a stale bundle keeps the tap queued for the next page", async () => {
+    await open(700);
+    sendRideEvent.mockRejectedValueOnce(Object.assign(new Error('Server Action "x" was not found on the server'), { name: "UnrecognizedActionError" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pause" }));
+    await advance(0);
+    expect(JSON.parse(localStorage.getItem(RIDE_QUEUE_KEY)!)["5"]).toEqual([expect.objectContaining({ kind: "pause" })]);
+    expect(text("ride-header")).toContain("Saved on this phone");
   });
 });

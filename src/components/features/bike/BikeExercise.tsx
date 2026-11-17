@@ -12,7 +12,7 @@
  */
 
 import { RideProfileChart, zoneOpacity } from "@/components/features/bike/RideProfileChart";
-import { armRide } from "@/components/features/bike/useRide";
+import { armRide, disarmRide } from "@/components/features/bike/useRide";
 import { BackLink } from "@/components/ui/BackLink";
 import { useWorkoutSession } from "@/contexts/workout-session-context";
 import type { RideMode } from "@/db/schema/rides";
@@ -73,7 +73,10 @@ export function BikeExercise({
     armRide();
     const res = await callAction(startRide({ sessionId: session.sessionId, programExerciseId, mode, clientId: crypto.randomUUID() }));
     if (res.success) router.replace(`${pathname}?ride=1`);
-    else setError(res.error);
+    else {
+      disarmRide();
+      setError(res.error);
+    }
     setStarting(false);
   }
 

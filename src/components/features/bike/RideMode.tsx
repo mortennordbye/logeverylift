@@ -54,6 +54,11 @@ function HoldToSkip({ step, onSkip, className = "" }: { step: number; onSkip: ()
     timer.current = null;
     setHolding(false);
   };
+  /** The finger slid off the button: no skip. */
+  const off = (e: React.PointerEvent<HTMLButtonElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) stop();
+  };
   const begin = () => {
     stop();
     setHolding(true);
@@ -69,6 +74,7 @@ function HoldToSkip({ step, onSkip, className = "" }: { step: number; onSkip: ()
       type="button"
       aria-label={`Hold to skip step ${step}`}
       onPointerDown={begin}
+      onPointerMove={off}
       onPointerUp={stop}
       onPointerLeave={stop}
       onPointerCancel={stop}
@@ -168,7 +174,7 @@ export function RideMode({
   const router = useRouter();
   const pathname = usePathname();
   const workoutSession = useWorkoutSession();
-  const { logWithRetry } = useWorkoutSetWriter();
+  const { logWithRetry, unlogWithRetry } = useWorkoutSetWriter();
   const { enqueue } = usePendingQueue();
   const landscape = useLandscape();
 
@@ -178,7 +184,14 @@ export function RideMode({
     },
     [logWithRetry, initial.ride.sessionId, exerciseId, setNumbers],
   );
-  const { view, events, timeline, serverNow, ready, prompt, online, unsent, queued, soundOff, actions } = useRide({ initial, saveStep });
+  // A skip taken back (here or on another phone): the skipped row goes, and the step saves again when it ends.
+  const unsaveStep = useCallback(
+    (programSetId: number) => {
+      void unlogWithRetry({ sessionId: initial.ride.sessionId, exerciseId, setNumber: setNumbers[programSetId] ?? 1, programSetId });
+    },
+    [unlogWithRetry, initial.ride.sessionId, exerciseId, setNumbers],
+  );
+  const { view, events, timeline, serverNow, ready, prompt, online, unsent, queued, soundOff, actions } = useRide({ initial, saveStep, unsaveStep });
   const plan = view.plan;
   const s = rideScreen(plan, timeline, units);
   const ended = timeline.status === "finished" || timeline.status === "ended_early";
@@ -226,9 +239,11 @@ export function RideMode({
   const lap = () => actions.lap();
 
   // The end: finish the workout of a program with only this exercise, then the bike screen.
+  // A skip of the last step ends the ride: it waits while its Undo shows.
   const wrapped = useRef(false);
+  const undoPending = toast?.undo === "unskip";
   useEffect(() => {
-    if (!ready || !ended || queued > 0 || !online || wrapped.current) return;
+    if (!ready || !ended || queued > 0 || !online || undoPending || wrapped.current) return;
     wrapped.current = true;
     void (async () => {
       if (onlyExercise && !sessionCompleted) {
@@ -240,7 +255,7 @@ export function RideMode({
       router.replace(pathname);
       router.refresh();
     })();
-  }, [ready, ended, queued, online, onlyExercise, sessionCompleted, initial.ride.sessionId, timeline.endedAt, enqueue, workoutSession, router, pathname]);
+  }, [ready, ended, queued, online, undoPending, onlyExercise, sessionCompleted, initial.ride.sessionId, timeline.endedAt, enqueue, workoutSession, router, pathname]);
 
   if (!ready) return <div data-ride-mode className="fixed inset-0 z-50 bg-background" aria-busy="true" />;
 
@@ -257,11 +272,22 @@ export function RideMode({
     </div>
   );
 
+  const toastRow = toast && (
+    <div className="flex items-center justify-between gap-3 rounded-2xl bg-foreground pl-4 pr-1 min-h-12 text-background" role="status" data-testid="ride-toast">
+      <span className="font-semibold tabular-nums">{toast.text}</span>
+      {toast.undo && (
+        <button type="button" onClick={undo} className="min-h-11 px-3 font-semibold active:opacity-70">
+          Undo
+        </button>
+      )}
+    </div>
+  );
   if (ended || !s) {
     return (
       <div data-ride-mode className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-background px-6 text-center" data-testid="ride-done">
         <p className="text-3xl font-bold">{timeline.status === "ended_early" ? "Ride ended early" : "Ride done"}</p>
         <p className="text-base text-muted-foreground">{offline ? "Saved on this phone. It sends when you are online." : "Saving the ride"}</p>
+        {toastRow && <div className="w-full max-w-sm text-left">{toastRow}</div>}
       </div>
     );
   }
@@ -275,16 +301,6 @@ export function RideMode({
     <h1 className="text-[28px] font-bold leading-tight tracking-tight" data-testid="ride-step-title">
       {s.title}
     </h1>
-  );
-  const toastRow = toast && (
-    <div className="flex items-center justify-between gap-3 rounded-2xl bg-foreground pl-4 pr-1 min-h-12 text-background" role="status" data-testid="ride-toast">
-      <span className="font-semibold tabular-nums">{toast.text}</span>
-      {toast.undo && (
-        <button type="button" onClick={undo} className="min-h-11 px-3 font-semibold active:opacity-70">
-          Undo
-        </button>
-      )}
-    </div>
   );
   const nudges = (withExtend: boolean) => (
     <>
@@ -319,6 +335,12 @@ export function RideMode({
     <button type="button" onClick={actions.soundOn} className="min-h-11 rounded-xl bg-muted px-3 text-sm" data-testid="ride-sound-off">
       Tap to turn sound back on
     </button>
+  );
+
+  const announce = (
+    <span className="sr-only" aria-live="polite">
+      {`${s.title}, ${s.target ? `${s.target.value}${s.target.unit ? ` ${s.target.unit}` : ""}` : ""}`}
+    </span>
   );
 
   // Opened on a running ride without a tap: sound and the wake lock need one.
@@ -387,6 +409,8 @@ export function RideMode({
           {pauseBtn}
           {lapBtn}
         </div>
+        {soundHint}
+        {announce}
       </div>
     );
   }
@@ -408,9 +432,7 @@ export function RideMode({
         {pauseBtn}
         {lapBtn}
       </div>
-      <span className="sr-only" aria-live="polite">
-        {`${s.title}, ${s.target ? `${s.target.value}${s.target.unit ? ` ${s.target.unit}` : ""}` : ""}`}
-      </span>
+      {announce}
     </div>
   );
 }

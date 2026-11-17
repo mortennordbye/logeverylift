@@ -101,8 +101,9 @@ describe("saving a step", () => {
   it("a save from the set list keeps the ride's offset, extension and sources", async () => {
     const s = await setup();
     ok(await logWorkoutSet(stepLog(s, 1, { targetOffsetW: 5, extendedSeconds: 120 })));
-    const { stepStatus: _s, targetOffsetW: _o, extendedSeconds: _e, sources: _src, ...plain } = stepLog(s, 1);
-    ok(await logWorkoutSet({ ...plain, durationSeconds: 1000 }));
+    const plain: Record<string, unknown> = { ...stepLog(s, 1), durationSeconds: 1000 };
+    for (const k of ["stepStatus", "targetOffsetW", "extendedSeconds", "sources"]) delete plain[k];
+    ok(await logWorkoutSet(plain));
     const [row] = await db.select().from(workoutSets).where(eq(workoutSets.sessionId, s.sessionId));
     expect([row.stepStatus, row.durationSeconds, row.targetOffsetW, row.extendedSeconds, row.sources]).toEqual(["done", 1000, 5, 120, { durationSeconds: "clock" }]);
   });
@@ -111,6 +112,9 @@ describe("saving a step", () => {
     const s = await setup();
     expect((await logWorkoutSet(stepLog(s, 0, { targetOffsetW: 55 }))).success).toBe(false);
     expect((await logWorkoutSet(stepLog(s, 0, { sources: { durationSeconds: "guess" } }))).success).toBe(false);
+    // Sources name result fields only.
+    expect((await logWorkoutSet(stepLog(s, 0, { sources: { notes: "clock" } }))).success).toBe(false);
+    expect((await logWorkoutSet(stepLog(s, 0, { sources: { durationSeconds: "clock", avgPower: "typed" } }))).success).toBe(true);
   });
 });
 
