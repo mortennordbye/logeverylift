@@ -394,8 +394,9 @@ Without a bike LTHR, heart rate targets become effort targets (Z2 4, Z3 6, Z4 7)
 - Step 0, undo of a skip: the event list had none, so a new kind `unskip` cancels the latest skip and the step goes on as if never skipped. Undo of ±5 W and +1 min is the opposite event, as written.
 - Step 0, heartbeat: not a `ride_events` row. It sets `rides.heartbeat_at`, so it takes no sequence number and never makes another device conflict.
 - Step 0, step status: lap on a timed step saves it as partial; End ride saves the current step as partial, or leaves it out when no second was ridden.
-- Step 0, planned end for the auto end: start, plus the planned time of the timed steps and the extensions, plus the pauses already over. An open pause counts, so a ride left paused also ends.
-- Step 0, a client time outside the ride: the event is kept at the server's time, not refused, so a queued event is never lost.
+- Step 0, auto end: 2 hours after the latest of the planned end, the last event and the last heartbeat, so a ride someone still uses never ends. The planned end is the start, plus each step's time or estimate (an open distance step at 25 km/h, a lap step 10 min) and the extensions, plus the pauses already over. An open pause counts, so a ride left paused also ends.
+- Step 0, a client time outside the ride: the event is kept at the server's time, not refused, so a queued event is never lost. It never goes before the last stored event or heartbeat, so a late replay cannot rewrite what another device saw.
+- Step 0, an event on an ended ride: accepted when it makes the ride live again (an unskip of the last step, an offline extend from before the end), else "The ride has ended". The auto end bounds how late that can be.
 - Step 0, outdoor targets in the frozen plan: only a written outdoor target for now. The derived one (4.2) is added to the plan by the step that first shows it.
 - Step 0, `workout_sessions.ended_early`: the column only. The finish flow (step 3) writes it; `startRide` writes `ride_mode`.
 - Step 0, weekly sync: a ramp or free step keeps its target; the sync writes no zone on it.
