@@ -97,8 +97,8 @@ describe("startRide", () => {
     const first = ok(await start(s));
     expect(await start(s)).toEqual({ success: false, error: "A ride is already running" });
 
-    // Two hours after its planned end (and the lap step that never got its tap), it ends on its own.
-    vi.setSystemTime(new Date(T0.getTime() + 45 * 60_000 + AUTO_END_AFTER_MS));
+    // Two hours after its planned end (the lap step that never got its tap counts 10 min), it ends on its own.
+    vi.setSystemTime(new Date(T0.getTime() + 55 * 60_000 + AUTO_END_AFTER_MS));
     const second = ok(await start(s));
     expect(second.ride.id).not.toBe(first.ride.id);
     const [old] = await db.select().from(rides).where(eq(rides.id, first.ride.id));
@@ -232,5 +232,82 @@ describe("getRide", () => {
     asUser((await createUser({ enduranceEnabled: true })).id);
     expect(await getRide({ rideId: ride.id })).toEqual({ success: false, error: "Not found" });
     expect(ok(await getRide({}))).toBeNull();
+  });
+});
+
+describe("review fixes", () => {
+  const at = (seconds: number) => new Date(T0.getTime() + seconds * 1000);
+  async function program(steps: unknown[]) {
+    const { program, slots } = await createStepProgram(me, bike, { v: 2, sport: "bike", name: "Ride", steps });
+    const session = await createSession(me, program.id);
+    return { sessionId: session.id, programExerciseId: slots[0].programExerciseId };
+  }
+
+  it("an outdoor ride of distance steps that runs 3 hours with heartbeats does not end on its own; an abandoned one does", async () => {
+    const steps = [
+      { type: "work", end: { type: "distance", meters: 10_000 } },
+      { type: "work", end: { type: "distance", meters: 10_000 } },
+    ];
+    const used = await program(steps);
+    const { ride } = ok(await startRide({ ...used, mode: "outdoor", clientId: cid() }));
+    for (const s of [9000, 10_200]) {
+      vi.setSystemTime(at(s));
+      ok(await sendRideEvent({ rideId: ride.id, clientId: cid(), kind: "heartbeat", expectedSeq: 1 }));
+    }
+    vi.setSystemTime(at(3 * 3600));
+    expect(ok(await getRide({ rideId: ride.id }))!.ride.status).toBe("running");
+    ok(await sendRideEvent({ rideId: ride.id, clientId: cid(), kind: "end", expectedSeq: 1 }));
+
+    vi.setSystemTime(T0);
+    const left = await program(steps);
+    const { ride: abandoned } = ok(await startRide({ ...left, mode: "outdoor", clientId: cid() }));
+    // 2 × 10 km at 25 km/h is 48 min; 2 hours after that it ends.
+    vi.setSystemTime(at(48 * 60 + 2 * 3600));
+    expect(ok(await getRide({ rideId: abandoned.id }))!.ride).toMatchObject({ status: "ended_early", endedAt: T0.getTime() });
+  });
+
+  it("an unskip of the last step brings the finished ride back", async () => {
+    const s = await program([
+      { type: "work", end: { type: "time", seconds: 300 } },
+      { type: "work", end: { type: "time", seconds: 300 } },
+    ]);
+    const { ride } = ok(await start(s));
+    vi.setSystemTime(at(310));
+    const skipped = ok(await sendRideEvent({ rideId: ride.id, clientId: cid(), kind: "skip", expectedSeq: 1 }));
+    expect(skipped.ride.status).toBe("finished");
+    vi.setSystemTime(at(313));
+    const back = ok(await sendRideEvent({ rideId: ride.id, clientId: cid(), kind: "unskip", expectedSeq: 2 }));
+    expect(back.ride).toMatchObject({ status: "running", endedAt: null });
+  });
+
+  it("an offline extend from inside the ride counts after the planned end", async () => {
+    const s = await program([{ type: "work", end: { type: "time", seconds: 300 } }]);
+    const { ride } = ok(await start(s));
+    vi.setSystemTime(at(310));
+    const r = ok(await sendRideEvent({ rideId: ride.id, clientId: cid(), kind: "extend", value: 60, clientAt: at(290).getTime(), expectedSeq: 1 }));
+    expect(r.ride.status).toBe("running");
+    expect(r.events[1].at).toBe(at(290).getTime());
+  });
+
+  it("a late offline replay does not rewrite what another device already saw", async () => {
+    const s = await program([
+      { type: "work", end: { type: "time", seconds: 900 } },
+      { type: "work", end: { type: "time", seconds: 900 } },
+    ]);
+    const { ride } = ok(await start(s));
+    // Device B is online and sends heartbeats; it saw step 1 end at 900 s.
+    vi.setSystemTime(at(1190));
+    ok(await sendRideEvent({ rideId: ride.id, clientId: cid(), kind: "heartbeat", expectedSeq: 1 }));
+    // Device A paused offline at 600 s and replays at 1200 s.
+    vi.setSystemTime(at(1200));
+    const r = ok(await sendRideEvent({ rideId: ride.id, clientId: cid(), kind: "pause", clientAt: at(600).getTime(), expectedSeq: 1 }));
+    expect(r.events[1].at).toBe(at(1190).getTime());
+    expect(r.ride.status).toBe("paused");
+  });
+
+  it("two starts with the same client id at once return the same ride", async () => {
+    const s = await rideSetup();
+    const [a, b] = await Promise.all([start(s, "same"), start(s, "same")]);
+    expect(ok(a).ride.id).toBe(ok(b).ride.id);
   });
 });

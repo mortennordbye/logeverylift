@@ -61,12 +61,13 @@ async function settle(ex: Executor, ride: Ride, now: number): Promise<RideView> 
   const rows = await ex.select().from(rideEvents).where(eq(rideEvents.rideId, ride.id)).orderBy(asc(rideEvents.seq));
   const events = rows.map((e) => ({ seq: e.seq, kind: e.kind, value: e.value, at: e.at.getTime(), clientId: e.clientId }));
   const plan = ride.plan as RidePlan;
-  const t = rideTimeline(plan, events, now);
+  const t = rideTimeline(plan, events, now, { heartbeatAt: ride.heartbeatAt?.getTime() ?? null });
   let { status, endedAt } = ride;
   if (t.status !== ride.status || (t.endedAt ?? null) !== (ride.endedAt?.getTime() ?? null)) {
     status = t.status;
     endedAt = t.endedAt !== null ? new Date(t.endedAt) : null;
-    await ex.update(rides).set({ status, endedAt }).where(eq(rides.id, ride.id));
+    // Only over the events read here: a newer event settles the ride itself.
+    await ex.update(rides).set({ status, endedAt }).where(and(eq(rides.id, ride.id), eq(rides.seq, ride.seq)));
   }
   return {
     ride: {
@@ -86,6 +87,16 @@ async function settle(ex: Executor, ride: Ride, now: number): Promise<RideView> 
 }
 
 const clientIdSchema = z.string().min(1).max(64);
+
+/** The user's ride whose start event has this client id, if any. */
+async function startedWith(userId: string, clientId: string): Promise<RideView | null> {
+  const [row] = await db
+    .select({ ride: rides })
+    .from(rides)
+    .innerJoin(rideEvents, and(eq(rideEvents.rideId, rides.id), eq(rideEvents.clientId, clientId), eq(rideEvents.kind, "start")))
+    .where(eq(rides.userId, userId));
+  return row ? settle(db, row.ride, Date.now()) : null;
+}
 
 const startRideSchema = z.object({
   sessionId: z.number().int().positive(),
@@ -109,12 +120,8 @@ export async function startRide(data: unknown): Promise<ActionResult<RideView>> 
   if (!(await enduranceEnabledFor(userId))) return { success: false, error: "Endurance features are not on for this account" };
 
   try {
-    const [replay] = await db
-      .select({ ride: rides })
-      .from(rideEvents)
-      .innerJoin(rides, eq(rides.id, rideEvents.rideId))
-      .where(and(eq(rides.userId, userId), eq(rideEvents.clientId, clientId), eq(rideEvents.kind, "start")));
-    if (replay) return { success: true, data: await settle(db, replay.ride, Date.now()) };
+    const replay = await startedWith(userId, clientId);
+    if (replay) return { success: true, data: replay };
 
     const [session] = await db
       .select({ programId: workoutSessions.programId, isCompleted: workoutSessions.isCompleted })
@@ -159,8 +166,12 @@ export async function startRide(data: unknown): Promise<ActionResult<RideView>> 
     });
     return { success: true, data: await settle(db, ride, now) };
   } catch (e) {
-    // Two starts at once: the active-ride index lets one through.
-    if (isUniqueViolation(e)) return { success: false, error: "A ride is already running" };
+    // Two starts at once: the active-ride index lets one through. A retry of
+    // the same start gets that ride.
+    if (isUniqueViolation(e)) {
+      const same = await startedWith(userId, clientId);
+      return same ? { success: true, data: same } : { success: false, error: "A ride is already running" };
+    }
     console.error("[startRide] failed", { sessionId, programExerciseId });
     return { success: false, error: "Failed to start the ride" };
   }
@@ -212,27 +223,39 @@ export async function sendRideEvent(data: unknown): Promise<ActionResult<RideVie
       if (replay) return { success: true, data: await settle(tx, ride, now) };
 
       const view = await settle(tx, ride, now);
-      if (!isLive(view.ride.status)) return { success: false, error: "The ride has ended" };
       if (kind === "heartbeat") {
+        if (!isLive(view.ride.status)) return { success: false, error: "The ride has ended" };
         await tx.update(rides).set({ heartbeatAt: new Date(now) }).where(eq(rides.id, rideId));
         return { success: true, data: view };
       }
       if (expectedSeq !== ride.seq) return { success: false, error: RIDE_CONFLICT };
 
+      // Never before what the server already has: the last event or heartbeat.
+      const heartbeatAt = ride.heartbeatAt?.getTime() ?? null;
+      const knownUntil = Math.max(ride.startedAt.getTime(), heartbeatAt ?? 0, ...view.events.map((e) => e.at));
+      const at = eventTime(clientAt, ride.startedAt.getTime(), now, knownUntil);
       const seq = ride.seq + 1;
+      // An ended ride takes an event that makes it live again: an unskip of
+      // the last step, or an offline extend or pause from before its end.
+      if (!isLive(view.ride.status)) {
+        const withIt = rideTimeline(view.plan, [...view.events, { seq, kind, value: value ?? null, at }], now, { heartbeatAt });
+        if (!isLive(withIt.status)) return { success: false, error: "The ride has ended" };
+      }
       await tx.insert(rideEvents).values({
         rideId,
         seq,
         clientId,
         kind,
         value: value ?? null,
-        at: new Date(eventTime(clientAt, ride.startedAt.getTime(), now)),
+        at: new Date(at),
         clientAt: clientAt != null ? new Date(clientAt) : null,
       });
       const [next] = await tx.update(rides).set({ seq }).where(eq(rides.id, rideId)).returning();
       return { success: true, data: await settle(tx, next, now) };
     });
-  } catch {
+  } catch (e) {
+    // A ride made live again while another one runs.
+    if (isUniqueViolation(e)) return { success: false, error: "A ride is already running" };
     console.error("[sendRideEvent] failed", { rideId, kind });
     return { success: false, error: "Failed to save the ride" };
   }

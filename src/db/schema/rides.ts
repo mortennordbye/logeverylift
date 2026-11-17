@@ -51,6 +51,8 @@ export const rides = pgTable(
       .on(t.userId)
       .where(sql`${t.status} IN ('running', 'paused')`),
     index("idx_rides_session").on(t.sessionId),
+    // The user's rides: the active ride and the start replay lookup.
+    index("idx_rides_user").on(t.userId),
   ],
 );
 
