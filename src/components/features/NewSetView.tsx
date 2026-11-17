@@ -92,7 +92,8 @@ export function NewSetView({
   const [runMode, setRunMode] = useState<"distance" | "time">(
     lastSet?.distanceMeters != null ? "distance"
     : lastSet?.durationSeconds != null ? "time"
-    : "distance"
+    // A ride has no default distance, so it starts on time.
+    : cfg.defaultDistanceM != null ? "distance" : "time"
   );
   const [reps, setReps] = useState(lastSet?.targetReps ?? 10);
   const [weight, setWeight] = useState(Number(lastSet?.weightKg ?? 0));
@@ -103,13 +104,14 @@ export function NewSetView({
     ? Number(lastSet?.durationSeconds ?? 0)
     : Number(lastSet?.durationSeconds ?? 60);
   const [duration, setDuration] = useState(initialDuration);
-  const [distanceMeters, setDistanceMeters] = useState(lastSet?.distanceMeters ?? cfg.defaultDistanceM);
-  const [distanceStr, setDistanceStr] = useState(metersToInput(lastSet?.distanceMeters ?? cfg.defaultDistanceM));
+  const startDistance = lastSet?.distanceMeters ?? cfg.defaultDistanceM;
+  const [distanceMeters, setDistanceMeters] = useState(startDistance ?? 0);
+  const [distanceStr, setDistanceStr] = useState(startDistance != null ? metersToInput(startDistance) : "");
   // The units arrive after first render on a cold load; show the field in them.
   const [unitShown, setUnitShown] = useState(unit);
   if (unitShown !== unit) {
     setUnitShown(unit);
-    setDistanceStr(metersToInput(distanceMeters));
+    setDistanceStr(distanceMeters > 0 ? metersToInput(distanceMeters) : "");
   }
   const [inclinePercent, setInclinePercent] = useState<number | null>(lastSet?.inclinePercent ?? null);
   const [inclineStr, setInclineStr] = useState(lastSet?.inclinePercent != null ? String(lastSet.inclinePercent) : "");

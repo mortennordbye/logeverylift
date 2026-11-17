@@ -680,7 +680,8 @@ export function WorkoutSetsList({
         programSetId: setId,
         actualReps: 0,
         weightKg: 0,
-        distanceMeters,
+        // A ride logged on its time alone has no distance.
+        distanceMeters: distanceMeters > 0 ? distanceMeters : undefined,
         durationSeconds: runDurationSeconds > 0 ? runDurationSeconds : undefined,
         inclinePercent: inclinePercent ?? undefined,
         heartRateZone: heartRateZone ?? undefined,

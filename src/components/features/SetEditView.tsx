@@ -172,7 +172,7 @@ function SetEditForm({
   const [runMode, setRunMode] = useState<"distance" | "time">(
     set.distanceMeters != null ? "distance"
     : set.durationSeconds != null ? "time"
-    : "distance"
+    : cfg.defaultDistanceM != null ? "distance" : "time"
   );
   // In a workout this field is the reps *achieved*, so it seeds from the
   // achieved count when the session already has one. In program-edit mode it
@@ -205,13 +205,15 @@ function SetEditForm({
   const repsMin = isWorkout ? 0 : 1;
   const [duration, setDuration] = useState(override?.durationSeconds ?? Number(set.durationSeconds ?? 0));
   const [startDelay, setStartDelay] = useState(override?.startDelaySeconds ?? set.startDelaySeconds ?? 0);
-  const [distanceMeters, setDistanceMeters] = useState(set.distanceMeters ?? cfg.defaultDistanceM);
-  const [distanceStr, setDistanceStr] = useState(metersToInput(set.distanceMeters ?? cfg.defaultDistanceM));
+  // A ride has no default distance: the field starts empty (0).
+  const startDistance = set.distanceMeters ?? cfg.defaultDistanceM;
+  const [distanceMeters, setDistanceMeters] = useState(startDistance ?? 0);
+  const [distanceStr, setDistanceStr] = useState(startDistance != null ? metersToInput(startDistance) : "");
   // The units arrive after first render on a cold load; show the field in them.
   const [unitShown, setUnitShown] = useState(unit);
   if (unitShown !== unit) {
     setUnitShown(unit);
-    setDistanceStr(metersToInput(distanceMeters));
+    setDistanceStr(distanceMeters > 0 ? metersToInput(distanceMeters) : "");
   }
   const [inclinePercent, setInclinePercent] = useState<number | null>(set.inclinePercent ?? null);
   const [inclineStr, setInclineStr] = useState(set.inclinePercent != null ? String(set.inclinePercent) : "");
@@ -401,7 +403,7 @@ function SetEditForm({
           actualReps: isRunning ? 0 : reps,
           weightKg: isRunning ? 0 : weight,
           durationSeconds: duration > 0 ? duration : undefined,
-          distanceMeters: isRunning ? (distanceMeters ?? undefined) : undefined,
+          distanceMeters: isRunning && distanceMeters > 0 ? distanceMeters : undefined,
           // No rpe: rir is the effort the lifter actually picked, and leaving
           // the picker alone means effort is unknown rather than a middling 7.
           rir: failed ? 0 : (rir ?? undefined),
