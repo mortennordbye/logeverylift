@@ -334,6 +334,12 @@ export async function logWorkoutSet(
       targetOffsetW,
       extendedSeconds,
       sources,
+      avgPower,
+      avgHr,
+      maxHr,
+      avgCadence,
+      avgSpeed,
+      climbM,
     } = validation.data;
 
     // RIR is the primary effort input; derive RPE from it so all downstream
@@ -413,6 +419,23 @@ export async function logWorkoutSet(
     // Replays from the offline queue land here too and are idempotent: the row
     // is rewritten with the same values, and PR detection below only inserts
     // when a value strictly beats the current record.
+    // A ride's step write (ride mode, the ride results table) sends `sources`.
+    // It keeps what it does not send: the clock's save of a step leaves the
+    // numbers typed or filled since, and the results table sends only the
+    // fields the rider changed (docs/plans/bike-ride-logger.md, 4.5). Sources
+    // merge into the stored map; a field sent as null loses its source.
+    const rideWrite = plannedStep != null && sources !== undefined;
+    const results = plannedStep
+      ? Object.fromEntries(Object.entries({ avgPower, avgHr, maxHr, avgCadence, avgSpeed, climbM }).filter(([, v]) => v !== undefined))
+      : {};
+    const cleared = [
+      ...Object.entries(results).filter(([, v]) => v === null).map(([k]) => k),
+      ...(rideWrite && distanceMeters === null ? ["distanceMeters"] : []),
+    ];
+    const addSources = sources ? Object.fromEntries(Object.entries(sources).filter(([k]) => !cleared.includes(k))) : undefined;
+    const keepRpe = rideWrite && rir === undefined && rpe === undefined;
+    const keepDistance = rideWrite && distanceMeters === undefined;
+
     const setValues = {
       sessionId,
       exerciseId,
@@ -439,7 +462,8 @@ export async function logWorkoutSet(
       // Ride mode's own fields, only when sent: a re-log from the set list keeps them.
       ...(plannedStep && targetOffsetW !== undefined && { targetOffsetW }),
       ...(plannedStep && extendedSeconds !== undefined && { extendedSeconds }),
-      ...(plannedStep && sources !== undefined && { sources }),
+      ...(plannedStep && sources !== undefined && { sources: addSources }),
+      ...results,
     };
     // One transaction for the row and the records it earns, under a per-user,
     // per-exercise lock (lockRecords).
@@ -468,11 +492,11 @@ export async function logWorkoutSet(
             actualReps: setValues.actualReps,
             weightKg: setValues.weightKg,
             durationSeconds: setValues.durationSeconds ?? null,
-            distanceMeters: setValues.distanceMeters ?? null,
+            ...(!keepDistance && { distanceMeters: setValues.distanceMeters ?? null }),
             inclinePercent: setValues.inclinePercent ?? null,
             heartRateZone: setValues.heartRateZone ?? null,
             rir: setValues.rir ?? null,
-            rpe: setValues.rpe,
+            ...(!keepRpe && { rpe: setValues.rpe }),
             restTimeSeconds: setValues.restTimeSeconds,
             notes: setValues.notes ?? null,
             isCompleted: setValues.isCompleted,
@@ -481,7 +505,10 @@ export async function logWorkoutSet(
             ...(plannedStep && { plannedStep, stepStatus: setValues.stepStatus }),
             ...(setValues.targetOffsetW !== undefined && { targetOffsetW: setValues.targetOffsetW }),
             ...(setValues.extendedSeconds !== undefined && { extendedSeconds: setValues.extendedSeconds }),
-            ...(setValues.sources !== undefined && { sources: setValues.sources }),
+            ...(addSources !== undefined && {
+              sources: sql`(coalesce(${workoutSets.sources}, '{}'::jsonb) || ${JSON.stringify(addSources)}::jsonb) - array(select jsonb_array_elements_text(${JSON.stringify(cleared)}::jsonb))`,
+            }),
+            ...results,
           },
         })
         .returning();

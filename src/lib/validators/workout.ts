@@ -106,7 +106,7 @@ export const logWorkoutSetSchema = z.object({
     .min(0, "Weight cannot be negative")
     .max(1000, "Weight must be under 1000kg"),
   durationSeconds: z.number().int().min(0).optional(),
-  distanceMeters: z.number().int().min(0).optional(),
+  distanceMeters: z.number().int().min(0).nullable().optional(),
   inclinePercent: z.number().int().min(0).max(30).optional(),
   heartRateZone: z.number().int().min(1).max(5).optional(),
   // Reps In Reserve — the primary effort input (0 = to failure, 5 = 5+ left).
@@ -123,6 +123,8 @@ export const logWorkoutSetSchema = z.object({
     .int()
     .min(1, "RPE must be at least 1")
     .max(10, "RPE must be at most 10")
+    // Null: the ride results table took the effort away (a ride write keeps the stored RPE when it sends none).
+    .nullable()
     .optional(),
   restTimeSeconds: z
     .number()
@@ -144,6 +146,15 @@ export const logWorkoutSetSchema = z.object({
   stepStatus: z.enum(["done", "partial", "skipped"]).optional(),
   targetOffsetW: z.number().int().min(-NUDGE_CAP_W).max(NUDGE_CAP_W).optional(),
   extendedSeconds: z.number().int().min(0).max(EXTEND_MAX_S).optional(),
+  // Ride results a rider types after the ride (docs/plans/bike-ride-logger.md,
+  // 4.1 and 4.5). Each is written only when sent; null clears it.
+  avgPower: z.number().int().min(0).max(2500).nullable().optional(),
+  avgHr: z.number().int().min(30).max(250).nullable().optional(),
+  maxHr: z.number().int().min(30).max(250).nullable().optional(),
+  avgCadence: z.number().int().min(0).max(250).nullable().optional(),
+  // m/s
+  avgSpeed: z.number().min(0).max(40).nullable().optional(),
+  climbM: z.number().int().min(0).max(20000).nullable().optional(),
   sources: z.partialRecord(z.enum(RESULT_FIELDS), z.enum(RESULT_SOURCES)).optional(),
 });
 
