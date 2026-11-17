@@ -706,7 +706,13 @@ export function restoredSetValues(
   const values: Record<string, unknown> = { ...targetSet };
   delete values.id;
   if (!currentSet) return values;
-  for (const field of syncOwnedSetFields(targetSet)) values[field] = currentSet[field];
+  // A restore across the bike move (docs/plans/bike-ride-logger.md, step 1)
+  // turns a step back into a plain set: the current row holds the sync's zone
+  // and rest in the other shape, so only the scaled end is kept.
+  const sameShape = (targetSet.stepKind == null) === (currentSet.stepKind == null);
+  for (const field of syncOwnedSetFields(targetSet)) {
+    if (sameShape || field === "distanceMeters" || field === "durationSeconds") values[field] = currentSet[field];
+  }
   const syncOwned = new Set(syncOwnedSetFields(targetSet));
   for (const field of PROGRESSION_FIELDS) {
     if (syncOwned.has(field)) continue;

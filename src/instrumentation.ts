@@ -56,6 +56,14 @@ export async function register() {
   void purge();
   setInterval(purge, 24 * 60 * 60 * 1000).unref();
 
+  // Plain bike sets of endurance users become steps, once per program
+  // (docs/plans/bike-ride-logger.md, D3). A program with a workout in progress
+  // waits for the next boot.
+  const { migrateBikeSetsToSteps } = await import("@/lib/bike-sets-to-steps");
+  migrateBikeSetsToSteps().catch((err) =>
+    console.error("[migrateBikeSetsToSteps] failed", err instanceof Error ? err.message : "unknown"),
+  );
+
   // Copy gyms from OpenStreetMap for "Gyms near me". Runs weekly; checked
   // hourly, so an import the busy Overpass server turns away is retried soon.
   const gymCountries = env.GYM_IMPORT_COUNTRIES;

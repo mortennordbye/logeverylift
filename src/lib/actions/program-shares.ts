@@ -3,6 +3,7 @@
 import { db } from "@/db";
 import { livePrograms } from "@/lib/plan-live";
 import { planWrite } from "@/lib/plan-revisions";
+import { settleStepRows } from "@/lib/program-steps-db";
 import { friendships, programExercises, programSets, programShares, programs } from "@/db/schema";
 import {
   copySharedProgramSchema,
@@ -262,6 +263,8 @@ export async function copySharedProgram(
               ...stepFieldsOf(ps),
             })),
           );
+          // A plain ride arrives as steps for an endurance user (docs/plans/bike-ride-logger.md, D3).
+          await settleStepRows(tx, newPe.id);
         }
       }
 

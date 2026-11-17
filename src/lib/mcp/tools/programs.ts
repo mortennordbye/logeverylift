@@ -39,7 +39,7 @@ import {
 } from "@/lib/utils/progression";
 import { reanchoredPeaks } from "@/lib/utils/periodization";
 import { REP_RANGE_MESSAGE, repRangeIsWellFormed } from "@/lib/validators/workout";
-import { StepRowsError, assertStepRows } from "@/lib/program-steps-db";
+import { StepRowsError, settleStepRows } from "@/lib/program-steps-db";
 import { workoutToRows } from "@/lib/utils/program-steps";
 import { parseWorkout, programStepFieldsSchema } from "@/lib/utils/workout-steps";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -339,7 +339,7 @@ export function registerProgramTools(server: McpServer, userId: string, clientId
         "Each set takes setNumber and optional targetReps, repRangeMin and repRangeMax (both or neither, min <= targetReps <= max), targetRir (0-5), weightKg, durationSeconds, distanceMeters, inclinePercent, targetHeartRateZone (1-5), sessionRole ('work' marks a hard interval rep), startDelaySeconds (0-60, prep time before a timed set), restTimeSeconds and setType. Any other key fails the call. All values are metric.",
         "Field owners: target reps and weight belong to the progression engine; an edit is a one-off until the next logged session (change the progression settings to change the trend). On a set with a peak anchor, distance or duration is this week's value and the peak is re-derived from it. targetHeartRateZone and restTimeSeconds on a 'work' set with a peak anchor belong to the weekly sync: a different value is refused, and an omitted one keeps the sync's value; send sessionRole: null on that set to take them over. To make a whole week lighter or harder, use manage_training_cycle operation='set_volume', not set edits.",
         "operation='update': requires programExerciseId; any provided slot fields are updated. A new exerciseId must be a built-in exercise or one of the user's own. If sets[] is provided it becomes the slot's full set list: an entry with id updates that set, an entry without id updates the set at the same setNumber, other entries are added, and stored sets that no entry names are removed. Set ids never change, so logged workouts keep their link. A set without sessionRole keeps the role it had.",
-        "Endurance steps (swim, bike or run exercises only): a set with stepKind (warmup, work, recovery, cooldown, rest) is one step of a structured session. It ends on exactly one of durationSeconds, distanceMeters or endsOnLap: true. Optional targets (1-2 entries, the shape of a step target in logeverylift://docs/workout-steps; the second caps the first), cadenceLow and cadenceHigh, and for swims stroke, equipment, sendOffSeconds and poolLengthM on the slot; note is a short cue. A repeat block is one set per round: the sets of block 1 round 1, then block 1 round 2, and so on, each with blockId and blockRound, every round the same. Instead of sets[] you can send workout: a step tree with repeats, and it becomes the set list. Either every set of a slot is a step or none is. The whole slot is checked after the write and a broken one is refused with the set numbers.",
+        "Endurance steps (swim, bike or run exercises only): a set with stepKind (warmup, work, recovery, cooldown, rest) is one step of a structured session. It ends on exactly one of durationSeconds, distanceMeters or endsOnLap: true. Optional targets (1-2 entries, the shape of a step target in logeverylift://docs/workout-steps; the second caps the first), cadenceLow and cadenceHigh, and for swims stroke, equipment, sendOffSeconds and poolLengthM on the slot; note is a short cue. A repeat block is one set per round: the sets of block 1 round 1, then block 1 round 2, and so on, each with blockId and blockRound, every round the same. Instead of sets[] you can send workout: a step tree with repeats, and it becomes the set list. Either every set of a slot is a step or none is. For a user with endurance features on, a bike slot always holds steps: plain bike sets are stored as steps (each set one step, its targetHeartRateZone a zone target on LTHR, its rest a rest step after it). The whole slot is checked after the write and a broken one is refused with the set numbers.",
         "operation='remove': requires programExerciseId.",
         `Every operation requires reason and expectedVersion (the program's version). The result has the program's new version. ${REVISION_RULES}`,
         `On add and update: ${LIMITS_TEXT}`,
@@ -497,7 +497,7 @@ export function registerProgramTools(server: McpServer, userId: string, clientId
                   .insert(programSets)
                   .values(args.sets.map((s) => setValues(inserted.id, s)));
               }
-              await assertStepRows(tx, inserted.id);
+              await settleStepRows(tx, inserted.id);
               return inserted;
             });
           });
@@ -603,7 +603,7 @@ export function registerProgramTools(server: McpServer, userId: string, clientId
                     .where(eq(programExercises.id, programExerciseId));
                 }
                 if (args.sets === undefined) {
-                  await assertStepRows(tx, programExerciseId);
+                  await settleStepRows(tx, programExerciseId);
                   return;
                 }
                 // Matched by id, then by set number, and updated in place, so ids
@@ -673,7 +673,7 @@ export function registerProgramTools(server: McpServer, userId: string, clientId
                     .set({ deletedAt: new Date() })
                     .where(inArray(programSets.id, match.deletes));
                 }
-                await assertStepRows(tx, programExerciseId);
+                await settleStepRows(tx, programExerciseId);
               });
               limits = limitSummary(check, unusedOverrides);
             }));

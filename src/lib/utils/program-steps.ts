@@ -357,13 +357,14 @@ export type PlainEnduranceSet = {
   distanceMeters: number | null;
   targetHeartRateZone: number | null;
   sessionRole: string | null;
+  setType?: string | null;
 };
 
 /**
  * Older plain endurance sets as a step tree (docs/plans/one-program-model.md,
- * step 4): each set becomes one step, a work rep or zone 4-5 a work step,
- * zone 1 an easy step, the rest steady work. Its zone becomes an HR zone
- * target on LTHR (bike and run). A set with a distance ends on it, else on
+ * step 4): each set becomes one step, a warm-up set a warm-up step, a work
+ * rep or zone 4-5 a work step, zone 1 an easy step, the rest steady work. Its
+ * zone becomes an HR zone target on LTHR (bike and run). A set with a distance ends on it, else on
  * its time, else on the lap button. Rest after a set stays on the set.
  */
 export function plainSetsToWorkout(sets: PlainEnduranceSet[], meta: { sport: WorkoutSport; name: string; poolLengthM?: number | null }): Workout {
@@ -371,7 +372,7 @@ export function plainSetsToWorkout(sets: PlainEnduranceSet[], meta: { sport: Wor
     .sort((a, b) => a.setNumber - b.setNumber)
     .map((s) => {
       const zone = s.targetHeartRateZone;
-      const type: WorkoutStep["type"] = s.sessionRole === "work" || (zone ?? 0) >= 4 ? "work" : zone === 1 ? "recovery" : "work";
+      const type: WorkoutStep["type"] = s.setType === "warmup" ? "warmup" : s.sessionRole === "work" || (zone ?? 0) >= 4 ? "work" : zone === 1 ? "recovery" : "work";
       const end: WorkoutStep["end"] =
         s.distanceMeters != null && s.distanceMeters > 0
           ? { type: "distance", meters: s.distanceMeters }
@@ -382,6 +383,35 @@ export function plainSetsToWorkout(sets: PlainEnduranceSet[], meta: { sport: Wor
       return { type, end, ...(target && { target }) };
     });
   return { v: 2, sport: meta.sport, name: meta.name.trim().slice(0, 80) || "Session", ...(meta.poolLengthM != null && { poolLengthM: meta.poolLengthM }), steps: steps.length ? steps : [{ type: "work", end: { type: "lap" } }] };
+}
+
+/**
+ * Plain bike sets as the step rows of the one-time move
+ * (docs/plans/bike-ride-logger.md, D3): plainSetsToWorkout, and a rest after
+ * a set becomes a rest step after it, because no step reader reads a step
+ * row's own rest. The last set's rest is dropped, and so is a rest under the
+ * 5 s a step needs. `from` is the setNumber of the plain set a row came from
+ * (null on a rest step). The error is the schema check's first problems.
+ */
+export function plainSetsToStepRows(
+  sets: (PlainEnduranceSet & { restTimeSeconds: number })[],
+  meta: { sport: WorkoutSport; name: string },
+): { rows: (StepFields & { setNumber: number; from: number | null })[] } | { error: string } {
+  const sorted = [...sets].sort((a, b) => a.setNumber - b.setNumber);
+  const steps = plainSetsToWorkout(sorted, meta).steps;
+  const nodes: WorkoutNode[] = [];
+  const from: (number | null)[] = [];
+  for (const [i, s] of sorted.entries()) {
+    nodes.push(steps[i]);
+    from.push(s.setNumber);
+    if (i < sorted.length - 1 && s.restTimeSeconds >= 5) {
+      nodes.push({ type: "rest", end: { type: "time", seconds: s.restTimeSeconds } });
+      from.push(null);
+    }
+  }
+  const parsed = parseWorkout({ ...plainSetsToWorkout([], meta), steps: nodes });
+  if (!parsed.ok) return { error: parsed.errors.slice(0, 3).map((e) => `${e.path} ${e.message}`).join("; ") };
+  return { rows: workoutToRows(parsed.workout).map((r, i) => ({ ...r, from: from[i] })) };
 }
 
 /** Each structured exercise's play steps and planned rows, keys prefixed when there are several (one guided run, docs/plans/one-program-model.md). */

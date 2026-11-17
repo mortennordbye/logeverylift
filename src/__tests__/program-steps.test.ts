@@ -193,6 +193,51 @@ describe("plainSetsToWorkout", () => {
     ]);
     expect(parseWorkout(w).ok).toBe(true);
   });
+
+  it("keeps a warm-up set as a warm-up step", async () => {
+    const { plainSetsToWorkout } = await import("@/lib/utils/program-steps");
+    const w = plainSetsToWorkout([{ setNumber: 1, distanceMeters: null, durationSeconds: 600, targetHeartRateZone: 1, sessionRole: null, setType: "warmup" }], { sport: "bike", name: "Ride" });
+    expect(w.steps).toEqual([{ type: "warmup", end: { type: "time", seconds: 600 }, target: { metric: "hr", anchor: "lthr", zone: 1 } }]);
+  });
+});
+
+describe("plainSetsToStepRows (bike-ride-logger, step 1)", () => {
+  const plain = (setNumber: number, f: Partial<{ durationSeconds: number | null; distanceMeters: number | null; targetHeartRateZone: number | null; sessionRole: string | null; setType: string | null; restTimeSeconds: number }>) => ({
+    setNumber,
+    durationSeconds: null,
+    distanceMeters: null,
+    targetHeartRateZone: null,
+    sessionRole: null,
+    setType: "working",
+    restTimeSeconds: 0,
+    ...f,
+  });
+
+  it("puts a rest step after a set with rest, but not after the last set, and names each row's set", async () => {
+    const { plainSetsToStepRows } = await import("@/lib/utils/program-steps");
+    const out = plainSetsToStepRows(
+      [
+        plain(1, { durationSeconds: 900, targetHeartRateZone: 2, setType: "warmup", restTimeSeconds: 60 }),
+        plain(2, { durationSeconds: 900, targetHeartRateZone: 3, restTimeSeconds: 3 }),
+        plain(3, { durationSeconds: 300, targetHeartRateZone: 4, sessionRole: "work", restTimeSeconds: 120 }),
+      ],
+      { sport: "bike", name: "Bike tempo" },
+    );
+    if ("error" in out) throw new Error(out.error);
+    expect(out.rows.map((r) => [r.setNumber, r.from, r.stepKind, r.durationSeconds, r.targets])).toEqual([
+      [1, 1, "warmup", 900, [{ metric: "hr", anchor: "lthr", zone: 2 }]],
+      [2, null, "rest", 60, null],
+      // A rest under 5 s is no step.
+      [3, 2, "work", 900, [{ metric: "hr", anchor: "lthr", zone: 3 }]],
+      [4, 3, "work", 300, [{ metric: "hr", anchor: "lthr", zone: 4 }]],
+    ]);
+  });
+
+  it("returns the schema problem for a set no step can hold", async () => {
+    const { plainSetsToStepRows } = await import("@/lib/utils/program-steps");
+    const out = plainSetsToStepRows([plain(1, { durationSeconds: 2 })], { sport: "bike", name: "Ride" });
+    expect("error" in out && out.error).toMatch(/seconds/);
+  });
 });
 
 describe("programPlay (one-program-model journey review)", () => {

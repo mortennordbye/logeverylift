@@ -8,8 +8,8 @@
  */
 
 import { db } from "@/db";
-import { exercises, programExercises, programSets, programs } from "@/db/schema";
-import { checkStepRows, stepOfRow, stepProblemText, workoutToRows, type PlannedStepSnapshot, type StepRow } from "@/lib/utils/program-steps";
+import { exercises, programExercises, programSets, programs, users, workoutSessions, workoutSets } from "@/db/schema";
+import { checkStepRows, plainSetsToStepRows, stepOfRow, stepProblemText, workoutToRows, type PlannedStepSnapshot, type StepRow } from "@/lib/utils/program-steps";
 import type { Tx } from "@/lib/plan-revisions";
 import type { Workout, WorkoutSport } from "@/lib/utils/workout-steps";
 import { and, asc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
@@ -125,4 +125,80 @@ export async function replaceExerciseSteps(tx: Tx, programExerciseId: number, wo
   if (gone.length) await tx.update(programSets).set({ deletedAt: new Date() }).where(inArray(programSets.id, gone));
   await tx.update(programExercises).set({ poolLengthM: workout.poolLengthM ?? null }).where(eq(programExercises.id, programExerciseId));
   await assertStepRows(tx, programExerciseId);
+}
+
+/**
+ * A bike exercise of an endurance user always holds steps
+ * (docs/plans/bike-ride-logger.md, D3). When every live set of the slot is a
+ * plain set, they become steps in the plan write's transaction: each set keeps
+ * its row (its id, its weekly-sync anchor and role when the end keeps its
+ * kind), a zone stays a zone target, and a rest after a set becomes a rest
+ * step. A slot of another sport, another user, no sets, or sets that are
+ * already steps is left alone. Returns whether rows changed; throws
+ * StepRowsError when a set fits no step.
+ */
+export async function bikeSetsToSteps(tx: Tx, programExerciseId: number): Promise<boolean> {
+  // plan-read: includes deleted (the slot being written, for its sport and owner)
+  const [slot] = await tx
+    .select({ discipline: exercises.discipline, name: programs.name, userId: users.id, endurance: users.enduranceEnabled })
+    .from(programExercises)
+    .innerJoin(exercises, eq(exercises.id, programExercises.exerciseId))
+    .innerJoin(programs, eq(programs.id, programExercises.programId))
+    .innerJoin(users, eq(users.id, programs.userId))
+    .where(eq(programExercises.id, programExerciseId));
+  if (slot?.discipline !== "bike" || !slot.endurance) return false;
+  const old = await tx
+    .select()
+    .from(programSets)
+    .where(and(eq(programSets.programExerciseId, programExerciseId), isNull(programSets.deletedAt)))
+    .orderBy(asc(programSets.setNumber), asc(programSets.id));
+  if (old.length === 0 || old.some((r) => r.stepKind != null)) return false;
+  const out = plainSetsToStepRows(old, { sport: "bike", name: slot.name });
+  if ("error" in out) throw new StepRowsError(`These bike sets cannot become steps: ${out.error}`);
+  const bySetNumber = new Map(old.map((r) => [r.setNumber, r]));
+  for (const { from, ...row } of out.rows) {
+    const prev = from != null ? bySetNumber.get(from) : undefined;
+    const keepsDistance = prev?.peakDistanceMeters != null && row.distanceMeters != null;
+    const keepsDuration = prev?.peakDurationSeconds != null && row.durationSeconds != null;
+    const values = {
+      ...row,
+      targetReps: null,
+      repRangeMin: null,
+      repRangeMax: null,
+      weightKg: null,
+      targetRir: null,
+      startDelaySeconds: null,
+      inclinePercent: null,
+      targetHeartRateZone: null,
+      setType: "working",
+      // The rest is a step of its own now; the workout screen would add the row's too.
+      restTimeSeconds: 0,
+      peakDistanceMeters: keepsDistance ? prev.peakDistanceMeters : null,
+      peakDurationSeconds: keepsDuration ? prev.peakDurationSeconds : null,
+      sessionRole: keepsDistance || keepsDuration ? prev.sessionRole : null,
+    };
+    if (!prev) {
+      await tx.insert(programSets).values({ ...values, programExerciseId });
+      continue;
+    }
+    await tx.update(programSets).set(values).where(eq(programSets.id, prev.id));
+    // A rest step moves the sets after it; rows logged in an open workout move with their set.
+    if (prev.setNumber !== row.setNumber) {
+      const open = tx
+        .select({ id: workoutSessions.id })
+        .from(workoutSessions)
+        .where(and(eq(workoutSessions.userId, slot.userId), eq(workoutSessions.isCompleted, false)));
+      await tx
+        .update(workoutSets)
+        .set({ setNumber: row.setNumber })
+        .where(and(eq(workoutSets.programSetId, prev.id), inArray(workoutSets.sessionId, open)));
+    }
+  }
+  await assertStepRows(tx, programExerciseId);
+  return true;
+}
+
+/** The end of every write to a slot's sets: plain bike sets become steps (D3), then the whole-exercise check. */
+export async function settleStepRows(tx: Tx, programExerciseId: number): Promise<void> {
+  if (!(await bikeSetsToSteps(tx, programExerciseId))) await assertStepRows(tx, programExerciseId);
 }

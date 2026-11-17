@@ -23,6 +23,7 @@ import { PHASE_TYPE_LABELS } from "@/lib/utils/seasons";
 import { getAthleteProfile } from "@/lib/athlete-profile";
 import { enduranceEnabledFor } from "@/lib/endurance";
 import { PlanStateError, chainSeason, planWrite, type PlanWriteContext, type PlanWriteSession } from "@/lib/plan-revisions";
+import { settleStepRows } from "@/lib/program-steps-db";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 
 export type TriathlonPlanInput = {
@@ -286,4 +287,6 @@ async function insertPlanExercise(
       targetRir: s.targetRir ?? null,
     })),
   );
+  // A ride is written as steps (docs/plans/bike-ride-logger.md, D3).
+  await settleStepRows(tx, pe.id);
 }

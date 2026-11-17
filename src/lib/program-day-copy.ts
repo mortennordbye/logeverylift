@@ -13,7 +13,7 @@
 
 import { exercises, programExercises, programSets, programs } from "@/db/schema";
 import { PlanStateError, type PlanWriteSession } from "@/lib/plan-revisions";
-import { assertStepRows } from "@/lib/program-steps-db";
+import { assertStepRows, settleStepRows } from "@/lib/program-steps-db";
 import { workoutToRows } from "@/lib/utils/program-steps";
 import type { Workout } from "@/lib/utils/workout-steps";
 import { and, asc, eq, isNull } from "drizzle-orm";
@@ -51,6 +51,7 @@ export async function copyProgramForDay(w: PlanWriteSession, userId: string, ses
           return { ...s, programExerciseId: newPe.id, peakDistanceMeters: null, peakDurationSeconds: null };
         }),
       );
+      await settleStepRows(tx, newPe.id);
     }
   }
   return copy.id;
