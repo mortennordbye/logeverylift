@@ -23,7 +23,8 @@ import { computePmc, type DayLoad, type PmcDay } from "@/lib/garmin/analytics/pm
 import type { Sport } from "@/lib/garmin/analytics/sport";
 
 export type EnduranceSport = "swim" | "bike" | "run";
-export type LoadMethod = "run_pace" | "swim_css" | "srpe" | "none";
+/** bike_power: a ride's step averages with an FTP (docs/plans/bike-ride-logger.md, 4.6), set by appSessionLoads. */
+export type LoadMethod = "run_pace" | "swim_css" | "bike_power" | "srpe" | "none";
 
 /** One hour at RPE 7.5 is about 100, as for strength (load.ts). Inference. */
 export const SRPE_FACTOR = 0.22;

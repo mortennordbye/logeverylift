@@ -20,6 +20,7 @@ export const LOAD_EVIDENCE = [
   { rule: "TSS = hours x IF^2 x 100", label: "Coach convention" },
   { rule: "run_pace: the same formula with IF = speed / threshold speed", label: "Inference" },
   { rule: "swim_css: hours x IF^3 x 100 with IF = speed / CSS", label: "Inference" },
+  { rule: "bike_power: the same formula with NP estimated from step average watts", label: "Inference" },
   { rule: "srpe: minutes x session RPE x 0.22", label: "Inference" },
   { rule: "Fitness (CTL, 42 days), fatigue (ATL, 7 days), form = CTL - ATL", label: "Coach convention" },
   { rule: "Ramp: up to 5 a week normal, 5-8 fast, above 8 a warning", label: "Coach convention" },
@@ -44,7 +45,7 @@ export function registerEnduranceAppTools(server: McpServer, userId: string) {
       description: [
         "Training load, fitness, fatigue and form, on one scale (100 = one hour at threshold).",
         "source 'garmin' when the user has Garmin data (that series also holds the app sessions Garmin did not record), else 'app' from sessions logged in the app. The two are never added.",
-        "App methods: run_pace (needs a threshold pace), swim_css (needs CSS), srpe (minutes x RPE x 0.22), strength_srpe. A session with no RPE and no usable threshold has no load: it is listed in noLoad, never guessed.",
+        "App methods: run_pace (needs a threshold pace), swim_css (needs CSS), bike_power (a ride with step average watts on 90% of its time and an FTP: an estimate, hours x IF^2 x 100 with the step averages' fourth-power mean as NP), srpe (minutes x RPE x 0.22), strength_srpe. A session with no RPE and no usable threshold has no load: it is listed in noLoad, never guessed.",
         "Per day: load, fitness (ctl), fatigue (atl) and form (tsb) per sport and total. ramp is the 7-day change in total fitness with its band. The first 42 days are calibrating. evidence gives the label of each rule.",
       ].join(" "),
       inputSchema: { days: z.number().int().min(7).max(365).optional() },
