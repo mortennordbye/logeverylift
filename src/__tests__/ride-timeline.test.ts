@@ -195,6 +195,34 @@ describe("rideTimeline", () => {
   });
 });
 
+describe("review fixes", () => {
+  const open = (i: number, estSeconds: number): TimelineStep => ({ ...step(i, null), estSeconds });
+
+  it("a ride of open steps someone still uses does not end on its own", () => {
+    const plan = { steps: [open(1, 3600), open(2, 3600)] };
+    // 3 hours in, a heartbeat 10 s ago: the visible app is riding.
+    const used = rideTimeline(plan, [start()], at(3 * 3600), { heartbeatAt: at(3 * 3600 - 10) });
+    expect(used.status).toBe("running");
+    // The same ride left alone ends 2 hours after its estimated end.
+    expect(rideTimeline(plan, [start()], at(2 * 3600) + AUTO_END_AFTER_MS - 1000).status).toBe("running");
+    expect(rideTimeline(plan, [start()], at(2 * 3600) + AUTO_END_AFTER_MS)).toMatchObject({ status: "ended_early", autoEnded: true });
+  });
+
+  it("the last event keeps a ride with no estimates alive", () => {
+    const plan = { steps: [step(1, null), step(2, null)] };
+    const t = rideTimeline(plan, [start(), ev("lap", 5400)], at(2 * 3600 + 1));
+    expect(t.status).toBe("running");
+    expect(t.steps.map((r) => r.status)).toEqual(["done"]);
+  });
+
+  it("an extend taken back after the step's time is up ends the step then", () => {
+    const plan = { steps: [step(1, 60), step(2, 600)] };
+    const t = rideTimeline(plan, [start(), ev("extend", 30, 60), ev("nudge", 80, 5), ev("extend", 90, -60)], at(100));
+    expect(t.steps[0]).toMatchObject({ status: "done", endedAt: at(90), offsetW: 5 });
+    expect(t.current).toMatchObject({ index: 1, startedAt: at(90), offsetW: 0 });
+  });
+});
+
 describe("eventTime", () => {
   const startedAt = at(0);
   const now = at(600);
@@ -206,6 +234,10 @@ describe("eventTime", () => {
     expect(eventTime(null, startedAt, now)).toBe(now);
     expect(eventTime(at(-1), startedAt, now)).toBe(now);
     expect(eventTime(at(601), startedAt, now)).toBe(now);
+  });
+  it("never goes before what the server already has: the last event or heartbeat", () => {
+    expect(eventTime(at(120), startedAt, now, at(300))).toBe(at(300));
+    expect(eventTime(at(400), startedAt, now, at(300))).toBe(at(400));
   });
 });
 
@@ -276,6 +308,11 @@ describe("buildRidePlan", () => {
     if (!p.ok) throw new Error(JSON.stringify(p.errors));
     expect(buildRidePlan(p.workout, [1], {}, "indoor").steps[0].seconds).toBe(500);
     expect(buildRidePlan(p.workout, [1], {}, "outdoor").steps[0].seconds).toBeNull();
+  });
+
+  it("gives open steps an estimate for the auto end: distance at 25 km/h, a lap step 10 min", () => {
+    const plan = buildRidePlan(w, setIds, { ftp: 200 }, "outdoor");
+    expect(plan.steps.map((s) => s.estSeconds)).toEqual([600, 300, 120, 300, 120, 300, 720, 600]);
   });
 
   it("refuses set ids that do not match the steps", () => {

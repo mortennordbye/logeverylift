@@ -31,6 +31,9 @@ export const EXTEND_STEP_S = 60;
 export const EXTEND_MAX_S = 3600;
 /** A ride still running this long after its planned end ends on its own (4.3). */
 export const AUTO_END_AFTER_MS = 2 * 60 * 60 * 1000;
+/** For the auto end only: an open distance step at 25 km/h, a lap step 10 min. */
+export const OPEN_STEP_SPEED_MS = 25 / 3.6;
+export const LAP_STEP_EST_S = 600;
 /** sendRideEvent's answer when another device sent an event first: refetch the ride and send again. */
 export const RIDE_CONFLICT = "The ride changed on another device";
 
@@ -45,6 +48,8 @@ export type RidePlanStep = {
   round: { index: number; of: number } | null;
   /** Seconds the step runs; null when it ends on the lap button. */
   seconds: number | null;
+  /** Seconds it likely runs, for the auto end only: its time, else an estimate. */
+  estSeconds: number;
   /** The main target in the user's numbers, and its cap. */
   target: ResolvedTarget | null;
   target2: ResolvedTarget | null;
@@ -114,12 +119,14 @@ export function buildRidePlan(workout: Workout, setIds: number[], thresholds: Th
       const est = estimateWorkout({ ...workout, steps: [s] }, thresholds);
       seconds = est.durationComplete && est.durationSeconds > 0 ? est.durationSeconds : null;
     }
+    const estSeconds = seconds ?? (s.end.type === "distance" ? Math.round(s.end.meters / OPEN_STEP_SPEED_MS) : LAP_STEP_EST_S);
     steps.push({
       key: p.key,
       programSetId: setIds[k],
       step: s,
       round: p.round,
       seconds,
+      estSeconds,
       target: resolveStepTarget(s, "bike", thresholds),
       target2: s.target2 ? resolveTarget(s.target2, "bike", thresholds) : null,
       outdoor: s.outdoor ? resolveTarget(s.outdoor, "bike", thresholds) : null,
@@ -132,7 +139,7 @@ export function buildRidePlan(workout: Workout, setIds: number[], thresholds: Th
 // ── The clock ────────────────────────────────────────────────────────────────
 
 /** What the timeline needs of a plan step. */
-export type TimelineStep = Pick<RidePlanStep, "key" | "programSetId" | "seconds" | "power">;
+export type TimelineStep = Pick<RidePlanStep, "key" | "programSetId" | "seconds" | "power"> & { estSeconds?: number };
 
 export type RideEventInput = {
   seq: number;
@@ -187,11 +194,13 @@ export type RideTimeline = {
 /**
  * The time an event counts at. An offline event replays with its client time
  * when that falls inside the ride (after its start, not in the future), else
- * at the server's time (4.3).
+ * at the server's time (4.3). It never goes before `knownUntil`, the last
+ * event or heartbeat the server has: a device that was online saw the ride
+ * up to then, and a late replay does not rewrite that.
  */
-export function eventTime(clientAt: number | null | undefined, rideStartedAt: number, serverNow: number): number {
-  if (clientAt == null || clientAt < rideStartedAt || clientAt > serverNow) return serverNow;
-  return clientAt;
+export function eventTime(clientAt: number | null | undefined, rideStartedAt: number, serverNow: number, knownUntil = rideStartedAt): number {
+  const t = clientAt == null || clientAt < rideStartedAt || clientAt > serverNow ? serverNow : clientAt;
+  return Math.max(t, Math.min(knownUntil, serverNow));
 }
 
 type Live = { index: number; startAt: number; pausedMs: number; pausedAt: number | null; extendS: number; offsetW: number };
@@ -210,11 +219,13 @@ const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(mi
  * - `lap` ends the step: done on a lap step, partial on a time step.
  * - `end` on the last step finishes the ride; before it, the ride ends early.
  *   The step it ends is partial (left out with no time ridden).
- * - The ride ends on its own 2 hours after its planned end (start, plus the
- *   planned time and extensions, plus the pauses already over), at its last
+ * - An extend taken back after the step's time is up ends the step then.
+ * - The ride ends on its own 2 hours after the latest of its planned end
+ *   (start, plus each step's time or estimate and the extensions, plus the
+ *   pauses already over), its last event and its last heartbeat, at its last
  *   ended step. The step that ran is left out.
  */
-export function rideTimeline(plan: { steps: TimelineStep[] }, events: RideEventInput[], now: number): RideTimeline {
+export function rideTimeline(plan: { steps: TimelineStep[] }, events: RideEventInput[], now: number, opts: { heartbeatAt?: number | null } = {}): RideTimeline {
   const steps = plan.steps;
   const sorted = [...events].sort((a, b) => a.at - b.at || a.seq - b.seq);
 
@@ -239,6 +250,7 @@ export function rideTimeline(plan: { steps: TimelineStep[] }, events: RideEventI
   let pauseAt: number | null = null;
   let pausedOverMs = 0;
   let extendedOver = 0;
+  let lastAt = 0;
 
   const activeMs = (l: Live, t: number) => Math.max(0, (l.pausedAt ?? t) - l.startAt - l.pausedMs);
   const endOf = (l: Live) => {
@@ -246,7 +258,8 @@ export function rideTimeline(plan: { steps: TimelineStep[] }, events: RideEventI
     return s === null ? null : l.startAt + l.pausedMs + (s + l.extendS) * 1000;
   };
   const plannedEnd = () =>
-    startedAt! + (steps.reduce((a, s) => a + (s.seconds ?? 0), 0) + extendedOver + (live?.extendS ?? 0)) * 1000 + pausedOverMs;
+    startedAt! + (steps.reduce((a, s) => a + (s.seconds ?? s.estSeconds ?? 0), 0) + extendedOver + (live?.extendS ?? 0)) * 1000 + pausedOverMs;
+  const aliveUntil = () => Math.max(plannedEnd(), lastAt, opts.heartbeatAt ?? 0);
 
   /** Close the current step at `t`; with a status, it is saved. */
   const close = (t: number, st: RideStepResult["status"] | null) => {
@@ -287,7 +300,7 @@ export function rideTimeline(plan: { steps: TimelineStep[] }, events: RideEventI
       if (end === null || end > t) break;
       next(end, "done");
     }
-    if (live && isLive() && t >= plannedEnd() + AUTO_END_AFTER_MS) {
+    if (live && isLive() && t >= aliveUntil() + AUTO_END_AFTER_MS) {
       close(t, null);
       status = "ended_early";
       endedAt = done.length ? done[done.length - 1].endedAt : startedAt;
@@ -307,6 +320,7 @@ export function rideTimeline(plan: { steps: TimelineStep[] }, events: RideEventI
     }
     if (!isLive()) continue;
     advance(t);
+    lastAt = t;
     if (!live) continue;
     const l: Live = live;
     const step = steps[l.index];
@@ -332,7 +346,9 @@ export function rideTimeline(plan: { steps: TimelineStep[] }, events: RideEventI
         next(t, step.seconds === null ? "done" : "partial");
         break;
       case "extend":
-        if (step.seconds !== null) l.extendS = clamp(l.extendS + (e.value ?? EXTEND_STEP_S), 0, EXTEND_MAX_S);
+        if (step.seconds === null) break;
+        l.extendS = clamp(l.extendS + (e.value ?? EXTEND_STEP_S), 0, EXTEND_MAX_S);
+        if (status === "running" && endOf(l)! < t) next(t, "done");
         break;
       case "nudge":
         if (step.power) l.offsetW = clamp(l.offsetW + (e.value ?? 0), -NUDGE_CAP_W, NUDGE_CAP_W);
