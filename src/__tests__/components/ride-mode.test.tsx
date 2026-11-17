@@ -247,7 +247,7 @@ describe("RideMode", () => {
     expect(logWithRetry).toHaveBeenCalledWith(expect.objectContaining({ programSetId: 12, stepStatus: "partial", durationSeconds: 100 }));
     expect(completeWorkoutSession).toHaveBeenCalledWith({ sessionId: 7, endTime: new Date(T0 + 820_000).toISOString() });
     expect(clearActiveWorkout).toHaveBeenCalled();
-    expect(replace).toHaveBeenCalledWith("/programs/1/workout/exercises/2");
+    expect(replace).toHaveBeenCalledWith("/programs/1/workout/exercises/2?results=1");
   });
 
   it("outdoors: heart rate as the big number, the power meter below, and Lap", async () => {
@@ -393,7 +393,7 @@ describe("RideMode", () => {
     expect(completeWorkoutSession).not.toHaveBeenCalled();
     await advance(5_000);
     expect(completeWorkoutSession).toHaveBeenCalled();
-    expect(replace).toHaveBeenCalledWith("/programs/1/workout/exercises/2");
+    expect(replace).toHaveBeenCalledWith("/programs/1/workout/exercises/2?results=1");
   });
 
   it("a skip taken back on another device removes the skipped row this phone saved", async () => {

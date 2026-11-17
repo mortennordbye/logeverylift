@@ -76,3 +76,25 @@ export function RideProfileChart({ chart, label }: { chart: RideChart; label: st
     </svg>
   );
 }
+
+/** Time in power zones as one bar with minutes under it: planned on the bike screen, done on the summary. */
+export function RideZoneBar({ zones, label, testId }: { zones: { zone: number; m: number }[]; label: string; testId?: string }) {
+  if (!zones.length) return null;
+  return (
+    <div data-testid={testId}>
+      <div className="mt-2 flex h-1.5 gap-0.5 overflow-hidden rounded-full" role="img" aria-label={`${label}, ${zones.map((z) => `Z${z.zone} ${z.m} min`).join(", ")}`}>
+        {zones.map((z) => (
+          <i key={z.zone} className="bg-brand" style={{ flex: z.m, opacity: zoneOpacity(z.zone) }} />
+        ))}
+      </div>
+      <div className="mt-1 flex justify-between text-[11px] text-muted-foreground tabular-nums">
+        {zones.map((z, i) => (
+          <span key={z.zone}>
+            Z{z.zone} {z.m}
+            {i === zones.length - 1 ? " min" : ""}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}

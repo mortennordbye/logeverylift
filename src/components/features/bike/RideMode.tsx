@@ -7,7 +7,7 @@
  * each step saved when it ends. Paused shows Resume and End ride. In
  * landscape the clock sits left of the target and the controls form one row.
  * When the ride ends, the workout is finished (a program of this exercise
- * only) and the bike screen shows "Ride done".
+ * only) and the ride's results table opens.
  */
 
 import { useRide, type RideTap } from "@/components/features/bike/useRide";
@@ -238,7 +238,7 @@ export function RideMode({
   };
   const lap = () => actions.lap();
 
-  // The end: finish the workout of a program with only this exercise, then the bike screen.
+  // The end: finish the workout of a program with only this exercise, then the results table.
   // A skip of the last step ends the ride: it waits while its Undo shows.
   const wrapped = useRef(false);
   const undoPending = toast?.undo === "unskip";
@@ -252,7 +252,8 @@ export function RideMode({
         if (failedInTransit(r)) enqueue({ kind: "completeWorkoutSession", payload });
         if (workoutSession?.sessionId === initial.ride.sessionId) workoutSession.clearActiveWorkout();
       }
-      router.replace(pathname);
+      // The results table: Avg W, heart rate and the effort (step 4).
+      router.replace(`${pathname}?results=1`);
       router.refresh();
     })();
   }, [ready, ended, queued, online, undoPending, onlyExercise, sessionCompleted, initial.ride.sessionId, timeline.endedAt, enqueue, workoutSession, router, pathname]);

@@ -7,11 +7,11 @@
  * numbers, one row per step, and "Start ride" pinned at the bottom.
  *
  * Start ride starts the server ride and opens ride mode (`?ride=1`). "Log by
- * hand" opens today's set list (`?hand=1`) until the results table of step 4
- * replaces it. After a ride the bar says "Ride done".
+ * hand" opens the results table with no ride (`?hand=1`, step 4). After a
+ * ride the page shows the ride's summary in place of this screen.
  */
 
-import { RideProfileChart, zoneOpacity } from "@/components/features/bike/RideProfileChart";
+import { RideProfileChart, RideZoneBar } from "@/components/features/bike/RideProfileChart";
 import { armRide, disarmRide } from "@/components/features/bike/useRide";
 import { BackLink } from "@/components/ui/BackLink";
 import { useWorkoutSession } from "@/contexts/workout-session-context";
@@ -32,14 +32,11 @@ export function BikeExercise({
   programExerciseId,
   exerciseName,
   data,
-  onlyExercise = true,
 }: {
   programId: number;
   programExerciseId: number;
   exerciseName: string;
   data: BikeExerciseData;
-  /** The program holds this exercise only: Done after a ride goes home, else back to the workout. */
-  onlyExercise?: boolean;
 }) {
   const [mode, setMode] = useState<RideMode>(data.defaultMode);
   const [starting, setStarting] = useState(false);
@@ -131,23 +128,7 @@ export function BikeExercise({
                 </div>
               ))}
             </div>
-            {zones.length > 0 && (
-              <>
-                <div className="mt-2 flex h-1.5 gap-0.5 overflow-hidden rounded-full" role="img" aria-label={`Planned time in zones, ${zones.map((z) => `Z${z.zone} ${z.m} min`).join(", ")}`}>
-                  {zones.map((z) => (
-                    <i key={z.zone} className="bg-brand" style={{ flex: z.m, opacity: zoneOpacity(z.zone) }} />
-                  ))}
-                </div>
-                <div className="mt-1 flex justify-between text-[11px] text-muted-foreground tabular-nums">
-                  {zones.map((z, i) => (
-                    <span key={z.zone}>
-                      Z{z.zone} {z.m}
-                      {i === zones.length - 1 ? " min" : ""}
-                    </span>
-                  ))}
-                </div>
-              </>
-            )}
+            <RideZoneBar zones={zones} label="Planned time in zones" />
           </div>
         )}
 
@@ -195,22 +176,6 @@ export function BikeExercise({
               Resume
             </Link>
           </>
-        ) : data.doneRide ? (
-          <>
-            <p className="text-sm text-center text-muted-foreground" data-testid="ride-done-line">
-              {data.doneRide.endedEarly ? "Ride ended early" : "Ride done"}
-            </p>
-            {/* A ride that ended while the app was closed: ride mode saves its last steps and finishes the workout. */}
-            <Link
-              href={onlyExercise && data.doneRide.sessionOpen ? `${pathname}?ride=1` : onlyExercise ? "/" : `/programs/${programId}/workout`}
-              className="min-h-12 rounded-2xl bg-brand-fill px-4 text-base font-semibold text-white inline-flex items-center justify-center active:opacity-80"
-            >
-              {onlyExercise && data.doneRide.sessionOpen ? "Save the ride" : "Done"}
-            </Link>
-            <Link href={`${pathname}?hand=1`} className="min-h-11 inline-flex items-center justify-center text-sm font-medium text-primary active:opacity-70">
-              Log by hand
-            </Link>
-          </>
         ) : (
           <>
             <button
@@ -222,7 +187,7 @@ export function BikeExercise({
               Start ride
             </button>
             {/* Hidden while a ride runs (4.3). */}
-            <Link href={`${pathname}?hand=1`} className="min-h-11 inline-flex items-center justify-center text-sm font-medium text-primary active:opacity-70">
+            <Link href={`${pathname}?hand=1&mode=${mode}`} className="min-h-11 inline-flex items-center justify-center text-sm font-medium text-primary active:opacity-70">
               Log by hand
             </Link>
           </>

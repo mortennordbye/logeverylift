@@ -87,11 +87,12 @@ describe("BikeExercise", () => {
     expect(targets()).toEqual(["Effort 2", "Effort 4", "Effort 2"]);
   });
 
-  it("Start ride starts the ride in the chosen mode and opens ride mode; Log by hand opens the set list", async () => {
+  it("Start ride starts the ride in the chosen mode and opens ride mode; Log by hand opens the results table in the chosen mode", async () => {
     startRide.mockResolvedValue({ success: true, data: {} });
     render(<BikeExercise programId={1} programExerciseId={2} exerciseName="Bike" data={data({ ftp: 180 })} />);
-    expect(screen.getByRole("link", { name: "Log by hand" }).getAttribute("href")).toBe("/programs/1/workout/exercises/2?hand=1");
+    expect(screen.getByRole("link", { name: "Log by hand" }).getAttribute("href")).toBe("/programs/1/workout/exercises/2?hand=1&mode=indoor");
     fireEvent.click(screen.getByRole("button", { name: "Change to Outdoor" }));
+    expect(screen.getByRole("link", { name: "Log by hand" }).getAttribute("href")).toBe("/programs/1/workout/exercises/2?hand=1&mode=outdoor");
     fireEvent.click(screen.getByRole("button", { name: "Start ride" }));
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/programs/1/workout/exercises/2?ride=1"));
     expect(startRide).toHaveBeenCalledWith(expect.objectContaining({ sessionId: 7, programExerciseId: 2, mode: "outdoor" }));
