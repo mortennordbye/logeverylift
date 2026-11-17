@@ -50,7 +50,8 @@ test("an endurance user's bike exercise shows the ride, switches mode, starts th
   const { userId, programId, peId } = await setup(testInfo.parallelIndex, true);
   await page.goto(`/programs/${programId}/workout/exercises/${peId}`);
 
-  const screen = page.getByTestId("bike-exercise");
+  // A streamed copy of the page can sit hidden for a moment: look at the visible one.
+  const screen = page.getByTestId("bike-exercise").filter({ visible: true });
   await expect(screen).toBeVisible();
   await expect(page.getByTestId("ride-step")).toHaveCount(5);
 
@@ -84,15 +85,18 @@ test("an endurance user's bike exercise shows the ride, switches mode, starts th
   const [started] = await db.select().from(rides).where(and(eq(rides.userId, userId), eq(rides.programExerciseId, peId)));
   expect(started.mode).toBe("outdoor");
   expect(started.status).toBe("running");
+  // Start ride opens ride mode (step 3).
+  await expect(page.getByTestId("ride-screen")).toBeVisible();
 
-  // While the ride runs the screen offers Resume, not Start ride or Log by hand (4.3).
+  // While the ride runs the bike screen offers Resume, not Start ride or Log by hand (4.3).
+  await page.goto(`/programs/${programId}/workout/exercises/${peId}`);
   await expect(page.getByRole("link", { name: "Resume" })).toHaveAttribute("href", `/programs/${programId}/workout/exercises/${peId}?ride=1`);
   await expect(page.getByRole("button", { name: "Start ride" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Log by hand" })).toHaveCount(0);
 
   // The last ride's mode is the default next time (D6).
   await page.goto(`/programs/${programId}/workout/exercises/${peId}`);
-  await expect(page.getByTestId("ride-mode")).toHaveText("Outdoor");
+  await expect(page.getByTestId("ride-mode").filter({ visible: true })).toHaveText("Outdoor");
 
   // ?hand=1 keeps today's set list.
   await page.goto(`/programs/${programId}/workout/exercises/${peId}?hand=1`);
