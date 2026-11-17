@@ -282,7 +282,8 @@ describe("buildRidePlan", () => {
     const plan = buildRidePlan(w, setIds, { ftp: 200 }, "indoor");
     expect(plan.steps[0].power).toEqual({ from: 100, to: 150 });
     expect(plan.steps[0].target?.text).toBe("100 to 150 W");
-    expect(plan.steps[0].outdoor).toMatchObject({ unit: "bpm", missing: "lthr_bike" });
+    // A written heart rate target with no bike LTHR becomes the derived effort (4.2).
+    expect(plan.steps[0].outdoor).toMatchObject({ unit: "RPE", text: "Effort 2", missing: null });
     expect(plan.steps[1].power).toEqual({ from: 176, to: 186 });
     expect(plan.steps[2].power).toBeNull();
     expect(plan.steps[7].power).toEqual({ from: 200, to: 210 });

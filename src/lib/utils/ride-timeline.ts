@@ -11,6 +11,7 @@
  */
 
 import type { RideEventKind, RideMode, RideStatus } from "@/db/schema/rides";
+import { outdoorTarget } from "@/lib/utils/bike-outdoor";
 import { flattenWorkout } from "@/lib/utils/workout-player";
 import {
   estimateWorkout,
@@ -53,8 +54,10 @@ export type RidePlanStep = {
   /** The main target in the user's numbers, and its cap. */
   target: ResolvedTarget | null;
   target2: ResolvedTarget | null;
-  /** The target for an outdoor ride, when one is written. */
+  /** The target for an outdoor ride: the written one, else derived from the power zone (4.2). */
   outdoor: ResolvedTarget | null;
+  /** An outdoor effort shown under a heart rate target (a 3 to 5 min step); absent on a plan frozen before it existed. */
+  outdoor2?: ResolvedTarget | null;
   /** Watts of a power target or a ramp, from the FTP at start; null without one. */
   power: { from: number | null; to: number | null } | null;
 };
@@ -120,6 +123,7 @@ export function buildRidePlan(workout: Workout, setIds: number[], thresholds: Th
       seconds = est.durationComplete && est.durationSeconds > 0 ? est.durationSeconds : null;
     }
     const estSeconds = seconds ?? (s.end.type === "distance" ? Math.round(s.end.meters / OPEN_STEP_SPEED_MS) : LAP_STEP_EST_S);
+    const outdoor = outdoorTarget(s, estSeconds, thresholds);
     steps.push({
       key: p.key,
       programSetId: setIds[k],
@@ -129,7 +133,8 @@ export function buildRidePlan(workout: Workout, setIds: number[], thresholds: Th
       estSeconds,
       target: resolveStepTarget(s, "bike", thresholds),
       target2: s.target2 ? resolveTarget(s.target2, "bike", thresholds) : null,
-      outdoor: s.outdoor ? resolveTarget(s.outdoor, "bike", thresholds) : null,
+      outdoor: outdoor?.main ?? null,
+      outdoor2: outdoor?.second ?? null,
       power: stepWatts(s, thresholds),
     });
   });
