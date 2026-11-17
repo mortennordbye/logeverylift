@@ -330,6 +330,10 @@ export async function logWorkoutSet(
       isCompleted,
       isFailed,
       wasEasy,
+      stepStatus,
+      targetOffsetW,
+      extendedSeconds,
+      sources,
     } = validation.data;
 
     // RIR is the primary effort input; derive RPE from it so all downstream
@@ -431,7 +435,11 @@ export async function logWorkoutSet(
       isCompleted,
       isFailed,
       wasEasy,
-      ...(plannedStep && { plannedStep, stepStatus: isCompleted ? ("done" as const) : null }),
+      ...(plannedStep && { plannedStep, stepStatus: stepStatus ?? (isCompleted ? ("done" as const) : null) }),
+      // Ride mode's own fields, only when sent: a re-log from the set list keeps them.
+      ...(plannedStep && targetOffsetW !== undefined && { targetOffsetW }),
+      ...(plannedStep && extendedSeconds !== undefined && { extendedSeconds }),
+      ...(plannedStep && sources !== undefined && { sources }),
     };
     // One transaction for the row and the records it earns, under a per-user,
     // per-exercise lock (lockRecords).
@@ -470,7 +478,10 @@ export async function logWorkoutSet(
             isCompleted: setValues.isCompleted,
             isFailed: setValues.isFailed,
             wasEasy: setValues.wasEasy,
-            ...(plannedStep && { plannedStep, stepStatus: isCompleted ? ("done" as const) : null }),
+            ...(plannedStep && { plannedStep, stepStatus: setValues.stepStatus }),
+            ...(setValues.targetOffsetW !== undefined && { targetOffsetW: setValues.targetOffsetW }),
+            ...(setValues.extendedSeconds !== undefined && { extendedSeconds: setValues.extendedSeconds }),
+            ...(setValues.sources !== undefined && { sources: setValues.sources }),
           },
         })
         .returning();

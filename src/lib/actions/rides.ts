@@ -44,6 +44,8 @@ export type RideView = {
     seq: number;
     startedAt: number;
     endedAt: number | null;
+    /** The last heartbeat of a visible app, for the timeline's auto end. */
+    heartbeatAt: number | null;
   };
   plan: RidePlan;
   events: (RideEventInput & { clientId: string })[];
@@ -67,7 +69,20 @@ async function settle(ex: Executor, ride: Ride, now: number): Promise<RideView> 
     status = t.status;
     endedAt = t.endedAt !== null ? new Date(t.endedAt) : null;
     // Only over the events read here: a newer event settles the ride itself.
-    await ex.update(rides).set({ status, endedAt }).where(and(eq(rides.id, ride.id), eq(rides.seq, ride.seq)));
+    const [stored] = await ex
+      .update(rides)
+      .set({ status, endedAt })
+      .where(and(eq(rides.id, ride.id), eq(rides.seq, ride.seq)))
+      .returning({ id: rides.id });
+    // The workout keeps whether its ride ended early (4.3): compliance does not
+    // count an ended-early key session as done. An unskip that makes the ride
+    // live again clears it.
+    if (stored) {
+      await ex
+        .update(workoutSessions)
+        .set({ endedEarly: status === "ended_early" })
+        .where(and(eq(workoutSessions.id, ride.sessionId), eq(workoutSessions.userId, ride.userId)));
+    }
   }
   return {
     ride: {
@@ -79,6 +94,7 @@ async function settle(ex: Executor, ride: Ride, now: number): Promise<RideView> 
       seq: ride.seq,
       startedAt: ride.startedAt.getTime(),
       endedAt: endedAt?.getTime() ?? null,
+      heartbeatAt: ride.heartbeatAt?.getTime() ?? null,
     },
     plan,
     events,
@@ -226,7 +242,7 @@ export async function sendRideEvent(data: unknown): Promise<ActionResult<RideVie
       if (kind === "heartbeat") {
         if (!isLive(view.ride.status)) return { success: false, error: "The ride has ended" };
         await tx.update(rides).set({ heartbeatAt: new Date(now) }).where(eq(rides.id, rideId));
-        return { success: true, data: view };
+        return { success: true, data: { ...view, ride: { ...view.ride, heartbeatAt: now } } };
       }
       if (expectedSeq !== ride.seq) return { success: false, error: RIDE_CONFLICT };
 

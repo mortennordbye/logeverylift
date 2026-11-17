@@ -32,6 +32,8 @@ import {
   PROGRESSION_REGRESSES,
   PROGRESSION_SCOPES,
 } from "@/lib/utils/progression";
+import { RESULT_SOURCES } from "@/db/schema/workout-sets";
+import { NUDGE_CAP_W, EXTEND_MAX_S } from "@/lib/utils/ride-timeline";
 import { programStepFieldsSchema } from "@/lib/utils/workout-steps";
 import { z } from "zod";
 
@@ -134,6 +136,12 @@ export const logWorkoutSetSchema = z.object({
   // Hit the target and it felt easy — an explicit request to progress next
   // session even if the consensus gate hasn't been met.
   wasEasy: z.boolean().default(false),
+  // A step ride mode saves when it ends (docs/plans/bike-ride-logger.md, 4.5).
+  // Without a status, a step is done when completed, as before.
+  stepStatus: z.enum(["done", "partial", "skipped"]).optional(),
+  targetOffsetW: z.number().int().min(-NUDGE_CAP_W).max(NUDGE_CAP_W).optional(),
+  extendedSeconds: z.number().int().min(0).max(EXTEND_MAX_S).optional(),
+  sources: z.record(z.string().max(32), z.enum(RESULT_SOURCES)).optional(),
 });
 
 /** A correction to a set in a finished session, made from history. */
