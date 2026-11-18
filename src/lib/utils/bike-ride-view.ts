@@ -243,6 +243,8 @@ function indoorText(s: RidePlanStep): string | null {
     const p = stepPct(s.step, null)!;
     return p.low === null ? `under ${p.high! + 1}% FTP` : `${p.low}-${p.high}% FTP`;
   }
+  // An effort reads as on every bike screen ("Effort 9-10"), not "RPE".
+  if (t.metric === "rpe" && t.low !== undefined && t.high !== undefined) return t.low === t.high ? `Effort ${t.low}` : `Effort ${t.low}-${t.high}`;
   return s.target?.missing ? targetLabel(t, "bike") : (s.target?.text ?? null);
 }
 

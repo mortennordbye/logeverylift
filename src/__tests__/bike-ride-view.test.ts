@@ -134,3 +134,18 @@ describe("rideChart", () => {
     expect(c.yTicks.map((t) => t.label)).toEqual(["50%"]);
   });
 });
+
+describe("an effort target indoors", () => {
+  it("reads Effort, as every bike screen says, not RPE", async () => {
+    const { ftpTestWorkout } = await import("@/lib/utils/ftp-tests");
+    const { parseWorkout } = await import("@/lib/utils/workout-steps");
+    const { workoutToRows } = await import("@/lib/utils/program-steps");
+    const parsed = parseWorkout(ftpTestWorkout("20min"));
+    if (!parsed.ok) throw new Error("template");
+    const ids = workoutToRows(parsed.workout).map((_, i) => i + 1);
+    const targets = bikeStepRows(buildRidePlan(parsed.workout, ids, { ftp: 180 }, "indoor")).map((r) => r.target);
+    expect(targets).toContain("Effort 9");
+    expect(targets).toContain("Effort 9-10");
+    expect(targets.some((t) => t?.includes("RPE"))).toBe(false);
+  });
+});
