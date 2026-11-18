@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 /**
  * Toast notifications.
@@ -73,6 +73,25 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
+/**
+ * A screen's pinned bottom bar (marked `data-pinned-bar`, such as the ride
+ * results' Done) stays free: the toast sits 8 px above its top. Null when no
+ * such bar is on screen, so the toast keeps its place above the bottom nav.
+ */
+function usePinnedBarBottom(): string | null {
+  const [bottom, setBottom] = useState<string | null>(null);
+  useLayoutEffect(() => {
+    const place = () => {
+      const bar = Array.from(document.querySelectorAll<HTMLElement>("[data-pinned-bar]")).find((el) => el.getBoundingClientRect().height > 0);
+      setBottom(bar ? `${Math.round(window.innerHeight - bar.getBoundingClientRect().top + 8)}px` : null);
+    };
+    place();
+    window.addEventListener("resize", place);
+    return () => window.removeEventListener("resize", place);
+  }, []);
+  return bottom;
+}
+
 function ToastView({
   toast,
   onDismiss,
@@ -81,12 +100,13 @@ function ToastView({
   onDismiss: () => void;
 }) {
   const isError = toast.variant === "error";
+  const bottom = usePinnedBarBottom();
   return (
     <div
       role={isError ? "alert" : "status"}
       aria-live={isError ? "assertive" : "polite"}
       className="fixed left-0 right-0 z-50 flex justify-center px-4 pointer-events-none"
-      style={{ bottom: "calc(env(safe-area-inset-bottom, 0px) + 80px)" }}
+      style={{ bottom: bottom ?? "calc(env(safe-area-inset-bottom, 0px) + 80px)" }}
     >
       <div
         className={`pointer-events-auto max-w-sm w-full rounded-2xl shadow-lg px-4 py-3 flex items-center gap-3 animate-in fade-in slide-in-from-bottom-2 duration-200 ${

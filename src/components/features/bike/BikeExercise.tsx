@@ -167,7 +167,7 @@ export function BikeExercise({
         {!data.liveRide && <StepAlertsRow state={alerts.state} busy={alerts.busy} error={alerts.error} onTurnOn={alerts.turnOn} />}
       </div>
 
-      <div className="shrink-0 px-4 pt-2 pb-3 flex flex-col gap-1 border-t border-border bg-background">
+      <div data-pinned-bar className="shrink-0 px-4 pt-2 pb-3 flex flex-col gap-1 border-t border-border bg-background">
         {error && (
           <p role="alert" className="text-sm text-center text-muted-foreground">
             {error}

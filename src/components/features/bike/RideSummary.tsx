@@ -286,7 +286,7 @@ export function RideSummary({
         )}
       </div>
 
-      <div className="shrink-0 px-4 pt-2 pb-3 flex flex-col gap-2 border-t border-border bg-background">
+      <div data-pinned-bar className="shrink-0 px-4 pt-2 pb-3 flex flex-col gap-2 border-t border-border bg-background">
         {rideAgain && (
           <button
             type="button"
