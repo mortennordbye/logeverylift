@@ -6,6 +6,7 @@ import { testDb } from "./fixtures/reset";
 import { insertStepProgram } from "./fixtures/step-program";
 import { ftpTestWorkout } from "../src/lib/utils/ftp-tests";
 import { expect, test } from "./fixtures/test";
+import { waitForLiveSession } from "./helpers";
 
 /**
  * Ride mode (docs/plans/bike-ride-logger.md, steps 3 and 4): a ride runs
@@ -116,6 +117,8 @@ async function startRide(page: Page, s: { userId: string; programId: number; peI
   await expect(page.getByTestId("bike-exercise").filter({ visible: true })).toBeVisible();
   if ((await page.getByTestId("ride-mode").filter({ visible: true }).textContent()) === "Outdoor") await page.getByRole("button", { name: "Change to Indoor trainer" }).click();
   await expect.poll(async () => (await testDb().select().from(workoutSessions).where(eq(workoutSessions.userId, s.userId))).length).toBe(1);
+  // The row can be in before the phone holds its id: Start ride then says "The workout is still starting".
+  await waitForLiveSession(page);
   startTap.set(s.userId, Date.now());
   shifted.set(s.userId, 0);
   await page.getByRole("button", { name: "Start ride" }).click();
