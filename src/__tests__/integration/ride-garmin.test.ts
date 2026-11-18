@@ -8,7 +8,7 @@
  * without Garmin is never touched.
  */
 import { db } from "@/db";
-import { athleteThresholds, garminActivities, garminActivityStreams, rideGarminFills, rides, workoutSessions, workoutSets } from "@/db/schema";
+import { athleteThresholds, garminActivities, garminActivityStreams, rideEvents, rideGarminFills, rides, workoutSessions, workoutSets } from "@/db/schema";
 import { pickRideGarminActivity, undoRideGarminFill } from "@/lib/actions/ride-garmin";
 import { getRide, sendRideEvent, startRide } from "@/lib/actions/rides";
 import { logWorkoutSet } from "@/lib/actions/workout-sets";
@@ -59,22 +59,21 @@ function ok<T>(r: { success: true; data: T } | { success: false; error: string }
   return r.data;
 }
 
-/** A finished ride of the mockup with each step saved by the clock; `pause` pauses it from 1000 s to 1060 s. */
-async function finishedRide({ pause = false, mode = "indoor" as "indoor" | "outdoor" } = {}) {
+/** A finished ride of the mockup with each step saved by the clock; `pause` pauses it from 1000 s to 1060 s; `start` in seconds after T0. */
+async function finishedRide({ pause = false, mode = "indoor" as "indoor" | "outdoor", start = 0 } = {}) {
   const { program, slots } = await createStepProgram(me, bike, mockup);
-  const session = await createSession(me, program.id, { date: TODAY, startTime: T0 });
+  const session = await createSession(me, program.id, { date: TODAY, startTime: at(start) });
   const ids = slots[0].setIds;
   const ridden = [ids[0], ids[1], ids[2], ids[3], ids[5]];
-  vi.setSystemTime(T0);
+  vi.setSystemTime(at(start));
   const v = ok(await startRide({ sessionId: session.id, programExerciseId: slots[0].programExerciseId, mode, clientId: `start-${Math.random()}` }));
-  let seq = v.ride.seq;
   if (pause) {
-    vi.setSystemTime(at(1000));
-    seq = ok(await sendRideEvent({ rideId: v.ride.id, clientId: "p", kind: "pause", expectedSeq: seq })).ride.seq;
-    vi.setSystemTime(at(1060));
-    seq = ok(await sendRideEvent({ rideId: v.ride.id, clientId: "r", kind: "resume", expectedSeq: seq })).ride.seq;
+    vi.setSystemTime(at(start + 1000));
+    const seq = ok(await sendRideEvent({ rideId: v.ride.id, clientId: "p", kind: "pause", expectedSeq: v.ride.seq })).ride.seq;
+    vi.setSystemTime(at(start + 1060));
+    ok(await sendRideEvent({ rideId: v.ride.id, clientId: "r", kind: "resume", expectedSeq: seq }));
   }
-  vi.setSystemTime(at(3900 + (pause ? 60 : 0) + 5));
+  vi.setSystemTime(at(start + 3900 + (pause ? 60 : 0) + 5));
   expect(ok(await getRide({ rideId: v.ride.id }))!.ride.status).toBe("finished");
   for (const [i, id] of ridden.entries()) {
     ok(
@@ -109,6 +108,9 @@ async function storeActivity(opts: {
   laps?: Win[];
   pauses?: Win[];
   userId?: string;
+  /** Watts and heart rate per truth window; default the mockup's, round and round. */
+  watts?: number[];
+  hrs?: number[];
 }) {
   const start = opts.start ?? T0;
   const end = opts.truth.at(-1)!.to;
@@ -116,8 +118,10 @@ async function storeActivity(opts: {
   const t: number[] = [];
   for (let s = 0; s < end; s++) if (!pauses.some((p) => s >= p.from && s < p.to)) t.push(s);
   const stepOf = (s: number) => opts.truth.findIndex((w) => s >= w.from && s < w.to);
-  const power = t.map((s) => WATTS[stepOf(s)] + ((s * 37) % 21) - 10);
-  const hr = t.map((s) => HR[stepOf(s)] + ((s * 13) % 7) - 3);
+  const wOf = (i: number) => (i < 0 ? 0 : (opts.watts?.[i] ?? WATTS[i % 5]));
+  const hOf = (i: number) => (i < 0 ? 100 : (opts.hrs?.[i] ?? HR[i % 5]));
+  const power = t.map((s) => wOf(stepOf(s)) + ((s * 37) % 21) - 10);
+  const hr = t.map((s) => hOf(stepOf(s)) + ((s * 13) % 7) - 3);
   const cadence = t.map((s) => 88 + (s % 5));
   const distance = t.map((s) => s * 8);
   const altitude = t.map((s) => 100 + Math.floor(s / 100));
@@ -267,9 +271,16 @@ describe("Garmin fill", () => {
 
     expect(await fillRidesFromGarmin(me)).toBe(0);
     expect((await rowsOf(r.sessionId)).find((x) => x.programSetId === r.ridden[2])!.avgPower).toBeNull();
-    expect((await rideGarminView(me, r.rideId)).state).toBe("none");
+    // The one match stays offered as "Fill from Garmin".
+    expect((await rideGarminView(me, r.rideId)).state).toBe("refill");
     // A second undo finds nothing.
     expect((await undoRideGarminFill({ rideId: r.rideId })).success).toBe(false);
+    // "Fill from Garmin" fills it again: the undo is not for good.
+    const view = await rideGarminView(me, r.rideId);
+    expect(view.candidates.map((c) => c.garminActivityId)).toEqual([4]);
+    ok(await pickRideGarminActivity({ rideId: r.rideId, garminActivityId: 4 }));
+    expect((await rideGarminView(me, r.rideId)).state).toBe("filled");
+    expect((await rowsOf(r.sessionId)).find((x) => x.programSetId === r.ridden[0])!.avgPower).not.toBeNull();
   });
 
   it("two matching activities fill nothing; the summary offers Pick, and a pick fills", async () => {
@@ -356,5 +367,115 @@ describe("Garmin fill", () => {
     expect(rep.numbers.drift).toMatchObject({ steady: expect.any(Boolean) });
     expect(rep.numbers.timeOnTarget).toHaveLength(5);
     expect(rep.garmin).toMatchObject({ state: "filled", garminActivityId: 12, split: "time" });
+  });
+
+  it("by time on the wall clock: a watch started 3 min before the app still gives each step its own watts", async () => {
+    const r = await finishedRide();
+    // Garmin started 180 s before Start ride: 3 min of easy spinning, then the steps on the app's clock.
+    const steps = windows(180);
+    const truth = [{ from: 0, to: 180 }, ...steps];
+    const s = await storeActivity({ id: 20, truth, start: at(-180), watts: [80, ...WATTS], hrs: [100, ...HR] });
+    expect(await fillRidesFromGarmin(me)).toBe(1);
+    const rows = await rowsOf(r.sessionId);
+    for (const [i, id] of r.ridden.entries()) {
+      const row = rows.find((x) => x.programSetId === id)!;
+      expect(Math.abs(row.avgPower! - mean(s.t, s.power, steps[i]))).toBeLessThanOrEqual(1);
+      expect(Math.abs(row.avgHr! - mean(s.t, s.hr, steps[i]))).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it("by time on the wall clock: Garmin's auto-pause outdoors shifts nothing, and the last step fills", async () => {
+    const r = await finishedRide({ mode: "outdoor" });
+    // The watch paused itself at a junction for 100 s; the app did not.
+    const truth = windows();
+    const s = await storeActivity({ id: 21, truth, typeKey: "road_biking", pauses: [{ from: 1500, to: 1600 }] });
+    expect(await fillRidesFromGarmin(me)).toBe(1);
+    const rows = await rowsOf(r.sessionId);
+    for (const [i, id] of r.ridden.entries()) {
+      const row = rows.find((x) => x.programSetId === id)!;
+      expect(row.avgPower).not.toBeNull();
+      expect(Math.abs(row.avgPower! - mean(s.t, s.power, truth[i]))).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it("two app rides inside one Garmin activity each read their own part of it", async () => {
+    const a = await finishedRide();
+    const b = await finishedRide({ start: 4200 });
+    const first = windows();
+    const second = windows(4200);
+    const gap = { from: 3900, to: 4200 };
+    const wattsB = [100, 200, 60, 210, 150];
+    const s = await storeActivity({ id: 22, truth: [...first, gap, ...second], watts: [...WATTS, 50, ...wattsB], hrs: [...HR, 100, ...HR] });
+    expect(await fillRidesFromGarmin(me)).toBe(2);
+    const rowsB = await rowsOf(b.sessionId);
+    for (const [i, id] of b.ridden.entries()) {
+      const row = rowsB.find((x) => x.programSetId === id)!;
+      expect(Math.abs(row.avgPower! - mean(s.t, s.power, second[i]))).toBeLessThanOrEqual(1);
+    }
+    const rowsA = await rowsOf(a.sessionId);
+    expect(Math.abs(rowsA.find((x) => x.programSetId === a.ridden[1])!.avgPower! - mean(s.t, s.power, first[1]))).toBeLessThanOrEqual(1);
+  });
+
+  it("one ride that throws is logged and the others still fill", async () => {
+    const r = await finishedRide();
+    await storeActivity({ id: 30, truth: windows() });
+    // A ride whose frozen plan is broken, started before the good one.
+    const session = await createSession(me, null, { date: TODAY, startTime: at(-600) });
+    const [bad] = await db.insert(rides).values({ userId: me, sessionId: session.id, mode: "indoor", status: "finished", plan: {}, seq: 1, startedAt: at(-600), endedAt: at(-300) }).returning();
+    await db.insert(rideEvents).values({ rideId: bad.id, seq: 1, clientId: "s", kind: "start", at: at(-600) });
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(await fillRidesFromGarmin(me)).toBe(1);
+    expect(log).toHaveBeenCalledWith("[fillRidesFromGarmin] failed", { rideId: bad.id }, expect.any(String));
+    log.mockRestore();
+    expect((await rideGarminView(me, r.rideId)).state).toBe("filled");
+  });
+
+  it("matching reads no streams; only the activity that fills or shows has its streams read", async () => {
+    const r = await finishedRide();
+    await storeActivity({ id: 31, truth: windows() });
+    // A run at the same time and a bike ride in the morning: neither matches.
+    await storeActivity({ id: 32, truth: windows(), typeKey: "running" });
+    await storeActivity({ id: 33, truth: windows(), start: at(-6 * 3600) });
+    const select = vi.spyOn(db, "select");
+    const streamReads = () => select.mock.calls.filter(([fields]) => fields && "streams" in (fields as object)).length;
+    // The matching query (the one that reads activity types) never reads streams.
+    const matchWithStreams = () => select.mock.calls.filter(([fields]) => fields && "streams" in (fields as object) && "typeKey" in (fields as object)).length;
+    expect(await fillRidesFromGarmin(me)).toBe(1);
+    expect(streamReads()).toBe(1);
+    expect(matchWithStreams()).toBe(0);
+    select.mockClear();
+    expect(await fillRidesFromGarmin(me)).toBe(0);
+    expect(streamReads()).toBe(0);
+    await rideGarminView(me, r.rideId);
+    expect(streamReads()).toBe(1);
+    select.mockRestore();
+  });
+
+  it("a pick-pending summary reads no streams", async () => {
+    const r = await finishedRide();
+    await storeActivity({ id: 34, truth: windows() });
+    await storeActivity({ id: 35, truth: [{ from: 0, to: 1800 }], start: at(1200) });
+    const select = vi.spyOn(db, "select");
+    expect((await rideGarminView(me, r.rideId)).state).toBe("pick");
+    await fillRidesFromGarmin(me);
+    expect(select.mock.calls.filter(([fields]) => fields && "streams" in (fields as object))).toHaveLength(0);
+    select.mockRestore();
+  });
+
+  it("one standing fill per ride: the database refuses a second, and two picks at once fill once and keep the other's declined marker", async () => {
+    const r = await finishedRide();
+    await storeActivity({ id: 36, truth: windows() });
+    await storeActivity({ id: 37, truth: [{ from: 0, to: 1800 }], start: at(1200) });
+    // Both pairs filled once and undone: two declined markers.
+    for (const id of [36, 37]) {
+      ok(await pickRideGarminActivity({ rideId: r.rideId, garminActivityId: id }));
+      ok(await undoRideGarminFill({ rideId: r.rideId }));
+    }
+    const results = await Promise.all([36, 37].map((id) => pickRideGarminActivity({ rideId: r.rideId, garminActivityId: id })));
+    expect(results.filter((x) => x.success)).toHaveLength(1);
+    const fills = await db.select().from(rideGarminFills).where(eq(rideGarminFills.rideId, r.rideId));
+    expect(fills.filter((f) => !f.declined)).toHaveLength(1);
+    expect(fills.filter((f) => f.declined)).toHaveLength(1);
+    await expect(db.insert(rideGarminFills).values({ userId: me, rideId: r.rideId, garminActivityId: 99, previous: {} })).rejects.toThrow();
   });
 });

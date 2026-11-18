@@ -102,5 +102,12 @@ export const rideGarminFills = pgTable(
     declined: boolean("declined").default(false).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
-  (t) => [uniqueIndex("uniq_ride_garmin_fills_pair").on(t.rideId, t.garminActivityId), index("idx_ride_garmin_fills_user").on(t.userId)],
+  (t) => [
+    uniqueIndex("uniq_ride_garmin_fills_pair").on(t.rideId, t.garminActivityId),
+    // One standing (not undone) fill per ride, so a worker fill and a Pick cannot both land.
+    uniqueIndex("uniq_ride_garmin_fills_standing")
+      .on(t.rideId)
+      .where(sql`NOT ${t.declined}`),
+    index("idx_ride_garmin_fills_user").on(t.userId),
+  ],
 );

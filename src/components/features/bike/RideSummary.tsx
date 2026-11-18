@@ -8,8 +8,9 @@
  * plan against what was done per step with ↓ under the target and the time on
  * target, heart rate drift, and the effort. Estimates say "est.". With nothing
  * but times, "Plan only" offers Add numbers. An ended-early ride says so and
- * counts only the ridden steps. A Garmin fill offers Undo; two matching
- * Garmin rides offer Pick. An FTP test ride shows "New FTP 186 W · Save"
+ * counts only the ridden steps. A Garmin fill offers Undo (it asks first);
+ * after an Undo with one Garmin ride, "Fill from Garmin" fills it again; two
+ * matching Garmin rides offer Pick. An FTP test ride shows "New FTP 186 W · Save"
  * (4.9), which adds the threshold row.
  */
 
@@ -60,6 +61,7 @@ export function RideSummary({
   const pathname = usePathname();
   const router = useRouter();
   const [picking, setPicking] = useState(false);
+  const [confirmUndo, setConfirmUndo] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const run = async (call: () => Promise<{ success: boolean; error?: string }>) => {
@@ -72,6 +74,7 @@ export function RideSummary({
       return;
     }
     setPicking(false);
+    setConfirmUndo(false);
     router.refresh();
   };
   const addHref = `${pathname}?results=1`;
@@ -182,14 +185,43 @@ export function RideSummary({
 
         {rideId !== undefined && garmin?.state === "filled" && (
           <div className="flex items-center justify-between gap-2 rounded-xl border border-dashed border-border pl-4 pr-2 min-h-12 text-sm" data-testid="summary-garmin">
-            <span className="text-muted-foreground">Steps filled from Garmin</span>
+            {confirmUndo ? (
+              <>
+                <span className="text-muted-foreground">Remove the Garmin numbers?</span>
+                <span className="flex">
+                  <button type="button" onClick={() => setConfirmUndo(false)} className="min-h-11 px-3 text-muted-foreground whitespace-nowrap active:opacity-70">
+                    Keep
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => run(() => undoRideGarminFill({ rideId }))}
+                    className="min-h-11 px-3 font-semibold text-primary whitespace-nowrap active:opacity-70 disabled:opacity-50"
+                  >
+                    Remove
+                  </button>
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="text-muted-foreground">Steps filled from Garmin</span>
+                <button type="button" onClick={() => setConfirmUndo(true)} className="min-h-11 px-3 font-semibold text-primary whitespace-nowrap active:opacity-70">
+                  Undo
+                </button>
+              </>
+            )}
+          </div>
+        )}
+        {rideId !== undefined && garmin?.state === "refill" && garmin.candidates[0] && (
+          <div className="flex items-center justify-between gap-2 rounded-xl border border-dashed border-border pl-4 pr-2 min-h-12 text-sm" data-testid="summary-garmin-refill">
+            <span className="text-muted-foreground">Garmin numbers removed</span>
             <button
               type="button"
               disabled={busy}
-              onClick={() => run(() => undoRideGarminFill({ rideId }))}
+              onClick={() => run(() => pickRideGarminActivity({ rideId, garminActivityId: garmin.candidates[0].garminActivityId }))}
               className="min-h-11 px-3 font-semibold text-primary whitespace-nowrap active:opacity-70 disabled:opacity-50"
             >
-              Undo
+              Fill from Garmin
             </button>
           </div>
         )}

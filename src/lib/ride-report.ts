@@ -185,7 +185,8 @@ export async function rideReport(userId: string, by: { rideId?: number; workoutS
         }
       : null,
     garmin: {
-      // "filled": the steps hold Garmin numbers (Undo in the app); "pick": two or more Garmin rides match and the rider picks one in the app.
+      // "filled": the steps hold Garmin numbers (Undo in the app); "pick": two or more Garmin rides match and the rider picks one in the app;
+      // "refill": the rider undid the fill of the one match ("Fill from Garmin" in the app fills it again).
       state: garmin.state,
       garminActivityId: garmin.garminActivityId,
       declined: garmin.declined,

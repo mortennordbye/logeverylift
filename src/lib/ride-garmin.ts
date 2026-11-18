@@ -6,9 +6,13 @@
  *
  * - Match: the activity's start to end overlaps the ride's, with 5 min on
  *   either side. Two or more matches fill nothing: the rider picks one.
- * - Split: by Garmin's laps or by the timeline's step times (`splitRide`).
+ * - Split: by Garmin's laps, else by each step's start and end on the wall
+ *   clock, less the rider's pauses in the app (`splitRide`).
  * - Fill: empty or clock-sourced fields only, marked `garmin`. Typed and
  *   assistant values stay. What was there is kept in `ride_garmin_fills`.
+ *
+ * Matching reads only each activity's summary and session; the streams are
+ * read for the one activity that fills or is shown.
  *
  * Plain server code: callers resolve the user. The worker calls
  * `fillRidesFromGarmin` after it stored new activities.
@@ -21,6 +25,7 @@ import { garminAllowedFor } from "@/lib/garmin/access";
 import { isIndoor, sportOf } from "@/lib/garmin/analytics/sport";
 import { rideTimeline, type RidePlan, type RideTimeline } from "@/lib/utils/ride-timeline";
 import {
+  clipStreams,
   rideDoneChart,
   rideStreamNumbers,
   splitRide,
@@ -33,7 +38,7 @@ import {
   type StreamNumbers,
   type WindowValues,
 } from "@/lib/utils/ride-stream";
-import { and, asc, eq, gte, inArray, lte, ne, sql } from "drizzle-orm";
+import { and, asc, eq, gte, ilike, inArray, lte, ne, or, sql } from "drizzle-orm";
 
 /** An activity counts as the ride's when it overlaps it with this much to spare on either side (4.8). */
 export const MATCH_TOLERANCE_MS = 5 * 60_000;
@@ -53,13 +58,12 @@ export type RideFillPrevious = {
   mode: { from: RideMode; to: RideMode; session: RideMode | null } | null;
 };
 
-/** A stored Garmin activity with its streams, as the fill reads it. */
-export type RideActivity = {
-  garminActivityId: number;
-  typeKey: string;
-  startMs: number;
-  endMs: number;
-  /** Stream time 0, the FIT session's start. */
+/** A stored Garmin bike activity that may match a ride: its summary times, no streams. */
+export type RideCandidate = { garminActivityId: number; typeKey: string; startMs: number; endMs: number };
+
+/** A matched activity with its streams, as the fill and the summary read it. */
+export type RideActivity = RideCandidate & {
+  /** Stream time 0: the first record (since the parser keeps it), else the session start (the first timer start, the same second in Garmin's files). */
   t0Ms: number;
   streams: RideStreams;
   laps: FitLap[];
@@ -74,55 +78,72 @@ export function modeOfActivity(typeKey: string): RideMode {
 const gmt = (v: unknown) => (typeof v === "string" ? Date.parse(`${v.replace(" ", "T")}Z`) : NaN);
 const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
-function toActivity(r: { garminActivityId: number; typeKey: string; data: unknown; streams: unknown; laps: unknown; events: unknown; session: unknown }): RideActivity | null {
-  const data = (r.data ?? {}) as Record<string, unknown>;
-  const session = (r.session ?? {}) as Record<string, unknown>;
-  const startMs = typeof session.startTime === "string" ? Date.parse(session.startTime) : gmt(data.startTimeGMT);
-  const seconds = num(session.totalElapsedTime) ?? num(data.elapsedDuration) ?? num(data.duration);
-  const streams = (r.streams ?? {}) as RideStreams;
-  if (!Number.isFinite(startMs) || seconds === null || !Array.isArray(streams.t)) return null;
-  return {
-    garminActivityId: r.garminActivityId,
-    typeKey: r.typeKey,
-    startMs,
-    endMs: startMs + seconds * 1000,
-    t0Ms: startMs,
-    streams,
-    laps: Array.isArray(r.laps) ? (r.laps as FitLap[]) : [],
-    events: Array.isArray(r.events) ? (r.events as FitEvent[]) : [],
-  };
-}
+/** Garmin's bike activity types, as `sportOf` reads them, so matching never reads a run or a swim. */
+const bikeType = or(
+  ilike(garminActivities.activityType, "%cycling%"),
+  ilike(garminActivities.activityType, "%biking%"),
+  ilike(garminActivities.activityType, "%bike%"),
+  eq(garminActivities.activityType, "virtual_ride"),
+);
+const streamOf = and(eq(garminActivityStreams.userId, garminActivities.userId), eq(garminActivityStreams.garminActivityId, garminActivities.garminActivityId));
 
-/** The user's stored Garmin bike activities with streams that overlap the ride (5 min tolerance). */
-export async function rideMatches(userId: string, ride: { startedAt: number; endedAt: number }): Promise<RideActivity[]> {
+/**
+ * The user's stored Garmin bike activities with streams that overlap the ride
+ * (5 min tolerance), from their summary and session times only.
+ */
+export async function rideMatches(userId: string, ride: { startedAt: number; endedAt: number }): Promise<RideCandidate[]> {
   // start_time_local is local time stored as UTC: a day either side covers every time zone.
   const rows = await db
     .select({
       garminActivityId: garminActivities.garminActivityId,
       typeKey: garminActivities.activityType,
-      data: garminActivities.data,
-      streams: garminActivityStreams.streams,
-      laps: garminActivityStreams.laps,
-      events: garminActivityStreams.events,
-      session: garminActivityStreams.session,
+      startGmt: sql<string | null>`${garminActivities.data}->>'startTimeGMT'`,
+      elapsed: sql<number | null>`(${garminActivities.data}->>'elapsedDuration')::float8`,
+      duration: sql<number | null>`(${garminActivities.data}->>'duration')::float8`,
+      sessionStart: sql<string | null>`${garminActivityStreams.session}->>'startTime'`,
+      sessionElapsed: sql<number | null>`(${garminActivityStreams.session}->>'totalElapsedTime')::float8`,
     })
     .from(garminActivities)
-    .innerJoin(
-      garminActivityStreams,
-      and(eq(garminActivityStreams.userId, garminActivities.userId), eq(garminActivityStreams.garminActivityId, garminActivities.garminActivityId)),
-    )
+    .innerJoin(garminActivityStreams, streamOf)
     .where(
       and(
         eq(garminActivities.userId, userId),
+        bikeType,
         gte(garminActivities.startTimeLocal, new Date(ride.startedAt - 86_400_000)),
         lte(garminActivities.startTimeLocal, new Date(ride.endedAt + 86_400_000)),
       ),
     )
     .orderBy(asc(garminActivities.startTimeLocal));
-  return rows
-    .filter((r) => sportOf(r.typeKey) === "bike")
-    .map(toActivity)
-    .filter((a): a is RideActivity => !!a && a.startMs - MATCH_TOLERANCE_MS < ride.endedAt && a.endMs + MATCH_TOLERANCE_MS > ride.startedAt);
+  const out: RideCandidate[] = [];
+  for (const r of rows) {
+    if (sportOf(r.typeKey) !== "bike") continue;
+    const startMs = r.sessionStart ? Date.parse(r.sessionStart) : gmt(r.startGmt);
+    const seconds = num(r.sessionElapsed) ?? num(r.elapsed) ?? num(r.duration);
+    if (!Number.isFinite(startMs) || seconds === null) continue;
+    const endMs = startMs + seconds * 1000;
+    if (startMs - MATCH_TOLERANCE_MS < ride.endedAt && endMs + MATCH_TOLERANCE_MS > ride.startedAt) out.push({ garminActivityId: r.garminActivityId, typeKey: r.typeKey, startMs, endMs });
+  }
+  return out;
+}
+
+/** One matched activity with its streams, laps and timer events; null when its streams are unusable. */
+export async function loadActivity(userId: string, c: RideCandidate): Promise<RideActivity | null> {
+  const [r] = await db
+    .select({ streams: garminActivityStreams.streams, laps: garminActivityStreams.laps, events: garminActivityStreams.events, session: garminActivityStreams.session })
+    .from(garminActivityStreams)
+    .where(and(eq(garminActivityStreams.userId, userId), eq(garminActivityStreams.garminActivityId, c.garminActivityId)));
+  const streams = (r?.streams ?? {}) as RideStreams;
+  if (!r || !Array.isArray(streams.t)) return null;
+  const session = (r.session ?? {}) as Record<string, unknown>;
+  const events = Array.isArray(r.events) ? (r.events as FitEvent[]) : [];
+  const first = typeof session.firstRecordTime === "string" ? Date.parse(session.firstRecordTime) : NaN;
+  return {
+    ...c,
+    t0Ms: Number.isFinite(first) ? first : c.startMs,
+    streams,
+    laps: Array.isArray(r.laps) ? (r.laps as FitLap[]) : [],
+    events,
+  };
 }
 
 /** The ride's timeline from its stored events. */
@@ -140,23 +161,27 @@ const ended = (t: RideTimeline) => (t.status === "finished" || t.status === "end
 
 /** The split of an activity into the ride's ridden steps. */
 export function rideSplit(timeline: RideTimeline, a: RideActivity): RideSplit {
-  return splitRide(timeline.steps, a.laps, a.events, a.t0Ms);
+  return splitRide(timeline.steps, a.laps, a.events, a.t0Ms, timeline.pauses);
 }
 
 type FillResult = { status: "filled"; fields: number } | { status: "exists" } | { status: "not_ended" };
 
 /**
  * Fill the ride's steps from one activity. Writes only empty or clock-sourced
- * fields; a pair already filled or declined writes nothing.
+ * fields; a pair already filled or declined, or a ride with a fill standing
+ * (the partial unique index), writes nothing. `ex` may be an open transaction:
+ * the fill then runs in a savepoint of it.
  */
-export async function fillRide(userId: string, ride: Ride, a: RideActivity, timeline?: RideTimeline): Promise<FillResult> {
+export async function fillRide(userId: string, ride: Ride, a: RideActivity, timeline?: RideTimeline, ex: Pick<typeof db, "transaction"> = db): Promise<FillResult> {
   const t = timeline ?? (await timelineOf(ride));
   if (!ended(t)) return { status: "not_ended" };
   const mode = modeOfActivity(a.typeKey);
   const split = rideSplit(t, a);
   const fields = mode === "indoor" ? INDOOR_FIELDS : OUTDOOR_FIELDS;
 
-  return db.transaction(async (tx) => {
+  return ex.transaction(async (tx) => {
+    // One fill at a time per ride: the worker and a Pick wait for each other here.
+    await tx.select({ id: rides.id }).from(rides).where(eq(rides.id, ride.id)).for("update");
     const [fill] = await tx
       .insert(rideGarminFills)
       .values({ userId, rideId: ride.id, garminActivityId: a.garminActivityId, previous: {} })
@@ -223,7 +248,8 @@ async function setRideMode(tx: Tx, ride: Ride, mode: RideMode, sessionMode: Ride
 /**
  * After a Garmin import: fill each of the user's rides of the last 7 days
  * that has ended, has no fill yet and exactly one matching activity whose
- * pair the rider has not declined. Garmin access only.
+ * pair the rider has not declined. Garmin access only. A ride that fails is
+ * logged and the others go on.
  */
 export async function fillRidesFromGarmin(userId: string, now = Date.now()): Promise<number> {
   if (!(await garminAllowedFor(userId))) return 0;
@@ -240,12 +266,19 @@ export async function fillRidesFromGarmin(userId: string, now = Date.now()): Pro
   for (const ride of recent) {
     const mine = fills.filter((f) => f.rideId === ride.id);
     if (mine.some((f) => !f.declined)) continue;
-    const t = await timelineOf(ride);
-    if (!ended(t)) continue;
-    const matches = await rideMatches(userId, { startedAt: t.startedAt!, endedAt: t.endedAt! });
-    if (matches.length !== 1 || mine.some((f) => f.garminActivityId === matches[0].garminActivityId)) continue;
-    const r = await fillRide(userId, ride, matches[0], t);
-    if (r.status === "filled") filled++;
+    try {
+      const t = await timelineOf(ride);
+      if (!ended(t)) continue;
+      const matches = await rideMatches(userId, { startedAt: t.startedAt!, endedAt: t.endedAt! });
+      // Two or more wait for a pick; a declined pair waits for "Fill from Garmin".
+      if (matches.length !== 1 || mine.some((f) => f.garminActivityId === matches[0].garminActivityId)) continue;
+      const a = await loadActivity(userId, matches[0]);
+      if (!a) continue;
+      const r = await fillRide(userId, ride, a, t);
+      if (r.status === "filled") filled++;
+    } catch (e) {
+      console.error("[fillRidesFromGarmin] failed", { rideId: ride.id }, e instanceof Error ? e.message : "unknown");
+    }
   }
   return filled;
 }
@@ -285,37 +318,58 @@ export async function undoRideFill(userId: string, rideId: number): Promise<bool
   });
 }
 
-/** Fill the ride from the activity the rider picked out of two or more matches. A declined pair may be picked again. */
+/**
+ * Fill the ride from an activity the rider picked: one of two or more
+ * matches, or the one match after an Undo ("Fill from Garmin"). The check,
+ * the removal of a declined marker for that pair and the fill are one
+ * transaction, so a failure keeps the marker and a worker fill cannot slip
+ * in between.
+ */
 export async function pickRideActivity(userId: string, rideId: number, garminActivityId: number): Promise<"filled" | "not_found" | "already_filled"> {
-  const [ride] = await db.select().from(rides).where(and(eq(rides.id, rideId), eq(rides.userId, userId)));
-  if (!ride) return "not_found";
-  const t = await timelineOf(ride);
-  if (!ended(t)) return "not_found";
-  const fills = await db.select().from(rideGarminFills).where(eq(rideGarminFills.rideId, rideId));
-  if (fills.some((f) => !f.declined)) return "already_filled";
-  const a = (await rideMatches(userId, { startedAt: t.startedAt!, endedAt: t.endedAt! })).find((m) => m.garminActivityId === garminActivityId);
-  if (!a) return "not_found";
-  await db.delete(rideGarminFills).where(and(eq(rideGarminFills.rideId, rideId), eq(rideGarminFills.garminActivityId, garminActivityId)));
-  const r = await fillRide(userId, ride, a, t);
-  return r.status === "filled" ? "filled" : "already_filled";
+  return db.transaction(async (tx) => {
+    const [ride] = await tx.select().from(rides).where(and(eq(rides.id, rideId), eq(rides.userId, userId))).for("update");
+    if (!ride) return "not_found";
+    const t = await timelineOf(ride);
+    if (!ended(t)) return "not_found";
+    const fills = await tx.select().from(rideGarminFills).where(eq(rideGarminFills.rideId, rideId));
+    if (fills.some((f) => !f.declined)) return "already_filled";
+    const c = (await rideMatches(userId, { startedAt: t.startedAt!, endedAt: t.endedAt! })).find((m) => m.garminActivityId === garminActivityId);
+    const a = c ? await loadActivity(userId, c) : null;
+    if (!a) return "not_found";
+    await tx.delete(rideGarminFills).where(and(eq(rideGarminFills.rideId, rideId), eq(rideGarminFills.garminActivityId, garminActivityId)));
+    const r = await fillRide(userId, ride, a, t, tx);
+    if (r.status !== "filled") throw new PickRace();
+    return "filled";
+  }).catch((e) => {
+    if (e instanceof PickRace) return "already_filled" as const;
+    throw e;
+  });
 }
+
+/** A fill landed between the check and the insert: roll the pick back. */
+class PickRace extends Error {}
 
 // ── Reading ──────────────────────────────────────────────────────────────────
 
 export type RideGarminView = {
-  /** "filled": a fill stands (Undo); "pick": two or more activities match and none fills; "none": nothing to show. */
-  state: "filled" | "pick" | "none";
+  /**
+   * "filled": a fill stands (Undo); "pick": two or more activities match and
+   * none fills; "refill": the one match was undone ("Fill from Garmin");
+   * "none": nothing to show.
+   */
+  state: "filled" | "pick" | "refill" | "none";
   garminActivityId: number | null;
   /** Any fill of this ride was undone. */
   declined: boolean;
+  /** The activities to pick from ("pick"), or the one to fill again ("refill"). */
   candidates: { garminActivityId: number; startMs: number; seconds: number }[];
-  /** The stream numbers and chart of the filled activity. */
+  /** The stream numbers and chart of the filled activity, from the ride's own part of it. */
   stream: { split: RideSplit["method"]; numbers: StreamNumbers; chart: DoneChart | null } | null;
 };
 
 const NONE: RideGarminView = { state: "none", garminActivityId: null, declined: false, candidates: [], stream: null };
 
-/** The ride's Garmin state for the summary and get_ride. Garmin access only; else nothing. */
+/** The ride's Garmin state for the summary and get_ride. Garmin access only; else nothing. Streams are read only for the filled activity. */
 export async function rideGarminView(userId: string, rideId: number): Promise<RideGarminView> {
   if (!(await garminAllowedFor(userId))) return NONE;
   const [ride] = await db.select().from(rides).where(and(eq(rides.id, rideId), eq(rides.userId, userId)));
@@ -326,12 +380,16 @@ export async function rideGarminView(userId: string, rideId: number): Promise<Ri
   const active = fills.find((f) => !f.declined) ?? null;
   const declined = fills.some((f) => f.declined);
   const matches = await rideMatches(userId, { startedAt: t.startedAt!, endedAt: t.endedAt! });
+  const listed = (ms: RideCandidate[]) => ms.map((m) => ({ garminActivityId: m.garminActivityId, startMs: m.startMs, seconds: Math.round((m.endMs - m.startMs) / 1000) }));
   if (active) {
-    const a = matches.find((m) => m.garminActivityId === active.garminActivityId) ?? null;
+    const c = matches.find((m) => m.garminActivityId === active.garminActivityId) ?? null;
+    const a = c ? await loadActivity(userId, c) : null;
     if (!a) return { ...NONE, state: "filled", garminActivityId: active.garminActivityId, declined };
     const plan = ride.plan as RidePlan;
     const split = rideSplit(t, a);
     const ftp = plan.thresholds.ftp ?? null;
+    // The ride's own part of the activity: from its first step's start to its last step's end.
+    const streams = split.windows.length ? clipStreams(a.streams, split.windows[0].from, split.windows.at(-1)!.to) : a.streams;
     return {
       state: "filled",
       garminActivityId: a.garminActivityId,
@@ -339,18 +397,14 @@ export async function rideGarminView(userId: string, rideId: number): Promise<Ri
       candidates: [],
       stream: {
         split: split.method,
-        numbers: rideStreamNumbers(a.streams, plan.steps, split.windows, { ftp, lthr: plan.thresholds.lthr_bike ?? null, mode: plan.mode }),
-        chart: rideDoneChart(a.streams, plan.steps, split, ftp),
+        numbers: rideStreamNumbers(streams, plan.steps, split.windows, { ftp, lthr: plan.thresholds.lthr_bike ?? null, mode: plan.mode }),
+        chart: rideDoneChart(streams, plan.steps, split, ftp),
       },
     };
   }
-  if (matches.length >= 2) {
-    return {
-      ...NONE,
-      state: "pick",
-      declined,
-      candidates: matches.map((m) => ({ garminActivityId: m.garminActivityId, startMs: m.startMs, seconds: Math.round((m.endMs - m.startMs) / 1000) })),
-    };
+  if (matches.length >= 2) return { ...NONE, state: "pick", declined, candidates: listed(matches) };
+  if (matches.length === 1 && fills.some((f) => f.declined && f.garminActivityId === matches[0].garminActivityId)) {
+    return { ...NONE, state: "refill", declined, candidates: listed(matches) };
   }
   return { ...NONE, declined };
 }

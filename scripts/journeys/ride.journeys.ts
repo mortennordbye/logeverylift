@@ -30,7 +30,7 @@ const set: JourneySet = {
     { id: 1, title: "Indoor ride", summary: "Start the ride, change the target, add a minute, skip with undo, pause, reload, landscape, end early, type the results and see the summary." },
     { id: 2, title: "Outdoor ride with no thresholds", summary: "Change to Outdoor, start, the effort target and Lap, end, the outdoor results with more numbers, Later, and the plan-only summary." },
     { id: 3, title: "Log by hand", summary: "Log the ride by hand from the bike screen: times, watts, effort, and back to the workout." },
-    { id: 4, title: "Filled from Garmin", summary: "The summary of a ride Garmin filled: NP, IF, the plan-against-done chart, zones, time on target, drift, then Undo." },
+    { id: 4, title: "Filled from Garmin", summary: "The summary of a ride Garmin filled: NP, IF, the plan-against-done chart, zones, time on target, drift, then Undo with its question, and Fill from Garmin." },
     { id: 5, title: "FTP test result", summary: "The summary of a 20 min FTP test: New FTP 186 W · Save, then Saved, and the bike screen in the new watts." },
   ],
   flows: [
@@ -86,9 +86,18 @@ const set: JourneySet = {
         });
         await step("J4 undo", async () => {
           await page.getByTestId("summary-garmin").getByRole("button", { name: "Undo" }).click();
-          await page.getByTestId("summary-garmin").waitFor({ state: "detached" });
+          await settle(300);
+          await shot(4, 3, "undo-confirm", "Undo asks first: Remove the Garmin numbers? Keep or Remove");
+          await page.getByTestId("summary-garmin").getByRole("button", { name: "Remove" }).click();
+          await page.getByTestId("summary-garmin-refill").waitFor();
           await settle(800);
-          await shot(4, 3, "after-undo", "After Undo: the step averages are gone, no stream numbers");
+          await shot(4, 4, "after-undo", "After Undo: the step averages are gone, no stream numbers, and Fill from Garmin");
+        });
+        await step("J4 refill", async () => {
+          await page.getByTestId("summary-garmin-refill").getByRole("button", { name: "Fill from Garmin" }).click();
+          await page.getByTestId("summary-garmin").waitFor();
+          await settle(800);
+          await shot(4, 5, "refilled", "Fill from Garmin: the stream numbers are back");
         });
       },
     },
