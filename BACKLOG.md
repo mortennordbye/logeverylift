@@ -289,7 +289,7 @@ When you finish an item, delete it. When you add an item, write enough that some
 ### Have a lawyer review the privacy policy and terms
 - **What:** The privacy policy, terms and consent texts were drafted against GDPR, personopplysningsloven and ekomloven, but nobody with legal training has read them.
 - **Why deferred:** Getting a review needs a person and possibly a fee; the drafts were needed now that sign-up is open.
-- **Unblocked by:** A short review by a Norwegian privacy lawyer. Ask specifically about the two open questions below: required health-data consent, and AI consent with free models that may train on requests. Also the transfer basis for ride step alerts: the push services of Apple, Google and Mozilla (USA) see the device's push address and the time of each push, not its encrypted text.
+- **Unblocked by:** A short review by a Norwegian privacy lawyer. Ask specifically about the two open questions below: required health-data consent, and AI consent with free models that may train on requests. Also the transfer basis for ride step alerts: the push services of Apple, Google, Mozilla and Microsoft (USA) see the device's push address and the time of each push, not its encrypted text.
 - **Touchpoints:** `src/app/privacy/page.tsx`, `src/app/terms/page.tsx`, `src/components/features/ConsentChecks.tsx`, `src/components/features/AiConsentSheet.tsx`, `docs/privacy/data-inventory.md`.
 
 ### Health-data consent is required to sign up

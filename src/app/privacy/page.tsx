@@ -180,10 +180,12 @@ export default function PrivacyPage() {
           gyms&apos; business addresses, nothing about you.
         </li>
         <li>
-          <strong>Your phone&apos;s push service</strong> (Apple, Google or Mozilla, in the USA), only if you turn on
-          step alerts for bike rides. During a ride our server sends each alert, such as the next step&apos;s target and
-          time, to the push service your browser uses, which passes it to your phone. The text is encrypted for your
-          phone, so the push service sees only your device&apos;s push address and when each alert is sent.
+          <strong>Your device&apos;s push service</strong> (Apple, Google, Mozilla or Microsoft, in the USA), only if you
+          turn on step alerts for bike rides. During a ride our server sends each alert, such as the next step&apos;s
+          target and time, to the push service your browser uses, which passes it to your device. The text is
+          encrypted for your device. The push service sees your device&apos;s push address, when each alert is sent and
+          its size, how long it may wait (60 seconds) and that it is urgent, and the operator&apos;s contact address.
+          It does not see which ride the alert is about.
         </li>
         <li>
           <strong>Google Drive</strong> stores an off-site copy of the backups. The backups are encrypted before they
