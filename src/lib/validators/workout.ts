@@ -32,7 +32,7 @@ import {
   PROGRESSION_REGRESSES,
   PROGRESSION_SCOPES,
 } from "@/lib/utils/progression";
-import { RESULT_SOURCES } from "@/db/schema/workout-sets";
+import type { ResultSource } from "@/db/schema/workout-sets";
 import { NUDGE_CAP_W, EXTEND_MAX_S } from "@/lib/utils/ride-timeline";
 import { RIDE_TESTS, programStepFieldsSchema } from "@/lib/utils/workout-steps";
 import { z } from "zod";
@@ -79,6 +79,9 @@ export const createWorkoutSessionSchema = z.object({
  * - 7: Moderate effort
  * - 5-6: Easy, many reps left
  */
+/** The sources a client may send for a result field; the others are the server's (`RESULT_SOURCES`). */
+export const CLIENT_RESULT_SOURCES = ["typed", "clock"] as const satisfies readonly ResultSource[];
+
 /** The result fields of a set whose source is kept (`workout_sets.sources`). */
 export const RESULT_FIELDS = ["durationSeconds", "distanceMeters", "avgPower", "avgHr", "maxHr", "avgCadence", "avgSpeed", "climbM", "measuredValue"] as const;
 
@@ -155,7 +158,9 @@ export const logWorkoutSetSchema = z.object({
   // m/s
   avgSpeed: z.number().min(0).max(40).nullable().optional(),
   climbM: z.number().int().min(0).max(20000).nullable().optional(),
-  sources: z.partialRecord(z.enum(RESULT_FIELDS), z.enum(RESULT_SOURCES)).optional(),
+  // Only what the app itself knows: "garmin" and "assistant" are set on the
+  // server (the Garmin fill, the assistant's step results), never by a client.
+  sources: z.partialRecord(z.enum(RESULT_FIELDS), z.enum(CLIENT_RESULT_SOURCES)).optional(),
   // The workout list's ring logs a whole exercise: it never writes over a row
   // that carries a step status or sources (a ride's step, a typed result).
   bulk: z.boolean().optional(),

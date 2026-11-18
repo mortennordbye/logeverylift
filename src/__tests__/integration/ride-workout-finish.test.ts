@@ -150,7 +150,7 @@ describe("finishing the workout of a live ride", () => {
     vi.setSystemTime(at(200));
     await db.update(workoutSessions).set({ isCompleted: true }).where(eq(workoutSessions.id, s.sessionId));
 
-    const read = ok(await getRide({ rideId: view.ride.id }));
+    const read = ok(await getRide({ rideId: view.ride.id }))!;
     expect(read.ride.status).toBe("ended_early");
     expect(read.events.at(-1)).toMatchObject({ kind: "end", at: at(200) });
 
