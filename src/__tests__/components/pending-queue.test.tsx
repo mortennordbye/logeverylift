@@ -197,6 +197,19 @@ describe("useWorkoutSetWriter", () => {
     expect(screen.getByTestId("count").textContent).toBe("1");
   });
 
+  it("offline: queues the write and says so with no em dash", async () => {
+    let writer!: ReturnType<typeof useWorkoutSetWriter>;
+    mount((w) => (writer = w));
+    Object.defineProperty(navigator, "onLine", { configurable: true, get: () => false });
+    try {
+      await act(async () => { await writer.logWithRetry(payload); });
+      expect(screen.getByText("Offline. Saved on this phone, it sends when you are online.")).toBeTruthy();
+      expect(screen.getByTestId("count").textContent).toBe("1");
+    } finally {
+      Object.defineProperty(navigator, "onLine", { configurable: true, get: () => true });
+    }
+  });
+
   it("Retry replays the queued write rather than queueing it a second time", async () => {
     let writer!: ReturnType<typeof useWorkoutSetWriter>;
     mount((w) => (writer = w));

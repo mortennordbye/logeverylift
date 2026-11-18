@@ -65,7 +65,7 @@ test("sets logged offline are saved once the connection is back", async ({ page,
 
   await context.setOffline(true);
   await page.getByRole("button", { name: "Log set 1", exact: true }).click();
-  await expect(page.getByText(/Offline — saved locally/)).toBeVisible();
+  await expect(page.getByText(/Offline. Saved on this phone/)).toBeVisible();
   expect(await testDb().select().from(workoutSets).where(eq(workoutSets.sessionId, id))).toHaveLength(0);
 
   await context.setOffline(false);

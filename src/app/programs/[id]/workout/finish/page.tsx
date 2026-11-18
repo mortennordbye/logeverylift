@@ -87,7 +87,7 @@ function FinishContent({ programId }: { programId: number }) {
         kind: "completeWorkoutSession",
         payload: { sessionId: existingSessionId, endTime, feeling, notes: trimmedNotes },
       });
-      showToast({ message: "Offline — workout saved locally, will sync when online", durationMs: 4000 });
+      showToast({ message: "Offline. The workout is saved on this phone and sends when you are online.", durationMs: 4000 });
       workoutSession?.clearActiveWorkout();
       router.replace("/");
       return true;

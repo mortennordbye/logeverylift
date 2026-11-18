@@ -308,7 +308,7 @@ export function useWorkoutSetWriter() {
     if (typeof navigator !== "undefined" && navigator.onLine === false) {
       enqueue({ kind: "logWorkoutSet", payload });
       showToast({
-        message: "Offline — saved locally, will sync when online",
+        message: "Offline. Saved on this phone, it sends when you are online.",
         durationMs: 4000,
       });
       return { success: true, data: { set: null as never, newPRs: [] } };
