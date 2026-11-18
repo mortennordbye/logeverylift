@@ -46,7 +46,7 @@ export default async function ProgramExerciseDetailPage({ params, searchParams }
   const sport = pe.exercise.discipline;
   const plain = pe.programSets.some((s) => s.stepKind == null);
   if (sport && (await enduranceEnabledFor(user.id)) && (!plain || steps === "1")) {
-    const meta = { sport, name: program.name, poolLengthM: pe.poolLengthM };
+    const meta = { sport, name: program.name, poolLengthM: pe.poolLengthM, test: pe.rideTest ?? undefined };
     let initial: Workout;
     if (plain) initial = plainSetsToWorkout(pe.programSets, meta);
     else if (pe.programSets.length === 0) initial = { v: 2, ...meta, poolLengthM: pe.poolLengthM ?? (sport === "swim" ? 25 : undefined), steps: [{ type: "work", end: sport === "swim" ? { type: "distance", meters: 100 } : { type: "time", seconds: 1800 } }] };

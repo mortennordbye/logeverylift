@@ -71,7 +71,7 @@ export async function dayProgramFromWorkout(w: PlanWriteSession, userId: string,
   w.create({ type: "program", id: program.id });
   const [pe] = await tx
     .insert(programExercises)
-    .values({ programId: program.id, exerciseId: sport.id, orderIndex: 0, progressionAdvance: "manual", poolLengthM: workout.poolLengthM ?? null })
+    .values({ programId: program.id, exerciseId: sport.id, orderIndex: 0, progressionAdvance: "manual", poolLengthM: workout.poolLengthM ?? null, rideTest: workout.test ?? null })
     .returning({ id: programExercises.id });
   await tx.insert(programSets).values(workoutToRows(workout).map((r) => ({ ...r, programExerciseId: pe.id, restTimeSeconds: 0 })));
   await assertStepRows(tx, pe.id);

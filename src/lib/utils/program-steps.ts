@@ -179,7 +179,7 @@ function sameStep(a: WorkoutStep, b: WorkoutStep): boolean {
  */
 export function buildWorkout(
   rows: StepRow[],
-  meta: { sport: WorkoutSport; name: string; poolLengthM?: number | null; description?: string | null },
+  meta: { sport: WorkoutSport; name: string; poolLengthM?: number | null; description?: string | null; test?: Workout["test"] | null },
 ): Built {
   const sorted = [...rows].sort((a, b) => a.setNumber - b.setNumber);
   const problems: StepProblem[] = [];
@@ -263,6 +263,7 @@ export function buildWorkout(
       name: meta.name.trim().slice(0, 80) || "Session",
       ...(meta.description ? { description: meta.description.slice(0, 1000) } : {}),
       ...(meta.poolLengthM != null ? { poolLengthM: meta.poolLengthM } : {}),
+      ...(meta.test != null ? { test: meta.test } : {}),
       steps: nodes,
     },
     nodeSets,
@@ -286,7 +287,7 @@ function locate(path: string, nodeSets: number[][]): { setNumber: number | null;
  */
 export function checkStepRows(
   rows: StepRow[],
-  meta: { sport: WorkoutSport | null; name: string; poolLengthM?: number | null },
+  meta: { sport: WorkoutSport | null; name: string; poolLengthM?: number | null; test?: Workout["test"] | null },
 ): StepProblem[] {
   const steps = rows.filter(isStepRow);
   if (steps.length === 0) return [];
@@ -295,7 +296,7 @@ export function checkStepRows(
     const plain = rows.find((r) => !isStepRow(r))!;
     return [{ setNumber: plain.setNumber, message: "every set of a structured exercise needs a step kind" }];
   }
-  const built = buildWorkout(steps, { sport: meta.sport, name: meta.name, poolLengthM: meta.poolLengthM });
+  const built = buildWorkout(steps, { sport: meta.sport, name: meta.name, poolLengthM: meta.poolLengthM, test: meta.test });
   if ("problems" in built) return built.problems;
   const parsed = parseWorkout(built.workout);
   if (parsed.ok) return [];

@@ -40,7 +40,7 @@ export async function assertStepRows(ex: Executor, programExerciseId: number): P
 
   // plan-read: includes deleted (the slot being written, for its sport and pool length)
   const [slot] = await ex
-    .select({ discipline: exercises.discipline, poolLengthM: programExercises.poolLengthM, name: programs.name })
+    .select({ discipline: exercises.discipline, poolLengthM: programExercises.poolLengthM, rideTest: programExercises.rideTest, name: programs.name })
     .from(programExercises)
     .innerJoin(exercises, eq(exercises.id, programExercises.exerciseId))
     .innerJoin(programs, eq(programs.id, programExercises.programId))
@@ -54,6 +54,7 @@ export async function assertStepRows(ex: Executor, programExerciseId: number): P
     sport: (slot?.discipline ?? null) as WorkoutSport | null,
     name: slot?.name ?? "Session",
     poolLengthM: slot?.poolLengthM,
+    test: slot?.rideTest,
   });
   if (problems.length) throw new StepRowsError(stepProblemText(problems));
 }
@@ -124,7 +125,7 @@ export async function replaceExerciseSteps(tx: Tx, programExerciseId: number, wo
   }
   const gone = old.slice(next.length).map((r) => r.id);
   if (gone.length) await tx.update(programSets).set({ deletedAt: new Date() }).where(inArray(programSets.id, gone));
-  await tx.update(programExercises).set({ poolLengthM: workout.poolLengthM ?? null }).where(eq(programExercises.id, programExerciseId));
+  await tx.update(programExercises).set({ poolLengthM: workout.poolLengthM ?? null, rideTest: workout.test ?? null }).where(eq(programExercises.id, programExerciseId));
   await assertStepRows(tx, programExerciseId);
 }
 

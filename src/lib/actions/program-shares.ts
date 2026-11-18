@@ -233,6 +233,7 @@ export async function copySharedProgram(
             progressionBackoffAfter: pe.progressionBackoffAfter,
             progressionReadiness: pe.progressionReadiness,
             poolLengthM: pe.poolLengthM,
+            rideTest: pe.rideTest,
           })
           .returning({ id: programExercises.id });
 

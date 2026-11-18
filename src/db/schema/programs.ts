@@ -157,6 +157,10 @@ export const programExercises = pgTable("program_exercises", {
   // Swim exercises: the pool length in metres (a 25 yd pool is 22.86). Null
   // for open water, other sports and strength.
   poolLengthM: real("pool_length_m"),
+  // Bike exercises: the FTP test the ride is, "ramp" or "20min" (RIDE_TESTS in
+  // src/lib/utils/workout-steps.ts; docs/plans/bike-ride-logger.md, 4.9). The
+  // step tree carries it as `test`. Null for any other ride or exercise.
+  rideTest: text("ride_test", { enum: ["ramp", "20min"] }),
   deletedAt: timestamp("deleted_at"),
 });
 

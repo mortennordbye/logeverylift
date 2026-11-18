@@ -1390,6 +1390,7 @@ export async function exportProgram(
         applyToPlan: pe.progressionApplyToPlan ?? false,
         suppressEffortPrompt: pe.progressionSuppressEffortPrompt ?? false,
         ...(pe.poolLengthM != null && { poolM: pe.poolLengthM }),
+        ...(pe.rideTest != null && { rideTest: pe.rideTest }),
         exercise: {
           name: pe.exercise.name,
           category: pe.exercise.category,
@@ -1463,6 +1464,7 @@ export async function exportAllPrograms(): Promise<ActionResult<ExportedPrograms
             applyToPlan: pe.progressionApplyToPlan ?? false,
             suppressEffortPrompt: pe.progressionSuppressEffortPrompt ?? false,
             ...(pe.poolLengthM != null && { poolM: pe.poolLengthM }),
+            ...(pe.rideTest != null && { rideTest: pe.rideTest }),
             exercise: {
               name: pe.exercise.name,
               category: pe.exercise.category,
@@ -1642,6 +1644,7 @@ export async function importProgram(
               progressionSuppressEffortPrompt: slot.suppressEffortPrompt ?? false,
               exerciseType: overrideType,
               ...(slot.poolM != null ? { poolLengthM: slot.poolM } : {}),
+              ...(slot.rideTest != null ? { rideTest: slot.rideTest } : {}),
             })
             .returning({ id: programExercises.id });
 

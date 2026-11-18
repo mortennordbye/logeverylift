@@ -34,7 +34,7 @@ import {
 } from "@/lib/utils/progression";
 import { RESULT_SOURCES } from "@/db/schema/workout-sets";
 import { NUDGE_CAP_W, EXTEND_MAX_S } from "@/lib/utils/ride-timeline";
-import { programStepFieldsSchema } from "@/lib/utils/workout-steps";
+import { RIDE_TESTS, programStepFieldsSchema } from "@/lib/utils/workout-steps";
 import { z } from "zod";
 
 export const WORKOUT_FEELINGS = ["Tired", "OK", "Good", "Awesome"] as const;
@@ -642,6 +642,7 @@ const importProgramEntrySchema = z.object({
             }),
           ),
           poolM: z.number().min(10).max(100).optional().catch(undefined),
+          rideTest: z.enum(RIDE_TESTS).optional().catch(undefined),
         }),
       )
       .max(50),

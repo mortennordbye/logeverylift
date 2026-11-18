@@ -259,6 +259,7 @@ const EXERCISE_FIELDS: Record<string, string> = {
   exerciseType: "exercise type",
   weightStack: "weight stack",
   poolLengthM: "pool length",
+  rideTest: "FTP test",
 };
 
 /** A Plan field on the history page: its label, and how a value reads (plain text when absent). */

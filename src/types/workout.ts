@@ -569,6 +569,8 @@ export type ExportedProgram = {
       }>;
       /** Swim pool length in metres. Only when set. */
       poolM?: number;
+      /** Bike FTP test ride ("ramp" or "20min"). Only when set. */
+      rideTest?: "ramp" | "20min";
     }>;
   };
 };
