@@ -67,6 +67,7 @@ export default async function WorkoutExerciseSetsPage({ params, searchParams }: 
           sessionCompleted={found.sessionCompleted}
           units={units}
           pushPublicKey={pushPublicKey()}
+          workoutHref={`/programs/${programId}/workout`}
         />
       );
     }

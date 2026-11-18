@@ -108,7 +108,7 @@ async function open(seconds = 0, opts: { armed?: boolean; mode?: "indoor" | "out
   vi.setSystemTime(T + seconds * 1000);
   serve(opts.mode);
   if (opts.armed !== false) armRide();
-  render(<RideMode exerciseId={3} initial={view()} setNumbers={{ 11: 1, 12: 2, 13: 3 }} onlyExercise sessionCompleted={false} units={{ distance: "km", swim: "m" }} pushPublicKey={opts.pushKey ?? null} />);
+  render(<RideMode exerciseId={3} initial={view()} setNumbers={{ 11: 1, 12: 2, 13: 3 }} onlyExercise sessionCompleted={false} units={{ distance: "km", swim: "m" }} pushPublicKey={opts.pushKey ?? null} workoutHref="/programs/1/workout" />);
   await advance(0);
 }
 
@@ -301,6 +301,42 @@ describe("RideMode", () => {
     expect(sent().map((d) => [d.kind, d.clientAt])).toEqual([["pause", T0 + 700_000]]);
     expect(localStorage.getItem(RIDE_QUEUE_KEY)).toBeNull();
     expect(text("ride-header")).not.toContain("Saved on this phone");
+  });
+
+  it("Ride done offline: Later goes to the workout and keeps the queue", async () => {
+    await open(700);
+    Object.defineProperty(navigator, "onLine", { configurable: true, get: () => false });
+    act(() => {
+      window.dispatchEvent(new Event("offline"));
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Pause" }));
+    await advance(0);
+    fireEvent.click(screen.getByRole("button", { name: "End ride" }));
+    await advance(0);
+    expect(screen.getByTestId("ride-done")).toBeTruthy();
+    const later = screen.getByRole("link", { name: "Later" });
+    expect(later.getAttribute("href")).toBe("/programs/1/workout");
+    // The taps stay on this phone; the next page that opens the ride sends them.
+    expect(JSON.parse(localStorage.getItem(RIDE_QUEUE_KEY)!)["5"].map((e: { kind: string }) => e.kind)).toEqual(["pause", "end"]);
+    expect(completeWorkoutSession).not.toHaveBeenCalled();
+  });
+
+  it("Ride done with a tap still sending shows Later too; once all is sent there is none", async () => {
+    await open(700);
+    fireEvent.click(screen.getByRole("button", { name: "Pause" }));
+    await advance(0);
+    let answer: (v: unknown) => void = () => {};
+    sendRideEvent.mockImplementationOnce(() => new Promise((r) => (answer = r)));
+    fireEvent.click(screen.getByRole("button", { name: "End ride" }));
+    await advance(0);
+    expect(screen.getByTestId("ride-done")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Later" })).toBeTruthy();
+    events.push({ seq: ++seq, kind: "end", value: null, at: Date.now(), clientId: "end" });
+    await act(async () => {
+      answer({ success: true, data: view() });
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(screen.queryByRole("link", { name: "Later" })).toBeNull();
   });
 
   it("opened on a running ride without a tap (a reload): Resume or End at the last step", async () => {

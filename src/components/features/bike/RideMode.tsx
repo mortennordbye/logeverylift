@@ -21,6 +21,7 @@ import { keptStepsText, pausedSince, pausedText, rideScreen, shiftedWattsText, s
 import { EXTEND_STEP_S, NUDGE_CAP_W, NUDGE_STEP_W, type RideStepResult } from "@/lib/utils/ride-timeline";
 import { callAction, failedInTransit } from "@/lib/utils/stale-bundle";
 import type { Units } from "@/lib/utils/units";
+import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -163,6 +164,7 @@ export function RideMode({
   sessionCompleted,
   units,
   pushPublicKey,
+  workoutHref,
 }: {
   exerciseId: number;
   initial: RideView;
@@ -174,6 +176,8 @@ export function RideMode({
   units: Units;
   /** The server's VAPID public key; null when push is off on the server. */
   pushPublicKey: string | null;
+  /** Where Later goes while the ride's taps wait on this phone. */
+  workoutHref: string;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -301,6 +305,12 @@ export function RideMode({
         <p className="text-3xl font-bold">{timeline.status === "ended_early" ? "Ride ended early" : "Ride done"}</p>
         <p className="text-base text-muted-foreground">{offline ? "Saved on this phone. It sends when you are online." : "Saving the ride"}</p>
         {toastRow && <div className="w-full max-w-sm text-left">{toastRow}</div>}
+        {/* Taps wait on this phone: the rider can leave, and the next page that opens the ride sends them. */}
+        {(offline || queued > 0) && (
+          <Link href={workoutHref} className="min-h-11 px-3 inline-flex items-center font-semibold text-primary active:opacity-70">
+            Later
+          </Link>
+        )}
       </div>
     );
   }
