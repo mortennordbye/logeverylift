@@ -16,6 +16,30 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** The owner's go.
 - **Touchpoints:** `src/lib/env.ts` (the three vars, all or none), `src/lib/push.ts` (`pushKeys`, `startRidePushLoop`), `src/instrumentation.ts`, `public/push-sw.js`, the ExternalSecret in the homelab repo.
 
+### Run and swim on the ride logger's parts (D1)
+- **What:** Give run and swim exercises what the bike got in docs/plans/bike-ride-logger.md: the exercise screen with the planned profile and step list, a server-kept session with a frozen plan and events driven by one timeline, each step saved when it ends, a results table and summary, step alerts, the Garmin fill and the outdoor targets. Run and swim keep today's steps and the old guided player (`/planned/[id]/play`).
+- **Why deferred:** Decision D1 of the brief: bike only in this build.
+- **Unblocked by:** A brief of its own: which numbers a run and a swim summary show (pace, CSS, stroke), how a pool swim's lengths map to steps, and whether `rides` becomes a general table or gets siblings.
+- **Touchpoints:** `src/components/features/bike/`, `src/lib/actions/rides.ts`, `src/lib/ride-settle.ts`, `src/lib/utils/ride-timeline.ts`, `src/lib/ride-garmin.ts`, `src/components/features/guided/GuidedPlayer.tsx`, `src/lib/program-steps-view.ts`.
+
+### Ride GPS track and map from Garmin
+- **What:** Show an outdoor ride's track on a map in its summary, from the Garmin activity the fill matched (the stream holds `lat` and `lng`).
+- **Why deferred:** Section 7 of docs/plans/bike-ride-logger.md: out of scope for this build.
+- **Unblocked by:** A choice of map tiles and their provider, with the `privacy-compliance` skill: the tile server would see the area of the ride.
+- **Touchpoints:** `src/db/schema/garmin.ts` (`garminActivityStreams`), `src/lib/garmin/fit.ts`, `src/lib/ride-garmin.ts`, `src/components/features/bike/RideSummary.tsx`.
+
+### Ride W/kg and peak powers
+- **What:** Watts per kilogram (from the user's body weight) and peak powers from 5 s to 20 min (best rolling means of the 1 s stream) in the ride summary and `get_ride`.
+- **Why deferred:** Section 7 of docs/plans/bike-ride-logger.md: out of scope for this build.
+- **Unblocked by:** Nothing. `bestRollingPower` already gives the best 60 s for the ramp test; it takes the other windows. Decide whether peaks are kept per ride for a power curve over time.
+- **Touchpoints:** `src/lib/utils/ride-stream.ts` (`bestRollingPower`), `src/lib/ride-report.ts`, `src/lib/mcp/tools/endurance-app.ts` (`get_ride`), `src/components/features/bike/RideSummary.tsx`.
+
+### Send rides to a Garmin device (D11)
+- **What:** Send a bike workout's steps to the user's Garmin as a structured workout, so the watch or bike computer runs the steps with its own sensors.
+- **Why deferred:** Decision D11 of docs/plans/bike-ride-logger.md: the app guides and logs; Garmin records.
+- **Unblocked by:** Access to Garmin's Training API (a partner program) and a decision on how a ride the watch ran maps back to the app's ride and its steps.
+- **Touchpoints:** `src/lib/utils/workout-steps.ts` (the step model), `src/lib/utils/ride-timeline.ts` (`buildRidePlan`), `src/lib/garmin/`.
+
 ### The Serwist service worker is not built
 - **What:** `src/app/sw.ts` (Serwist precache and runtime caching) is never emitted: `next build` runs Turbopack, and `@serwist/next` hooks only into webpack, so there is no `public/sw.js` and no worker registers. The offline page caching that `docs/plans/endurance-app.md` and the privacy page describe does not run. Ride step alerts use their own push-only worker (`public/push-sw.js`, scope `/push/`) and do not depend on it.
 - **Why deferred:** Found while building ride step alerts; it is older than that change and out of its scope.

@@ -373,7 +373,7 @@ Without a bike LTHR, heart rate targets become effort targets (Z2 4, Z3 6, Z4 7)
 - **Done when:** unit tests for both formulas; e2e saves a new FTP and the bike screen shows the
   new watts.
 
-## 7. Out of scope (put in BACKLOG.md when this brief is done)
+## 7. Out of scope (in BACKLOG.md: done)
 
 - Run and swim on the same parts (D1).
 - GPS track and map from Garmin.
