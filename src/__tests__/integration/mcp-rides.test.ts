@@ -7,8 +7,9 @@
  * ended-early ride. Clock: Tue 2026-11-17 12:00 UTC.
  */
 import { db } from "@/db";
-import { athleteThresholds, plannedSessions, programExercises, trainingCycles, users, workoutSets } from "@/db/schema";
-import { sendRideEvent, startRide } from "@/lib/actions/rides";
+import { athleteThresholds, plannedSessions, programExercises, trainingCycles, users, workoutSessions, workoutSets } from "@/db/schema";
+import { getRide, sendRideEvent, startRide } from "@/lib/actions/rides";
+import { saveStepResults } from "@/lib/step-results";
 import { logWorkoutSet } from "@/lib/actions/workout-sets";
 import { registerEnduranceAppTools } from "@/lib/mcp/tools/endurance-app";
 import { registerProgramTools } from "@/lib/mcp/tools/programs";
@@ -353,5 +354,112 @@ describe("get_ride", () => {
       isError: true,
       raw: expect.stringContaining("Endurance features are not on"),
     });
+  });
+});
+
+/** A planned session of today running this program. */
+async function plannedFor(programId: number) {
+  const [c] = await db.insert(trainingCycles).values({ userId: me, name: "Block", durationWeeks: 4, status: "active", startDate: "2026-11-16" }).returning();
+  const [p] = await db.insert(plannedSessions).values({ userId: me, cycleId: c.id, date: TODAY, position: 1, programId }).returning();
+  return p.id;
+}
+
+/** The mockup with three rounds: set numbers move, so the program's set ids hold other steps. */
+const threeRounds = { ...mockup, steps: [mockup.steps[0], { ...mockup.steps[1], count: 3 }, mockup.steps[2]] };
+
+describe("review fixes (step 5)", () => {
+  it("refuses results by planned session while a ride started from the program runs on today's open workout (D9)", async () => {
+    const r = await startMockRide();
+    const planned = await plannedFor(r.programId);
+    const res = await mcpTools(registerEnduranceAppTools, me)("log_step_results", { plannedSessionId: planned, steps: [{ key: "s1", status: "done", activeSeconds: 900 }], reason: "x" });
+    expect(res).toMatchObject({ isError: true, raw: expect.stringContaining("still running") });
+    expect(await rowsOf(r.sessionId)).toEqual([]);
+    const [session] = await db.select().from(workoutSessions).where(eq(workoutSessions.id, r.sessionId));
+    expect(session.isCompleted).toBe(false);
+  });
+
+  it("a program edit and a new FTP during a ride never reach its saved steps", async () => {
+    const r = await startMockRide();
+    const call = mcpTools(registerProgramTools, me);
+    const edited = await call("edit_program_exercise", { operation: "update", programExerciseId: r.programExerciseId, workout: threeRounds, reason: "More", expectedVersion: 1 });
+    expect(edited.isError, edited.raw).toBe(false);
+    await db.update(athleteThresholds).set({ value: 250 }).where(eq(athleteThresholds.userId, me));
+    // Step 2 (s3#1) ends: ride mode saves it to the program set the ride froze.
+    vi.setSystemTime(new Date(T0.getTime() + 31 * MIN));
+    ok(await logWorkoutSet(clockSave(r.sessionId, r.ridden[1], 2)));
+    const [row] = await rowsOf(r.sessionId);
+    const snap = row.plannedStep as { step: { target: unknown }; thresholds: { ftp: number } };
+    expect(snap.step.target).toEqual({ metric: "power", anchor: "ftp", low: 75, high: 81 });
+    expect(snap.thresholds.ftp).toBe(180);
+
+    // The ride ends: only its own dropped recovery is logged as not done, not the sets added mid-ride.
+    vi.setSystemTime(new Date(T0.getTime() + 66 * MIN));
+    ok(await getRide({ rideId: r.rideId }));
+    const notDone = (await rowsOf(r.sessionId)).filter((x) => x.stepStatus === "not_done");
+    expect(notDone.map((x) => x.programSetId)).toEqual([r.setIds[4]]);
+    expect((notDone[0].plannedStep as { thresholds: { ftp: number } }).thresholds.ftp).toBe(180);
+  });
+
+  it("maps keys through the ride's frozen plan after the program changed, and refuses a changed program without a ride", async () => {
+    const r = await finishedRide();
+    const call = mcpTools(registerEnduranceAppTools, me);
+    const edited = await mcpTools(registerProgramTools, me)("edit_program_exercise", { operation: "update", programExerciseId: r.programExerciseId, workout: threeRounds, reason: "More", expectedVersion: 1 });
+    expect(edited.isError, edited.raw).toBe(false);
+    const res = await call("log_step_results", { workoutSessionId: r.sessionId, steps: [{ key: "s5", status: "done", avgPower: 130 }], reason: "x" });
+    expect(res.isError, res.raw).toBe(false);
+    const rows = new Map((await rowsOf(r.sessionId)).map((x) => [x.programSetId, x]));
+    expect(rows.get(r.ridden[4])!.avgPower).toBe(130);
+    expect(rows.size).toBe(5);
+    const got = await call("get_step_results", { workoutSessionId: r.sessionId });
+    expect(got.data.steps.find((x: { key: string }) => x.key === "s5")).toMatchObject({ result: { avgPower: 130 } });
+
+    // A session with no ride: logged against the old program, refused after it changed.
+    const { program, slots } = await createStepProgram(me, bike, mockup);
+    const session = await createSession(me, program.id, { date: TODAY, startTime: T0 });
+    const first = await call("log_step_results", { workoutSessionId: session.id, steps: [{ key: "s1", status: "done", activeSeconds: 900 }, { key: "s5", status: "done", activeSeconds: 900 }], reason: "x" });
+    expect(first.isError, first.raw).toBe(false);
+    await mcpTools(registerProgramTools, me)("edit_program_exercise", { operation: "update", programExerciseId: slots[0].programExerciseId, workout: threeRounds, reason: "More", expectedVersion: 1 });
+    expect(await call("log_step_results", { workoutSessionId: session.id, steps: [{ key: "s5", status: "done", avgPower: 130 }], reason: "x" })).toMatchObject({
+      isError: true,
+      raw: expect.stringContaining("program changed"),
+    });
+  });
+
+  it("writes only the steps it names, keeps the source of an unchanged value, and keeps a done step done", async () => {
+    const r = await finishedRide();
+    ok(await logWorkoutSet({ ...clockSave(r.sessionId, r.ridden[1], 2), avgPower: 141, sources: { avgPower: "typed" } }));
+    const res = await mcpTools(registerEnduranceAppTools, me)("log_step_results", {
+      workoutSessionId: r.sessionId,
+      steps: [{ key: "s3#1", status: "partial", avgPower: 141 }],
+      reason: "x",
+    });
+    expect(res.isError, res.raw).toBe(false);
+    const rows = await rowsOf(r.sessionId);
+    expect(rows).toHaveLength(5);
+    const s2 = rows.find((x) => x.programSetId === r.ridden[1])!;
+    expect([s2.avgPower, s2.stepStatus, s2.isCompleted, s2.sources]).toEqual([141, "done", true, { durationSeconds: "clock", avgPower: "typed" }]);
+  });
+
+  it("the guided player's save leaves ride numbers it does not send, and drops the source of what it replaces", async () => {
+    const { program, slots } = await createStepProgram(me, bike, mockup);
+    const planned = await plannedFor(program.id);
+    const session = await createSession(me, program.id, { date: TODAY, startTime: T0, plannedSessionId: planned, source: "app" });
+    const id = slots[0].setIds[0];
+    ok(await logWorkoutSet({ ...clockSave(session.id, id, 1), avgPower: 124, maxHr: 150, sources: { durationSeconds: "clock", avgPower: "typed", maxHr: "typed" } }));
+    await saveStepResults(me, { plannedSessionId: planned, steps: [{ key: "s1", status: "done", activeSeconds: 800 }] }, "player");
+    const row = (await rowsOf(session.id)).find((x) => x.programSetId === id)!;
+    expect([row.durationSeconds, row.avgPower, row.maxHr, row.sources]).toEqual([800, 124, 150, { avgPower: "typed", maxHr: "typed" }]);
+  });
+
+  it("says plainly that a gradient is no target in a set list too", async () => {
+    const { slots } = await createStepProgram(me, bike, mockup);
+    const r = await mcpTools(registerProgramTools, me)("edit_program_exercise", {
+      operation: "update",
+      programExerciseId: slots[0].programExerciseId,
+      sets: [{ setNumber: 1, stepKind: "work", durationSeconds: 600, targets: [{ metric: "gradient", anchor: "absolute", low: 6, high: 8 }] }],
+      reason: "x",
+      expectedVersion: 1,
+    });
+    expect(r).toMatchObject({ isError: true, raw: expect.stringContaining("gradient is never a target") });
   });
 });

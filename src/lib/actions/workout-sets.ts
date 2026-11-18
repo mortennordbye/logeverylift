@@ -69,6 +69,7 @@ import type {
     WorkoutStats,
 } from "@/types/workout";
 import { plannedStepSnapshot } from "@/lib/program-steps-db";
+import { rideStepSnapshot } from "@/lib/ride-plan-db";
 import { WORKOUT_LIMITS } from "@/lib/utils/workout-steps";
 import { and, asc, desc, eq, gte, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
@@ -383,7 +384,11 @@ export async function logWorkoutSet(
     }
     const slot = resolved.slot;
     // An endurance step keeps its plan with the log (docs/plans/one-program-model.md, 1.2).
-    const plannedStep = slot?.stepKind != null && slot.programSetId != null ? await plannedStepSnapshot(db, slot.programSetId, auth.user.id) : null;
+    // A step of the session's ride keeps the plan the ride froze at its start (D9), not the program as edited since.
+    const plannedStep =
+      slot?.stepKind != null && slot.programSetId != null
+        ? ((await rideStepSnapshot(db, auth.user.id, sessionId, slot.programSetId)) ?? (await plannedStepSnapshot(db, slot.programSetId, auth.user.id)))
+        : null;
 
     // A step is at most 12 hours, as the step model allows (a typo in a typed time).
     if (plannedStep && durationSeconds != null && durationSeconds > WORKOUT_LIMITS.seconds.max) {

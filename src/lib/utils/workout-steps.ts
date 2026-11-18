@@ -87,7 +87,10 @@ const endSchema = z.discriminatedUnion("type", [
 ]);
 
 const targetSchema = z.strictObject({
-  metric: z.enum(TARGET_METRICS),
+  // Said plainly for the mistakes an assistant makes (bike-ride-logger, D12): a set list reaches only this check.
+  metric: z.enum(TARGET_METRICS, {
+    error: `metric must be ${TARGET_METRICS.join(", ")}. A gradient is never a target: write the climb in the step's note. Speed is a result, not a target`,
+  }),
   anchor: z.enum(TARGET_ANCHORS),
   low: z.number().optional(),
   high: z.number().optional(),

@@ -186,9 +186,10 @@ export function sentStep(r: StepResult, sessionRpe: number | null | undefined): 
 /**
  * An assistant write over a logged step: the columns to set and the fields it
  * kept. A result field is written, with source "assistant", unless the row
- * holds another value that the rider typed or Garmin filled. Effort and notes
- * are only filled when empty: the rider's own words stay. A step logged as
- * done or partial stays so.
+ * holds a value that the rider typed or Garmin filled (the same value keeps
+ * its source; another one is kept and reported). Effort and notes
+ * are only filled when empty: the rider's own words stay. A done step stays
+ * done and a partial one at least partial.
  */
 export function assistantStepWrite(stored: StoredStep, sent: SentStep): { set: Record<string, unknown>; kept: KeptField[] } {
   const set: Record<string, unknown> = {};
@@ -199,8 +200,9 @@ export function assistantStepWrite(stored: StoredStep, sent: SentStep): { set: R
     if (v === undefined) continue;
     const old = stored[f] ?? null;
     const src = stored.sources?.[f];
-    if (old !== null && old !== v && src !== undefined && ASSISTANT_KEEPS.includes(src)) {
-      kept.push({ field: f, by: src as KeptField["by"] });
+    if (old !== null && src !== undefined && ASSISTANT_KEEPS.includes(src)) {
+      // The same value keeps who wrote it; another one is not the assistant's to replace.
+      if (old !== v) kept.push({ field: f, by: src as KeptField["by"] });
       continue;
     }
     set[f] = v;
@@ -213,7 +215,8 @@ export function assistantStepWrite(stored: StoredStep, sent: SentStep): { set: R
     else set[f] = v;
   }
   const done = (s: StepStatus | null) => s === "done" || s === "partial";
-  if (stored.isCompleted && !done(sent.stepStatus)) {
+  // A done step stays done, a partial one at least partial.
+  if ((stored.stepStatus === "done" && sent.stepStatus !== "done") || (stored.isCompleted && !done(sent.stepStatus))) {
     if (stored.stepStatus !== sent.stepStatus) kept.push({ field: "status", by: "logged" });
   } else {
     set.stepStatus = sent.stepStatus;

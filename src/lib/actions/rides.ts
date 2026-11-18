@@ -13,6 +13,7 @@ import { isUniqueViolation } from "@/lib/custom-exercises";
 import { enduranceEnabledFor } from "@/lib/endurance";
 import { liveProgramExercises, liveProgramSets, livePrograms } from "@/lib/plan-live";
 import { plannedStepSnapshot } from "@/lib/program-steps-db";
+import { rideStepSnapshot } from "@/lib/ride-plan-db";
 import { scheduleRidePushes } from "@/lib/push";
 import { thresholdValues } from "@/lib/session-compliance";
 import { buildWorkout, type StepRow } from "@/lib/utils/program-steps";
@@ -113,14 +114,21 @@ async function settle(ex: Executor, ride: Ride, now: number): Promise<RideView> 
 async function logDroppedSteps(ex: Executor, ride: Ride, plan: RidePlan) {
   if (ride.programExerciseId === null) return;
   const inPlan = new Set(plan.steps.map((s) => s.programSetId));
+  // A plan frozen with its dropped steps logs only those, as planned at the
+  // start: a set the program gained during the ride is not this ride's (D9).
+  const dropped = plan.dropped ? new Set(plan.dropped.map((s) => s.programSetId)) : null;
   const sets = await ex
     .select({ id: programSets.id, setNumber: programSets.setNumber, exerciseId: programExercises.exerciseId })
-    // plan-read: includes deleted (the ride's exercise row, for its exercise id, and the live sets)
+    // plan-read: includes deleted (the ride's exercise row for its exercise id, and its sets as frozen or the live ones)
     .from(programSets)
     .innerJoin(programExercises, eq(programExercises.id, programSets.programExerciseId))
-    .where(and(eq(programSets.programExerciseId, ride.programExerciseId), isNotNull(programSets.stepKind), liveProgramSets));
+    .where(
+      dropped
+        ? and(eq(programSets.programExerciseId, ride.programExerciseId), inArray(programSets.id, [...dropped, -1]))
+        : and(eq(programSets.programExerciseId, ride.programExerciseId), isNotNull(programSets.stepKind), liveProgramSets),
+    );
   for (const set of sets.filter((x) => !inPlan.has(x.id))) {
-    const plannedStep = await plannedStepSnapshot(ex, set.id, ride.userId);
+    const plannedStep = (await rideStepSnapshot(ex, ride.userId, ride.sessionId, set.id)) ?? (await plannedStepSnapshot(ex, set.id, ride.userId));
     await ex
       .insert(workoutSets)
       .values({

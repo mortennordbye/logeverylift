@@ -16,8 +16,8 @@ import { rideStepLogs } from "@/lib/bike-exercise-view";
 import { getUserSettings } from "@/lib/user-settings";
 import { bikeStepRows, plannedRideNumbers } from "@/lib/utils/bike-ride-view";
 import { rideSummary } from "@/lib/utils/ride-results";
-import { rideTimeline, type RidePlan } from "@/lib/utils/ride-timeline";
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import type { RidePlan } from "@/lib/utils/ride-timeline";
+import { and, asc, desc, eq } from "drizzle-orm";
 
 const r1 = (n: number | null) => (n === null ? null : Math.round(n * 10) / 10);
 const r2 = (n: number | null) => (n === null ? null : Math.round(n * 100) / 100);
@@ -148,32 +148,3 @@ export async function rideReport(userId: string, by: { workoutSessionId?: number
 
 export type RideReport = NonNullable<Awaited<ReturnType<typeof rideReport>>>;
 
-/**
- * The id of the user's ride that is still running or paused on this workout
- * session, or on the session logged for this planned session; null when none
- * runs (D9: no assistant write reaches a running ride).
- */
-export async function liveRideOn(userId: string, by: { workoutSessionId?: number; plannedSessionId?: number }): Promise<number | null> {
-  const [ride] = await db
-    .select({ id: rides.id, plan: rides.plan, heartbeatAt: rides.heartbeatAt })
-    .from(rides)
-    .innerJoin(workoutSessions, eq(workoutSessions.id, rides.sessionId))
-    .where(
-      and(
-        eq(rides.userId, userId),
-        inArray(rides.status, ["running", "paused"]),
-        by.workoutSessionId != null ? eq(rides.sessionId, by.workoutSessionId) : eq(workoutSessions.plannedSessionId, by.plannedSessionId ?? -1),
-      ),
-    )
-    .limit(1);
-  if (!ride) return null;
-  // The stored status is settled on the next read of the app; the timeline says whether it still runs.
-  const events = await db.select().from(rideEvents).where(eq(rideEvents.rideId, ride.id)).orderBy(asc(rideEvents.seq));
-  const t = rideTimeline(
-    ride.plan as RidePlan,
-    events.map((e) => ({ seq: e.seq, kind: e.kind, value: e.value, at: e.at.getTime() })),
-    Date.now(),
-    { heartbeatAt: ride.heartbeatAt?.getTime() ?? null },
-  );
-  return t.status === "running" || t.status === "paused" ? ride.id : null;
-}

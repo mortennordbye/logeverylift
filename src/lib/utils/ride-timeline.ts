@@ -68,6 +68,12 @@ export type RidePlan = {
   name: string;
   thresholds: ThresholdValues;
   steps: RidePlanStep[];
+  /**
+   * The program sets the ride never runs (the recovery after a repeat's last
+   * round, 4.4), frozen as the steps are, so the end of the ride logs them as
+   * planned at the start. Absent on a plan frozen before it existed.
+   */
+  dropped?: Pick<RidePlanStep, "key" | "programSetId" | "step" | "round">[];
 };
 
 /** Watts of a step's power target or ramp: a range low to high, a ramp from to to. */
@@ -113,9 +119,13 @@ export function buildRidePlan(workout: Workout, setIds: number[], thresholds: Th
   }
 
   const steps: RidePlanStep[] = [];
+  const dropped: NonNullable<RidePlan["dropped"]> = [];
   play.forEach((p, k) => {
-    if (lastRecovery.has(k)) return;
     const s = p.step as WorkoutStep;
+    if (lastRecovery.has(k)) {
+      dropped.push({ key: p.key, programSetId: setIds[k], step: s, round: p.round });
+      return;
+    }
     let seconds: number | null = null;
     if (s.end.type === "time") seconds = s.end.seconds;
     else if (s.end.type === "distance" && mode === "indoor") {
@@ -138,7 +148,7 @@ export function buildRidePlan(workout: Workout, setIds: number[], thresholds: Th
       power: stepWatts(s, thresholds),
     });
   });
-  return { v: 1, mode, name: workout.name, thresholds, steps };
+  return { v: 1, mode, name: workout.name, thresholds, steps, dropped };
 }
 
 // ── The clock ────────────────────────────────────────────────────────────────

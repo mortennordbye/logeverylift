@@ -133,7 +133,7 @@ export function registerEnduranceAppTools(server: McpServer, userId: string) {
       description: [
         "A bike ride from ride mode, by workoutSessionId, or the latest ride of a program exercise by programExerciseId.",
         "Gives the mode (indoor or outdoor), the status (running, paused, finished, ended_early; an ended-early ride does not count as a done key session), the plan as frozen at the start (FTP, steps, planned time, load, IF, kJ, minutes per power zone), and per step the plan (end, target, watts, ramp, outdoor target, cadence, note) against what was done (status, time, +1 min extensions, the rider's ±5 W offset, avg power, avg and max heart rate, cadence, speed m/s, distance, climbing, RPE) with sources, who wrote each value (clock, typed, garmin, assistant). underTarget is true when the avg power (outdoors the avg heart rate) was under the plan's low end.",
-        "numbers: avg power over the steps with power, kJ and an estimated power load (method bike_power, NP estimated from the step averages) only when power covers 90% of the ridden time and an FTP is set, else the effort load (method srpe, minutes x RPE x 0.22), else none; minutes per power zone by step average. np, intensityFactor, heart rate zones, drift and time on target need a Garmin power stream and are null without one. Load models are inference; say so.",
+        "numbers: avg power over the steps with power; kJ only when power covers 90% of the ridden time; an estimated power load (method bike_power, NP estimated from the step averages) when power covers 90% and an FTP is set, else the effort load (method srpe, minutes x RPE x 0.22), else none; minutes per power zone by step average (needs an FTP). np, intensityFactor, heart rate zones, drift and time on target need a Garmin power stream and are null without one. Load models are inference; say so.",
         "Read only. No tool changes a running ride: it keeps its plan, and a program edit applies from the next ride. Null when there is no ride.",
       ].join(" "),
       inputSchema: { workoutSessionId: z.number().int().positive().optional(), programExerciseId: z.number().int().positive().optional() },
@@ -158,7 +158,7 @@ export function registerEnduranceAppTools(server: McpServer, userId: string) {
       description: [
         "Log the per-step results of a structured session, for example from what the athlete tells you.",
         "plannedSessionId (a session whose program has steps), or workoutSessionId of a logged session (a ride with no planned session), and steps: each key is the step id, plus #n for round n of a repeat (s3#2). Steps are numbered s1, s2 … in the order of the program's step tree (a repeat takes one number, its steps the next ones); with more than one structured exercise each key starts with the exercise's place (e2:s1). get_step_results and get_ride list the keys. Each step takes status, activeSeconds, distanceMeters, value, and for a ride avgPower, avgHr, maxHr, avgCadence, avgSpeed (m/s) and climbM, plus rpe and notes. Optional sessionRpe (1-10; without it and without a threshold the session has no load), notes. Give each step its own distanceMeters.",
-        "Each step is logged as one set of the session. When the session is not logged yet (plannedSessionId only), this writes it as a completed session linked to the planned one. When it is, the results attach to it: only the steps you name change, and each field you send is written with source 'assistant'. A value the athlete typed or Garmin filled is never replaced: the result lists it under kept, so tell the user. RPE and notes are only filled where empty, and a step already logged as done stays done. sessionRpe goes on each done step without its own RPE. Step results are logged data: they make no revision. A ride that is still running is not changed: wait until it has ended.",
+        "Each step is logged as one set of the session. When the session is not logged yet (plannedSessionId only), this writes it as a completed session linked to the planned one. When it is, the results attach to it: only the steps you name change, and each field you send is written with source 'assistant'. A value the athlete typed or Garmin filled is never replaced: the result lists it under kept, so tell the user. RPE and notes are only filled where empty, and a step already logged as done stays done. sessionRpe goes on each done step without its own RPE. Step results are logged data: they make no revision. A ride that is still running or paused is refused: wait until it has ended. For a session with a ride, the keys are the ride's own (get_ride lists them) and its steps keep the plan frozen at its start; for another session by workoutSessionId, a program changed since the session was logged is refused.",
         "Requires reason.",
       ].join(" "),
       inputSchema: {
@@ -175,10 +175,6 @@ export function registerEnduranceAppTools(server: McpServer, userId: string) {
       if ((args.plannedSessionId == null) === (args.workoutSessionId == null)) return fail("Send plannedSessionId or workoutSessionId");
       try {
         if (!(await enduranceEnabledFor(userId))) return fail(ENDURANCE_OFF);
-        // D9: a running ride is frozen; its steps save from the phone.
-        const { liveRideOn } = await import("@/lib/ride-report");
-        const ride = await liveRideOn(userId, args);
-        if (ride) return fail(`Ride ${ride} is still running. Its steps save from the phone as they end; log results after the ride has ended.`);
         const r =
           args.workoutSessionId != null
             ? await saveSessionStepResults(userId, args.workoutSessionId, { steps: args.steps, sessionRpe: args.sessionRpe })
