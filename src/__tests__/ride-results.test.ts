@@ -212,6 +212,12 @@ describe("rideSummary", () => {
     expect(s.noLoadReason).toBe("short");
   });
 
+  it("outdoors the plan column keeps an easy spin short ('Effort 2'), so the step name fits at 320 px", () => {
+    const outdoor = plan("outdoor");
+    const rows = rideSummary(outdoor, filled()).rows.map((r) => r.plan);
+    expect(rows.some((p) => p?.includes("easy spin"))).toBe(false);
+  });
+
   it("plan against done: ↓ only under the low end, no ↓ on an 'under' target", () => {
     const logs = filled();
     logs[4] = log({ avgPower: 131 });

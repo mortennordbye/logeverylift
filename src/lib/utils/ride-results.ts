@@ -276,7 +276,8 @@ function planText(s: RidePlanStep, row: { target: string | null }, mode: RideMod
     const w = wattsText(s);
     return w ? w.replace(/ W$/, "") : row.target;
   }
-  return row.target;
+  // The column is narrow: an easy spin reads "Effort 2" here, and the step name says the rest.
+  return row.target?.replace(/ · easy spin$/, "") ?? null;
 }
 
 /** Done: avg HR against a heart rate target outdoors, else avg W against the watts. ↓ when under the low end. */
