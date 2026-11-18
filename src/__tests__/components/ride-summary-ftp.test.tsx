@@ -13,6 +13,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const refresh = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }), usePathname: () => "/programs/1/workout/exercises/2" }));
 vi.mock("@/components/ui/BackLink", () => ({ BackLink: () => <span>Workout</span> }));
+vi.mock("@/lib/actions/rides", () => ({ startRide: vi.fn() }));
 vi.mock("@/lib/actions/ride-garmin", () => ({ undoRideGarminFill: vi.fn(), pickRideGarminActivity: vi.fn() }));
 const saveRideFtp = vi.fn();
 vi.mock("@/lib/actions/ride-ftp", () => ({ saveRideFtp: (d: unknown) => saveRideFtp(d) }));

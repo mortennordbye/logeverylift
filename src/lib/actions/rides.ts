@@ -12,6 +12,7 @@ import { RIDE_MODES, exercises, programExercises, programSets, programs, rideEve
 import { isUniqueViolation } from "@/lib/custom-exercises";
 import { enduranceEnabledFor } from "@/lib/endurance";
 import { liveProgramExercises, liveProgramSets, livePrograms } from "@/lib/plan-live";
+import { sessionRide } from "@/lib/ride-plan-db";
 import { LIVE, isLive, schedulePushes, settle, type RideView } from "@/lib/ride-settle";
 import { thresholdValues } from "@/lib/session-compliance";
 import { buildWorkout, type StepRow } from "@/lib/utils/program-steps";
@@ -49,6 +50,9 @@ const startRideSchema = z.object({
   mode: z.enum(RIDE_MODES),
   // The start event's id: a retried start returns the same ride.
   clientId: clientIdSchema,
+  // "Ride again" on the summary of a ride that ended early: a new ride of the
+  // same exercise on the same workout, which opens again if it was finished.
+  again: z.boolean().optional(),
 });
 
 /**
@@ -61,7 +65,7 @@ export async function startRide(data: unknown): Promise<ActionResult<RideView>> 
   const parsed = startRideSchema.safeParse(data);
   if (!parsed.success) return { success: false, error: "Invalid input", fieldErrors: parsed.error.flatten().fieldErrors };
   const userId = auth.user.id;
-  const { sessionId, programExerciseId, mode, clientId } = parsed.data;
+  const { sessionId, programExerciseId, mode, clientId, again } = parsed.data;
   if (!(await enduranceEnabledFor(userId))) return { success: false, error: "Endurance features are not on for this account" };
 
   try {
@@ -73,7 +77,13 @@ export async function startRide(data: unknown): Promise<ActionResult<RideView>> 
       .from(workoutSessions)
       .where(and(eq(workoutSessions.id, sessionId), eq(workoutSessions.userId, userId)));
     if (!session) return { success: false, error: "Not found" };
-    if (session.isCompleted) return { success: false, error: "This workout is finished" };
+    // Only a ride again after this exercise's ride ended early opens a finished workout.
+    let reopen = false;
+    if (session.isCompleted) {
+      const last = again ? await sessionRide(db, userId, sessionId) : null;
+      if (last?.status !== "ended_early" || last.programExerciseId !== programExerciseId) return { success: false, error: "This workout is finished" };
+      reopen = true;
+    }
 
     const [slot] = await db
       .select({ programId: programExercises.programId, discipline: exercises.discipline, name: programs.name, rideTest: programExercises.rideTest })
@@ -108,7 +118,10 @@ export async function startRide(data: unknown): Promise<ActionResult<RideView>> 
         .values({ userId, sessionId, programExerciseId, mode, status: "running", plan, seq: 1, startedAt: new Date(now) })
         .returning();
       await tx.insert(rideEvents).values({ rideId: row.id, seq: 1, clientId, kind: "start", at: new Date(now) });
-      await tx.update(workoutSessions).set({ rideMode: mode }).where(and(eq(workoutSessions.id, sessionId), eq(workoutSessions.userId, userId)));
+      await tx
+        .update(workoutSessions)
+        .set(reopen ? { rideMode: mode, isCompleted: false, endTime: null } : { rideMode: mode })
+        .where(and(eq(workoutSessions.id, sessionId), eq(workoutSessions.userId, userId)));
       return row;
     });
     const view = await settle(db, ride, now);

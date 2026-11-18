@@ -14,6 +14,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }), usePathname:
 vi.mock("@/components/ui/BackLink", () => ({ BackLink: () => <span>Workout</span> }));
 const undoRideGarminFill = vi.fn();
 const pickRideGarminActivity = vi.fn();
+vi.mock("@/lib/actions/rides", () => ({ startRide: vi.fn() }));
 vi.mock("@/lib/actions/ride-garmin", () => ({
   undoRideGarminFill: (d: unknown) => undoRideGarminFill(d),
   pickRideGarminActivity: (d: unknown) => pickRideGarminActivity(d),

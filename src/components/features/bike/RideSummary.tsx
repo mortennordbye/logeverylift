@@ -18,6 +18,9 @@ import { RideDoneChart, RideZoneBar } from "@/components/features/bike/RideProfi
 import { BackLink } from "@/components/ui/BackLink";
 import { pickRideGarminActivity, undoRideGarminFill } from "@/lib/actions/ride-garmin";
 import { saveRideFtp } from "@/lib/actions/ride-ftp";
+import { startRide } from "@/lib/actions/rides";
+import { armRide, disarmRide } from "@/components/features/bike/useRide";
+import type { RideMode } from "@/db/schema/rides";
 import type { FtpTestView } from "@/lib/utils/ftp-tests";
 import type { RideGarminView } from "@/lib/ride-garmin";
 import type { RideSummary as Summary } from "@/lib/utils/ride-results";
@@ -45,6 +48,7 @@ export function RideSummary({
   garmin,
   timeZone = null,
   ftpTest = null,
+  rideAgain = null,
 }: {
   programId: number;
   exerciseName: string;
@@ -57,6 +61,8 @@ export function RideSummary({
   garmin?: Pick<RideGarminView, "state" | "candidates">;
   timeZone?: string | null;
   ftpTest?: FtpTestView | null;
+  /** A ride that ended early: "Ride again" starts a new ride of this exercise on the same workout. */
+  rideAgain?: { sessionId: number; programExerciseId: number; mode: RideMode } | null;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -76,6 +82,21 @@ export function RideSummary({
     setPicking(false);
     setConfirmUndo(false);
     router.refresh();
+  };
+  const again = async () => {
+    if (!rideAgain || busy) return;
+    setBusy(true);
+    setError(null);
+    // Inside the tap: sound and the screen wake lock need a user gesture (iOS).
+    armRide();
+    const r = await callAction(startRide({ ...rideAgain, clientId: crypto.randomUUID(), again: true }));
+    if (r.success) {
+      router.replace(`${pathname}?ride=1`);
+      return;
+    }
+    disarmRide();
+    setBusy(false);
+    setError(r.error);
   };
   const addHref = `${pathname}?results=1`;
   const s = summary;
@@ -265,7 +286,18 @@ export function RideSummary({
         )}
       </div>
 
-      <div className="shrink-0 px-4 pt-2 pb-3 flex flex-col gap-1 border-t border-border bg-background">
+      <div className="shrink-0 px-4 pt-2 pb-3 flex flex-col gap-2 border-t border-border bg-background">
+        {rideAgain && (
+          <button
+            type="button"
+            onClick={again}
+            disabled={busy}
+            className="min-h-12 rounded-2xl bg-muted px-4 text-base font-semibold inline-flex items-center justify-center active:opacity-70 disabled:opacity-50"
+            data-testid="summary-ride-again"
+          >
+            Ride again
+          </button>
+        )}
         <Link
           href={saveTheRide ? `${pathname}?ride=1` : doneHref}
           className="min-h-12 rounded-2xl bg-brand-fill px-4 text-base font-semibold text-white inline-flex items-center justify-center active:opacity-80"

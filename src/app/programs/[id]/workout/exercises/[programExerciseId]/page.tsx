@@ -126,6 +126,7 @@ export default async function WorkoutExerciseSetsPage({ params, searchParams }: 
           ftpTest={after.ftpTest}
           doneHref={doneHref}
           saveTheRide={saveTheRide}
+          rideAgain={after.status === "ended_early" && !saveTheRide ? { sessionId: after.sessionId, programExerciseId: peId, mode: after.plan.mode } : null}
         />
       );
     }
