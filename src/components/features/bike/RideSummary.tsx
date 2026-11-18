@@ -168,7 +168,12 @@ export function RideSummary({
           </div>
         )}
 
-        {(s.planOnly || s.noLoad) && (
+        {!s.planOnly && s.noLoadReason === "short" && (
+          <p className="rounded-xl bg-muted px-4 py-3 text-sm text-muted-foreground" data-testid="summary-no-load">
+            No load · the ride is too short to count
+          </p>
+        )}
+        {(s.planOnly || s.noLoadReason === "numbers") && (
           <div className="flex items-center justify-between gap-2 rounded-xl bg-muted pl-4 pr-2 min-h-12 text-sm" data-testid="summary-plan-only">
             <span className="text-muted-foreground">{s.planOnly ? "Plan only · no ride numbers" : "No load without effort or watts"}</span>
             <Link href={addHref} className="min-h-11 px-3 inline-flex items-center font-semibold text-primary whitespace-nowrap active:opacity-70">

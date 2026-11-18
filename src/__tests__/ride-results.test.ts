@@ -202,6 +202,16 @@ describe("rideSummary", () => {
     expect(s.noLoad).toBe(false);
   });
 
+  it("a load that rounds to 0 (a ride of seconds) has no tile and is listed as missing (4.6)", () => {
+    const logs = filled();
+    const first = Number(Object.keys(logs)[0]);
+    const short = { [first]: { ...logs[first], durationSeconds: 8, avgPower: null, rpe: 6 } };
+    const s = rideSummary(plan(), short);
+    expect(s.tiles.map((t) => t.label)).not.toContain("Load");
+    expect(s.noLoad).toBe(true);
+    expect(s.noLoadReason).toBe("short");
+  });
+
   it("plan against done: ↓ only under the low end, no ↓ on an 'under' target", () => {
     const logs = filled();
     logs[4] = log({ avgPower: 131 });

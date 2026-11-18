@@ -261,8 +261,10 @@ export type RideSummary = {
   effort: number | null;
   /** Nothing but times: "Plan only · no ride numbers". */
   planOnly: boolean;
-  /** Ridden but no load: no power with an FTP, no effort. */
+  /** Ridden but no load (4.6): no power with an FTP and no effort, or a load that rounds to 0. */
   noLoad: boolean;
+  /** Why: "numbers" (add effort or watts) or "short" (the ride is too short to count). */
+  noLoadReason: "numbers" | "short" | null;
 };
 
 const hasNumber = (l: StepLog) =>
@@ -335,7 +337,8 @@ export function rideSummary(
     rows,
     effort,
     planOnly: riddenLogs.length > 0 && effort === null && !riddenLogs.some(hasNumber),
-    noLoad: riddenLogs.length > 0 && numbers.load === null,
+    noLoad: riddenLogs.length > 0 && (numbers.load === null || Math.round(numbers.load.value) === 0),
+    noLoadReason: riddenLogs.length === 0 ? null : numbers.load === null ? "numbers" : Math.round(numbers.load.value) === 0 ? "short" : null,
   };
 }
 

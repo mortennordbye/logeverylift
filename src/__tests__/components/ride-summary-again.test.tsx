@@ -71,6 +71,12 @@ describe("Ride again", () => {
     expect(replace).not.toHaveBeenCalled();
   });
 
+  it("a ride too short for a load says so (4.6)", () => {
+    const log = { status: "partial" as const, durationSeconds: 8, targetOffsetW: 0, extendedSeconds: 0, avgPower: null, avgHr: null, maxHr: null, avgCadence: null, avgSpeed: null, distanceMeters: null, climbM: null, rpe: 6, sources: null };
+    render(<RideSummary programId={1} exerciseName="Tempo" doneLine="Ended early" summary={rideSummary(plan, { [plan.steps[0].programSetId]: log })} doneHref="/" saveTheRide={false} rideId={7} />);
+    expect(screen.getByTestId("summary-no-load").textContent).toBe("No load · the ride is too short to count");
+  });
+
   it("a finished ride has no Ride again", () => {
     show(null);
     expect(screen.queryByRole("button", { name: "Ride again" })).toBeNull();
