@@ -9,7 +9,7 @@ import { athleteThresholds, pushSubscriptions, ridePushes, rides } from "@/db/sc
 import { deletePushSubscription, savePushSubscription } from "@/lib/actions/push";
 import { sendRideEvent, startRide } from "@/lib/actions/rides";
 import { env } from "@/lib/env";
-import { RIDE_PUSH_TICK_MS, sendDueRidePushes, startRidePushLoop } from "@/lib/push";
+import { MAX_DEVICES_PER_USER, RIDE_PUSH_TICK_MS, ridePushTick, sendDueRidePushes, startRidePushLoop } from "@/lib/push";
 import { asc, eq } from "drizzle-orm";
 import webpush from "web-push";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -54,7 +54,7 @@ function pushOn(on: boolean) {
   Object.assign(env, on ? { VAPID_PUBLIC_KEY: KEYS.publicKey, VAPID_PRIVATE_KEY: KEYS.privateKey, VAPID_SUBJECT: "mailto:test@example.com" } : { VAPID_PUBLIC_KEY: undefined, VAPID_PRIVATE_KEY: undefined, VAPID_SUBJECT: undefined });
 }
 
-const device = (n = 1) => ({ endpoint: `https://push.example/device-${n}`, keys: { p256dh: "BNcR", auth: "tBHI" } });
+const device = (n = 1) => ({ endpoint: `https://fcm.googleapis.com/fcm/send/device-${n}`, keys: { p256dh: "BNcR", auth: "tBHI" } });
 
 function ok<T>(r: { success: true; data: T } | { success: false; error: string }): T {
   if (!r.success) throw new Error(r.error);
@@ -179,7 +179,9 @@ describe("sending", () => {
       tag: `ride-${view.ride.id}`,
       url: `/programs/${programId}/workout/exercises/${programExerciseId}?ride=1`,
     });
-    expect(opts).toMatchObject({ TTL: 60, urgency: "high", topic: `ride-${view.ride.id}`, vapidDetails: { publicKey: KEYS.publicKey, privateKey: KEYS.privateKey } });
+    expect(opts).toMatchObject({ TTL: 60, urgency: "high", timeout: 10_000, vapidDetails: { publicKey: KEYS.publicKey, privateKey: KEYS.privateKey } });
+    // No Topic header: it would show the push service the ride id.
+    expect(opts).not.toHaveProperty("topic");
     expect((await alerts(view.ride.id)).length).toBe(7);
     const [stored] = await db.select().from(pushSubscriptions).where(eq(pushSubscriptions.userId, me));
     expect(stored.lastUsedAt?.getTime()).toBe(now);
@@ -226,7 +228,7 @@ describe("sending", () => {
     expect(left.map((r) => r.endpoint)).toEqual([device(3).endpoint]);
     expect(errors).toHaveBeenCalledWith("[ridePush] send failed", expect.objectContaining({ status: 500 }));
     // Logs ids and the status only, never the endpoint.
-    expect(JSON.stringify(errors.mock.calls)).not.toContain("push.example");
+    expect(JSON.stringify(errors.mock.calls)).not.toContain("googleapis");
     errors.mockRestore();
   });
 
@@ -252,7 +254,79 @@ describe("the loop", () => {
   });
 });
 
+describe("the loop", () => {
+  it("a run that throws or times out never stops the next run", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const send = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("hung host timed out"))
+      .mockResolvedValue(undefined);
+    const tick = ridePushTick(send);
+    await tick();
+    await tick();
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(errors).toHaveBeenCalledWith("[ridePush] loop failed", "hung host timed out");
+    errors.mockRestore();
+  });
+
+  it("one run at a time: a tick while a run is going does nothing", async () => {
+    let finish!: () => void;
+    const send = vi.fn(() => new Promise<void>((r) => (finish = r)));
+    const tick = ridePushTick(send);
+    const first = tick();
+    await tick();
+    expect(send).toHaveBeenCalledTimes(1);
+    finish();
+    await first;
+    const third = tick();
+    expect(send).toHaveBeenCalledTimes(2);
+    finish();
+    await third;
+  });
+});
+
 describe("subscriptions", () => {
+  it("accepts only the push services' hosts, over https, with no IP address", async () => {
+    asUser(me);
+    for (const endpoint of [
+      "https://fcm.googleapis.com/fcm/send/abc",
+      "https://web.push.apple.com/QGx",
+      "https://api.push.apple.com/x",
+      "https://updates.push.services.mozilla.com/wpush/v2/x",
+      "https://wns2-db5p.notify.windows.com/w/?token=x",
+    ]) {
+      expect(await savePushSubscription({ endpoint, keys: device().keys })).toMatchObject({ success: true });
+    }
+    for (const endpoint of [
+      "https://evil.example/x",
+      "https://fcm.googleapis.com.evil.example/x",
+      "https://evilpush.apple.com/x",
+      "https://push.apple.com.evil.example/x",
+      "http://fcm.googleapis.com/x",
+      "https://127.0.0.1/x",
+      "https://[::1]/x",
+      "https://fcm.googleapis.com:8443/x",
+    ]) {
+      expect(await savePushSubscription({ endpoint, keys: device().keys }), endpoint).toMatchObject({ success: false, error: "Invalid input" });
+    }
+  });
+
+  it(`keeps at most ${10} devices per user: the oldest goes`, async () => {
+    expect(MAX_DEVICES_PER_USER).toBe(10);
+    asUser(me);
+    for (let n = 2; n <= 11; n++) {
+      vi.setSystemTime(T0 + n * 1000);
+      ok(await savePushSubscription(device(n)));
+    }
+    const rows = await db.select({ endpoint: pushSubscriptions.endpoint }).from(pushSubscriptions).where(eq(pushSubscriptions.userId, me));
+    expect(rows.length).toBe(10);
+    expect(rows.map((r) => r.endpoint)).not.toContain(device(1).endpoint);
+    // Another user's devices are not counted or touched.
+    asUser(other);
+    ok(await savePushSubscription(device(20)));
+    expect((await db.select().from(pushSubscriptions).where(eq(pushSubscriptions.userId, me))).length).toBe(10);
+  });
+
   it("save is an upsert by endpoint; the same device signed in as another user moves to that user", async () => {
     asUser(me);
     ok(await savePushSubscription({ ...device(), keys: { p256dh: "BNew", auth: "aNew" } }));
@@ -276,7 +350,7 @@ describe("subscriptions", () => {
 
   it("refuses bad input, and refuses to save while push is off", async () => {
     asUser(me);
-    expect(await savePushSubscription({ endpoint: "http://push.example/x", keys: device().keys })).toMatchObject({ success: false, error: "Invalid input" });
+    expect(await savePushSubscription({ endpoint: "http://fcm.googleapis.com/x", keys: device().keys })).toMatchObject({ success: false, error: "Invalid input" });
     expect(await savePushSubscription({ endpoint: device(2).endpoint })).toMatchObject({ success: false, error: "Invalid input" });
     pushOn(false);
     expect(await savePushSubscription(device(2))).toEqual({ success: false, error: "Step alerts are off on this server" });

@@ -12,6 +12,16 @@
  * take push access away from a site whose push shows nothing.
  */
 
+/** The path of a link on this site; anything that resolves elsewhere ("//host", "/\\host", a full URL) is "/". */
+function sameSitePath(link) {
+  try {
+    const u = new URL(link, self.location.origin);
+    return link.startsWith("/") && u.origin === self.location.origin ? u.pathname + u.search + u.hash : "/";
+  } catch {
+    return "/";
+  }
+}
+
 /** The notification for a push payload; a payload that does not parse still shows one. */
 function notificationFromPayload(data) {
   let p = null;
@@ -21,7 +31,7 @@ function notificationFromPayload(data) {
     p = null;
   }
   const title = p && typeof p.title === "string" && p.title ? p.title : "LogEveryLift";
-  const url = p && typeof p.url === "string" && p.url.startsWith("/") ? p.url : "/";
+  const url = p && typeof p.url === "string" ? sameSitePath(p.url) : "/";
   const options = {
     body: p && typeof p.body === "string" ? p.body : "",
     icon: "/icon-192x192.png",
@@ -47,7 +57,7 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const path = (event.notification.data && event.notification.data.url) || "/";
+  const path = sameSitePath((event.notification.data && event.notification.data.url) || "/");
   const target = new URL(path, self.location.origin).href;
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {

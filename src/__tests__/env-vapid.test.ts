@@ -29,6 +29,19 @@ describe("VAPID env", () => {
     expect(pushKeys()).toBeNull();
   });
 
+  it("empty strings count as unset, so an empty secret field cannot stop the boot", async () => {
+    vi.stubEnv("VAPID_PUBLIC_KEY", "");
+    vi.stubEnv("VAPID_PRIVATE_KEY", "");
+    vi.stubEnv("VAPID_SUBJECT", "");
+    const { env } = await load();
+    expect(env.VAPID_PUBLIC_KEY).toBeUndefined();
+    const { pushKeys } = await import("@/lib/push");
+    expect(pushKeys()).toBeNull();
+    // A real value with the others empty is still half a set.
+    vi.stubEnv("VAPID_PUBLIC_KEY", KEYS.publicKey);
+    await expect(load()).rejects.toThrow(/together/);
+  });
+
   it("all three valid: push is on", async () => {
     vi.stubEnv("VAPID_PUBLIC_KEY", KEYS.publicKey);
     vi.stubEnv("VAPID_PRIVATE_KEY", KEYS.privateKey);

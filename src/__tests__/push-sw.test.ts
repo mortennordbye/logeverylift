@@ -56,8 +56,10 @@ describe("push", () => {
     await fire(w.handlers.push, { data: null });
     await fire(w.handlers.push, push("{not json"));
     await fire(w.handlers.push, push({ title: "Hi", url: "https://evil.example/" }));
+    await fire(w.handlers.push, push({ title: "Hi", url: "//evil.example/x" }));
+    await fire(w.handlers.push, push({ title: "Hi", url: "/\\evil.example/x" }));
     const calls = w.self.registration.showNotification.mock.calls as unknown as [string, { data: { url: string }; tag?: string }][];
-    expect(calls.map((c) => c[0])).toEqual(["LogEveryLift", "LogEveryLift", "Hi"]);
+    expect(calls.map((c) => c[0])).toEqual(["LogEveryLift", "LogEveryLift", "Hi", "Hi", "Hi"]);
     expect(calls.every((c) => c[1].data.url === "/" && c[1].tag === undefined)).toBe(true);
   });
 });
@@ -70,6 +72,11 @@ describe("notificationclick", () => {
     await fire(w.handlers.notificationclick, e);
     expect(e.notification.close).toHaveBeenCalled();
     expect(w.self.clients.openWindow).toHaveBeenCalledWith("https://app.example/programs/1/workout/exercises/2?ride=1");
+  });
+
+  it("a link stored off the site opens the app's home", async () => {
+    await fire(w.handlers.notificationclick, click("//evil.example/x"));
+    expect(w.self.clients.openWindow).toHaveBeenCalledWith("https://app.example/");
   });
 
   it("focuses a window already on that page", async () => {

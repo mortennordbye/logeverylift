@@ -5,6 +5,9 @@ const skipValidation =
   process.env.SKIP_ENV_VALIDATION === "true" ||
   process.env.SKIP_ENV_VALIDATION === "1";
 
+/** An empty value counts as unset: an ExternalSecret with an empty field must not stop the boot. */
+const unsetIfEmpty = <T extends z.ZodType>(schema: T) => z.preprocess((v) => (v === "" ? undefined : v), schema);
+
 const envSchema = z.object({
   NODE_ENV: z
     .enum(["development", "production", "test"])
@@ -37,18 +40,24 @@ const envSchema = z.object({
   // Web push for ride step alerts (src/lib/push.ts). All three or none: unset,
   // push is off and the bike screen says "Step alerts are off". Make a pair
   // with `npx web-push generate-vapid-keys`.
-  VAPID_PUBLIC_KEY: z
-    .string()
-    .refine((v) => /^[A-Za-z0-9_-]+$/.test(v) && Buffer.from(v, "base64url").length === 65, "must be a P-256 public key, base64url")
-    .optional(),
-  VAPID_PRIVATE_KEY: z
-    .string()
-    .refine((v) => /^[A-Za-z0-9_-]+$/.test(v) && Buffer.from(v, "base64url").length === 32, "must be 32 bytes, base64url")
-    .optional(),
-  VAPID_SUBJECT: z
-    .string()
-    .regex(/^(mailto:|https:\/\/)/, "must start with mailto: or https://")
-    .optional(),
+  VAPID_PUBLIC_KEY: unsetIfEmpty(
+    z
+      .string()
+      .refine((v) => /^[A-Za-z0-9_-]+$/.test(v) && Buffer.from(v, "base64url").length === 65, "must be a P-256 public key, base64url")
+      .optional(),
+  ),
+  VAPID_PRIVATE_KEY: unsetIfEmpty(
+    z
+      .string()
+      .refine((v) => /^[A-Za-z0-9_-]+$/.test(v) && Buffer.from(v, "base64url").length === 32, "must be 32 bytes, base64url")
+      .optional(),
+  ),
+  VAPID_SUBJECT: unsetIfEmpty(
+    z
+      .string()
+      .regex(/^(mailto:|https:\/\/)/, "must start with mailto: or https://")
+      .optional(),
+  ),
 }).superRefine((v, ctx) => {
   const set = [v.VAPID_PUBLIC_KEY, v.VAPID_PRIVATE_KEY, v.VAPID_SUBJECT].filter((x) => x !== undefined).length;
   if (set !== 0 && set !== 3) {

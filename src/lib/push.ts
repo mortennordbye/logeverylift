@@ -10,8 +10,9 @@
  *   row twice, and sends each to the user's devices (`sendDueRidePushes`).
  *
  * The payload holds the alert's title and body, the ride's tag and the link.
- * The push services see only the device, the time and the size: the payload
- * is encrypted for the device.
+ * It is encrypted for the device. The push service sees the device's address,
+ * the time, the size, the TTL and urgency headers and the VAPID subject (the
+ * operator's contact), never a ride id.
  */
 
 import { db } from "@/db";
@@ -31,6 +32,8 @@ export const RIDE_PUSH_TICK_MS = 5_000;
 export const HEARTBEAT_FRESH_MS = 15_000;
 /** An alert this late (the server was down) is dropped: the step it names has moved on. */
 export const RIDE_PUSH_STALE_MS = 60_000;
+/** Devices per user: a new one past this pushes out the oldest. */
+export const MAX_DEVICES_PER_USER = 10;
 
 /** The VAPID keys, or null when push is off. */
 export function pushKeys(): { publicKey: string; privateKey: string; subject: string } | null {
@@ -111,10 +114,11 @@ export async function sendDueRidePushes(now = Date.now()): Promise<{ claimed: nu
       try {
         await webpush.sendNotification({ endpoint: d.endpoint, keys: { p256dh: d.p256dh, auth: d.auth } }, JSON.stringify(payload), {
           vapidDetails: keys,
-          // A step alert is worth nothing a minute late; a newer one of the ride replaces it in the push service.
+          // A step alert is worth nothing a minute late. No Topic header: it would show the push service the ride id.
           TTL: 60,
           urgency: "high",
-          topic: ridePushTag(ride.id),
+          // A push service that does not answer must not hold the loop (web-push sets no timeout of its own).
+          timeout: 10_000,
         });
         result.sent++;
         await db.update(pushSubscriptions).set({ lastUsedAt: new Date(now) }).where(eq(pushSubscriptions.id, d.id));
@@ -133,23 +137,28 @@ export async function sendDueRidePushes(now = Date.now()): Promise<{ claimed: nu
 }
 
 /**
- * Start the send loop: every 5 s, one run at a time. Null when push is off,
- * so no loop runs. Errors are logged and never stop the loop.
+ * One run of the loop: never two at once, and a run that throws or times out
+ * is logged and lets the next run go.
  */
-export function startRidePushLoop(): ReturnType<typeof setInterval> | null {
-  if (!pushKeys()) return null;
+export function ridePushTick(send: () => Promise<unknown> = () => sendDueRidePushes()): () => Promise<void> {
   let running = false;
-  const tick = async () => {
+  return async () => {
     if (running) return;
     running = true;
     try {
-      await sendDueRidePushes();
+      await send();
     } catch (e) {
       console.error("[ridePush] loop failed", e instanceof Error ? e.message : "unknown");
     } finally {
       running = false;
     }
   };
+}
+
+/** Start the send loop: every 5 s. Null when push is off, so no loop runs. */
+export function startRidePushLoop(): ReturnType<typeof setInterval> | null {
+  if (!pushKeys()) return null;
+  const tick = ridePushTick();
   const id = setInterval(() => void tick(), RIDE_PUSH_TICK_MS);
   id.unref?.();
   return id;
