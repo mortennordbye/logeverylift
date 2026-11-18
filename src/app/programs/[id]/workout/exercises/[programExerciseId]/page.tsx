@@ -60,6 +60,7 @@ export default async function WorkoutExerciseSetsPage({ params, searchParams }: 
     if (found) {
       return (
         <RideMode
+          key={found.view.ride.id}
           exerciseId={pe.exercise.id}
           initial={found.view}
           setNumbers={setNumbers}
