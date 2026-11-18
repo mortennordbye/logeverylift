@@ -52,7 +52,9 @@ import {
   fuelProducts,
   sweatTests,
   racePlans,
+  pushSubscriptions,
   rideEvents,
+  ridePushes,
   rides,
 } from "@/db/schema";
 import { eq, getTableColumns, inArray, lt, or, sql } from "drizzle-orm";
@@ -123,6 +125,13 @@ export async function collectUserData(userId: string) {
     // Bike rides in ride mode and what the rider did in them (docs/plans/bike-ride-logger.md, 4.3).
     rides: rideRows,
     ride_events: rideIds.length ? await db.select().from(rideEvents).where(inArray(rideEvents.rideId, rideIds)) : [],
+    // Step alerts (4.7): the devices that turned them on, without the keys that
+    // encrypt their pushes, and the alerts of a running ride not yet sent.
+    push_subscriptions: await db
+      .select(columnsWithout(pushSubscriptions, ["p256dh", "auth"]))
+      .from(pushSubscriptions)
+      .where(eq(pushSubscriptions.userId, userId)),
+    ride_pushes: await db.select().from(ridePushes).where(eq(ridePushes.userId, userId)),
     exercise_prs: await db.select().from(exercisePrs).where(eq(exercisePrs.userId, userId)),
     exercises: await db.select().from(exercises).where(eq(exercises.userId, userId)),
     exercise_notes: await db.select().from(exerciseNotes).where(eq(exerciseNotes.userId, userId)),

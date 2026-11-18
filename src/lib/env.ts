@@ -34,6 +34,26 @@ const envSchema = z.object({
     .string()
     .refine((v) => Buffer.from(v, "base64").length === 32, "must be 32 bytes, base64")
     .optional(),
+  // Web push for ride step alerts (src/lib/push.ts). All three or none: unset,
+  // push is off and the bike screen says "Step alerts are off". Make a pair
+  // with `npx web-push generate-vapid-keys`.
+  VAPID_PUBLIC_KEY: z
+    .string()
+    .refine((v) => /^[A-Za-z0-9_-]+$/.test(v) && Buffer.from(v, "base64url").length === 65, "must be a P-256 public key, base64url")
+    .optional(),
+  VAPID_PRIVATE_KEY: z
+    .string()
+    .refine((v) => /^[A-Za-z0-9_-]+$/.test(v) && Buffer.from(v, "base64url").length === 32, "must be 32 bytes, base64url")
+    .optional(),
+  VAPID_SUBJECT: z
+    .string()
+    .regex(/^(mailto:|https:\/\/)/, "must start with mailto: or https://")
+    .optional(),
+}).superRefine((v, ctx) => {
+  const set = [v.VAPID_PUBLIC_KEY, v.VAPID_PRIVATE_KEY, v.VAPID_SUBJECT].filter((x) => x !== undefined).length;
+  if (set !== 0 && set !== 3) {
+    ctx.addIssue({ code: "custom", path: ["VAPID_PUBLIC_KEY"], message: "set VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY and VAPID_SUBJECT together, or none" });
+  }
 });
 
 type Env = z.infer<typeof envSchema>;
@@ -57,6 +77,9 @@ function loadEnv(): Env {
       SENTRY_DSN: process.env.SENTRY_DSN,
       GYM_IMPORT_COUNTRIES: process.env.GYM_IMPORT_COUNTRIES,
       GARMIN_KEY_ENCRYPTION_KEY: process.env.GARMIN_KEY_ENCRYPTION_KEY,
+      VAPID_PUBLIC_KEY: process.env.VAPID_PUBLIC_KEY,
+      VAPID_PRIVATE_KEY: process.env.VAPID_PRIVATE_KEY,
+      VAPID_SUBJECT: process.env.VAPID_SUBJECT,
     });
   }
 

@@ -701,6 +701,13 @@
       "when": 1794961080899,
       "tag": "0099_program_exercise_ride_test",
       "breakpoints": true
+    },
+    {
+      "idx": 100,
+      "version": "7",
+      "when": 1794962384517,
+      "tag": "0100_push_alerts",
+      "breakpoints": true
     }
   ]
 }

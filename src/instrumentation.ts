@@ -85,6 +85,11 @@ export async function register() {
     console.log(`[garmin] background import checks every ${TICK_MS / 1000}s`);
   }
 
+  // Ride step alerts (docs/plans/bike-ride-logger.md, 4.7): sends the due
+  // pushes every 5 s. Only when the VAPID keys are set; else push is off.
+  const { startRidePushLoop, RIDE_PUSH_TICK_MS } = await import("@/lib/push");
+  if (startRidePushLoop()) console.log(`[ridePush] alerts send every ${RIDE_PUSH_TICK_MS / 1000}s`);
+
   const adminEmail = env.ADMIN_EMAIL;
   const adminPassword = env.ADMIN_PASSWORD;
   const adminName = env.ADMIN_NAME;

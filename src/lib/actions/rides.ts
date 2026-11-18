@@ -13,6 +13,7 @@ import { isUniqueViolation } from "@/lib/custom-exercises";
 import { enduranceEnabledFor } from "@/lib/endurance";
 import { liveProgramExercises, liveProgramSets, livePrograms } from "@/lib/plan-live";
 import { plannedStepSnapshot } from "@/lib/program-steps-db";
+import { scheduleRidePushes } from "@/lib/push";
 import { thresholdValues } from "@/lib/session-compliance";
 import { buildWorkout, type StepRow } from "@/lib/utils/program-steps";
 import {
@@ -139,6 +140,19 @@ async function logDroppedSteps(ex: Executor, ride: Ride, plan: RidePlan) {
   }
 }
 
+/**
+ * Rewrite the ride's push alerts from its timeline (4.7). A failure is logged
+ * and never fails the ride action: the alerts are a help, the ride is the data.
+ */
+async function schedulePushes(ex: Pick<typeof db, "transaction">, userId: string, view: RideView) {
+  try {
+    // A savepoint inside the event's transaction, so a failure rolls back only the alerts.
+    await ex.transaction((sp) => scheduleRidePushes(sp, userId, view));
+  } catch {
+    console.error("[ridePush] schedule failed", { rideId: view.ride.id });
+  }
+}
+
 const clientIdSchema = z.string().min(1).max(64);
 
 /** The user's ride whose start event has this client id, if any. */
@@ -217,7 +231,9 @@ export async function startRide(data: unknown): Promise<ActionResult<RideView>> 
       await tx.update(workoutSessions).set({ rideMode: mode }).where(and(eq(workoutSessions.id, sessionId), eq(workoutSessions.userId, userId)));
       return row;
     });
-    return { success: true, data: await settle(db, ride, now) };
+    const view = await settle(db, ride, now);
+    await schedulePushes(db, userId, view);
+    return { success: true, data: view };
   } catch (e) {
     // Two starts at once: the active-ride index lets one through. A retry of
     // the same start gets that ride.
@@ -304,7 +320,9 @@ export async function sendRideEvent(data: unknown): Promise<ActionResult<RideVie
         clientAt: clientAt != null ? new Date(clientAt) : null,
       });
       const [next] = await tx.update(rides).set({ seq }).where(eq(rides.id, rideId)).returning();
-      return { success: true, data: await settle(tx, next, now) };
+      const after = await settle(tx, next, now);
+      await schedulePushes(tx, userId, after);
+      return { success: true, data: after };
     });
   } catch (e) {
     // A ride made live again while another one runs.
