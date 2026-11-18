@@ -1,5 +1,5 @@
-// Journeys of ride mode in the bike exercise (docs/plans/bike-ride-logger.md, steps 3 and 4).
-// Data: the steps demo seed (steps-ride and steps-noftp). Run: pnpm journeys ride --seed
+// Journeys of ride mode in the bike exercise (docs/plans/bike-ride-logger.md, steps 3, 4 and 7).
+// Data: the steps demo seed (steps-ride, steps-noftp, steps-hand and steps-garmin). Run: pnpm journeys ride --seed
 import type { Ctx, JourneySet } from "./types";
 
 const PASSWORD = "steps-demo-password";
@@ -23,13 +23,47 @@ const set: JourneySet = {
     ride: { email: "steps-ride@demo.local", password: PASSWORD, about: "FTP 180 W and bike LTHR 171, today's ride is the mockup ride" },
     noftp: { email: "steps-noftp@demo.local", password: PASSWORD, about: "the same ride, no thresholds set" },
     hand: { email: "steps-hand@demo.local", password: PASSWORD, about: "the same ride with FTP 180 W, logged by hand" },
+    garmin: { email: "steps-garmin@demo.local", password: PASSWORD, about: "the same ride, ridden 10 min ago and filled from a synthetic Garmin activity" },
   },
   journeys: [
     { id: 1, title: "Indoor ride", summary: "Start the ride, change the target, add a minute, skip with undo, pause, reload, landscape, end early, type the results and see the summary." },
     { id: 2, title: "Outdoor ride with no thresholds", summary: "Change to Outdoor, start, the effort target and Lap, end, the outdoor results with more numbers, Later, and the plan-only summary." },
     { id: 3, title: "Log by hand", summary: "Log the ride by hand from the bike screen: times, watts, effort, and back to the workout." },
+    { id: 4, title: "Filled from Garmin", summary: "The summary of a ride Garmin filled: NP, IF, the plan-against-done chart, zones, time on target, drift, then Undo." },
   ],
   flows: [
+    {
+      name: "garmin",
+      account: "garmin",
+      journeys: [4],
+      async run(c: Ctx) {
+        const { page, step, shot, settle } = c;
+        await step("J4 summary", async () => {
+          // Today's session is done by the ride, so home offers Do Again; the bike exercise then shows the ride's summary.
+          await c.go("/");
+          await page.getByRole("link", { name: "Do Again" }).click();
+          const guided = page.getByTestId("start-choice").getByRole("link", { name: /^Guided/ });
+          if (await guided.isVisible().catch(() => false)) await guided.click();
+          await page.waitForURL(/\/workout/);
+          if (!/\/exercises\//.test(page.url())) await page.getByRole("link", { name: /Bike/ }).first().click();
+          await page.waitForURL(/\/workout\/exercises\/\d+/);
+          await settle(2000);
+          await page.getByTestId("ride-summary-screen").waitFor();
+          await shot(4, 1, "summary", "The summary filled from Garmin: tiles, chart, zones");
+        });
+        await step("J4 steps", async () => {
+          await page.getByTestId("summary-garmin").scrollIntoViewIfNeeded();
+          await settle(300);
+          await shot(4, 2, "summary-steps", "Plan against done per step with time on target, and Steps filled from Garmin · Undo");
+        });
+        await step("J4 undo", async () => {
+          await page.getByTestId("summary-garmin").getByRole("button", { name: "Undo" }).click();
+          await page.getByTestId("summary-garmin").waitFor({ state: "detached" });
+          await settle(800);
+          await shot(4, 3, "after-undo", "After Undo: the step averages are gone, no stream numbers");
+        });
+      },
+    },
     {
       name: "ride",
       account: "ride",
