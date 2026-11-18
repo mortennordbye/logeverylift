@@ -24,6 +24,8 @@ The Dockerfile `HEALTHCHECK` polls `/api/health` every 30s.
 
 Listed in `.env.example`. `src/lib/env.ts` is the source of truth and will refuse to boot if any required var is missing. To add a new var: extend the schema in `src/lib/env.ts`, document it in `.env.example`, and update infrastructure config.
 
+Optional: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` and `VAPID_SUBJECT` turn on ride step alerts (web push, `src/lib/push.ts`). Set all three or none; with none, push is off and no send loop runs. Make a pair with `npx web-push generate-vapid-keys`. Not set in prod yet (BACKLOG).
+
 `SKIP_ENV_VALIDATION=true` bypasses the schema (used during `next build` only — at runtime we always validate).
 
 ## Rate limits (in-memory)

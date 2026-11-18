@@ -10,6 +10,18 @@ When you finish an item, delete it. When you add an item, write enough that some
 
 ## New features — additive
 
+### Turn on ride step alerts in prod (VAPID keys)
+- **What:** Ride step alerts (web push, docs/plans/bike-ride-logger.md 4.7) are built but off in prod, because no VAPID keys are set. Make a key pair (`npx web-push generate-vapid-keys`), store `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` and `VAPID_SUBJECT` (a `mailto:` address) in Bitwarden Secrets Manager (the `secrets` skill), add the three to the logeverylift ExternalSecret in the homelab repo (`k8s/talos/apps/logeverylift`), and check that the pod env has them and the log says `[ridePush] alerts send every 5s`. Then do the owner check of the brief's section 8: a ride with the phone locked, a push at each step and one minute before.
+- **Why deferred:** The owner chose not to wire the keys in this build.
+- **Unblocked by:** The owner's go.
+- **Touchpoints:** `src/lib/env.ts` (the three vars, all or none), `src/lib/push.ts` (`pushKeys`, `startRidePushLoop`), `src/instrumentation.ts`, `public/push-sw.js`, the ExternalSecret in the homelab repo.
+
+### The Serwist service worker is not built
+- **What:** `src/app/sw.ts` (Serwist precache and runtime caching) is never emitted: `next build` runs Turbopack, and `@serwist/next` hooks only into webpack, so there is no `public/sw.js` and no worker registers. The offline page caching that `docs/plans/endurance-app.md` and the privacy page describe does not run. Ride step alerts use their own push-only worker (`public/push-sw.js`, scope `/push/`) and do not depend on it.
+- **Why deferred:** Found while building ride step alerts; it is older than that change and out of its scope.
+- **Unblocked by:** A decision between `next build --webpack`, `@serwist/turbopack`, or dropping Serwist. Any of them needs an offline test, as turning on caching changes how every page loads.
+- **Touchpoints:** `src/app/sw.ts`, `next.config.ts`, `src/lib/utils/stale-bundle.ts` (`reloadForFreshBundle` asks the worker to update), `src/app/privacy/page.tsx` ("caches pages so the app works offline").
+
 ### Opening a finished workout's exercise starts a new, empty workout
 - **What:** Opening the bike exercise after its workout finished (to see the ride's summary) starts a new, empty workout session, because the workout layout starts one on any workout page of a program with no open workout. The summary reads the ride's own session, so it shows the right ride, but the Workout tab then shows a workout in progress.
 - **Why deferred:** Found in the step 4 journey review of the bike ride logger. It comes from the workout layout and is older than the ride logger.
@@ -277,7 +289,7 @@ When you finish an item, delete it. When you add an item, write enough that some
 ### Have a lawyer review the privacy policy and terms
 - **What:** The privacy policy, terms and consent texts were drafted against GDPR, personopplysningsloven and ekomloven, but nobody with legal training has read them.
 - **Why deferred:** Getting a review needs a person and possibly a fee; the drafts were needed now that sign-up is open.
-- **Unblocked by:** A short review by a Norwegian privacy lawyer. Ask specifically about the two open questions below: required health-data consent, and AI consent with free models that may train on requests.
+- **Unblocked by:** A short review by a Norwegian privacy lawyer. Ask specifically about the two open questions below: required health-data consent, and AI consent with free models that may train on requests. Also the transfer basis for ride step alerts: the push services of Apple, Google and Mozilla (USA) see the device's push address and the time of each push, not its encrypted text.
 - **Touchpoints:** `src/app/privacy/page.tsx`, `src/app/terms/page.tsx`, `src/components/features/ConsentChecks.tsx`, `src/components/features/AiConsentSheet.tsx`, `docs/privacy/data-inventory.md`.
 
 ### Health-data consent is required to sign up
@@ -381,7 +393,7 @@ When you finish an item, delete it. When you add an item, write enough that some
 
 ### Out-of-app push notifications via Service Worker
 - **Planned:** see [`docs/plans/web-push-and-reminders.md`](docs/plans/web-push-and-reminders.md).
-- **What:** Today the app uses the browser Notification API (in-app only). Real out-of-app push needs a Service Worker registration + `pushManager.subscribe()` + server-side delivery.
+- **What:** Today the rest timer and friend nudges use the browser Notification API (in-app only). Ride step alerts built the push parts of 3a (VAPID env, `push_subscriptions`, the push worker `public/push-sw.js`, sending in `src/lib/push.ts`); the rest timer push, friend pushes, the Settings control and 3b are still to do on top of them.
 - **Why deferred:** Not blocking any current flow.
 - **Unblocked by:** Product decision that out-of-app push is needed.
 - **Touchpoints:** `src/lib/notifications.ts`.
