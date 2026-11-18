@@ -232,6 +232,9 @@ export function wattsText(s: Pick<RidePlanStep, "power" | "step">): string | nul
   return p.from === p.to ? `${p.from} W` : `${p.from}-${p.to} W`;
 }
 
+/** Effort 2 outdoors, the "easy spin" of 4.2. */
+export const isEasySpin = (t: { unit: string; low: number | null; high: number | null }) => t.unit === "RPE" && t.low === 2 && t.high === 2;
+
 /** The indoor target: watts, else the target as written ("75-80% FTP" with no FTP). */
 function indoorText(s: RidePlanStep): string | null {
   const w = wattsText(s);
@@ -280,7 +283,7 @@ export function bikeStepRows(plan: RidePlan, units: Units = DEFAULT_UNITS): Bike
       title: `${STEP_WORD[step.type]}${s.round && step.type !== "recovery" && step.type !== "rest" ? ` · ${s.round.index} of ${s.round.of}` : ""}`,
       detail: detail.filter(Boolean).join(" · ") || null,
       note: step.note ?? null,
-      target: outdoor ? (s.outdoor?.text ?? indoorText(s)) : indoorText(s),
+      target: outdoor ? (s.outdoor ? (isEasySpin(s.outdoor) ? `${s.outdoor.text} · easy spin` : s.outdoor.text) : indoorText(s)) : indoorText(s),
       time: timeText(s, units),
       easy: step.type === "recovery" || step.type === "rest" || !!step.free,
     };

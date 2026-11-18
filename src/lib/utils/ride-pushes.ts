@@ -38,7 +38,8 @@ const word = (title: string) => title.split(" · ")[0];
 export function ridePushSchedule(plan: RidePlan, t: RideTimeline, now: number, units: Units = DEFAULT_UNITS): RidePushPlan[] {
   const cur = t.current;
   if (t.status !== "running" || !cur || cur.endsAt === null) return [];
-  const rows = bikeStepRows(plan, units);
+  // A push title stays short: the target without the words of an easy spin (the step word says it).
+  const rows = bikeStepRows(plan, units).map((r) => ({ ...r, target: r.target?.replace(/ · easy spin$/, "") ?? null }));
   const n = plan.steps.length;
   const time = (i: number) => {
     const s = plan.steps[i].seconds;

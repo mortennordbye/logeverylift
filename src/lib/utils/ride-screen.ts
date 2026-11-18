@@ -8,7 +8,7 @@
 
 import type { RideEventKind, RideMode } from "@/db/schema/rides";
 import type { RideView } from "@/lib/actions/rides";
-import { bikeStepRows, rideChart, wattsText } from "@/lib/utils/bike-ride-view";
+import { bikeStepRows, isEasySpin, rideChart, wattsText } from "@/lib/utils/bike-ride-view";
 import { isRampTestStep } from "@/lib/utils/ftp-tests";
 import { NUDGE_CAP_W, eventTime, type RideEventInput, type RidePlan, type RidePlanStep, type RideStepResult, type RideTimeline } from "@/lib/utils/ride-timeline";
 import { DEFAULT_UNITS, type Units } from "@/lib/utils/units";
@@ -98,6 +98,7 @@ export function rideScreen(plan: RidePlan, t: RideTimeline, units: Units = DEFAU
   if (outdoor) {
     if (watts) second.push({ label: "Power meter", value: watts });
     if (s.outdoor2?.unit === "RPE" && s.outdoor2.low !== null) second.push({ label: "Effort", value: `${s.outdoor2.low}` });
+    if (s.outdoor && isEasySpin(s.outdoor)) second.push({ label: "Easy spin", value: "" });
   } else {
     if (s.step.cadence) second.push({ label: "Cadence", value: `${s.step.cadence.low}-${s.step.cadence.high}` });
     const hr = s.target2?.unit === "bpm" && !s.target2.missing ? s.target2 : s.outdoor?.unit === "bpm" ? s.outdoor : null;
@@ -105,7 +106,8 @@ export function rideScreen(plan: RidePlan, t: RideTimeline, units: Units = DEFAU
   }
 
   const after = rows[cur.index + 1];
-  const next = after ? { title: `${after.title} · ${after.time}`, target: after.target } : { title: "Finish", target: null };
+  // The Next card stays one line: the target without its words.
+  const next = after ? { title: `${after.title} · ${after.time}`, target: after.target?.replace(/ · easy spin$/, "") ?? null } : { title: "Finish", target: null };
 
   // The chart gives each step its width; the bars here are its height in a small strip.
   const chart = rideChart(plan);

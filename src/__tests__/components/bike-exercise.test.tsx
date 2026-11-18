@@ -71,7 +71,7 @@ describe("BikeExercise", () => {
     expect(screen.getByTestId("ride-mode").textContent).toBe("Outdoor");
     expect(screen.queryByTestId("ride-profile")).toBeNull();
     expect(screen.getByTestId("ride-summary").textContent).toContain("LTHR 171");
-    expect(targets()).toEqual(["HR under 139", "HR 139-152", "Effort 2"]);
+    expect(targets()).toEqual(["HR under 139", "HR 139-152", "Effort 2 · easy spin"]);
     expect(screen.getByText("Z2-3 · 135-146 W with a power meter")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Change to Indoor trainer" }));
     expect(screen.getByTestId("ride-mode").textContent).toBe("Indoor trainer");
@@ -89,7 +89,7 @@ describe("BikeExercise", () => {
 
   it("outdoors with no bike LTHR: effort targets", () => {
     render(<BikeExercise programId={1} programExerciseId={2} exerciseName="Bike" data={data({ ftp: 180 }, "outdoor")} pushPublicKey={null} />);
-    expect(targets()).toEqual(["Effort 2", "Effort 4", "Effort 2"]);
+    expect(targets()).toEqual(["Effort 2 · easy spin", "Effort 4", "Effort 2 · easy spin"]);
   });
 
   it("Start ride starts the ride in the chosen mode and opens ride mode; Log by hand opens the results table in the chosen mode", async () => {

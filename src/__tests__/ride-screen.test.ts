@@ -94,6 +94,13 @@ describe("rideScreen", () => {
     expect(s.lap).toBe(true);
   });
 
+  it("outdoors on an effort 2 step: Effort 2 big, and easy spin on the line below (4.2)", () => {
+    const s = rideScreen(outdoor, rideTimeline(outdoor, [ev("start", 0)], at(1900)))!;
+    expect(s.title).toBe("Easy");
+    expect(s.target).toEqual({ value: "Effort 2", unit: null });
+    expect(s.second).toContainEqual({ label: "Easy spin", value: "" });
+  });
+
   it("is null before the start and after the end", () => {
     expect(rideScreen(indoor, rideTimeline(indoor, [], at(0)))).toBeNull();
     expect(rideScreen(indoor, rideTimeline(indoor, [ev("start", 0), ev("end", 10)], at(20)))).toBeNull();

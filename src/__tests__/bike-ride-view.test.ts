@@ -100,7 +100,8 @@ describe("bikeStepRows", () => {
     expect(rows.map((r) => [r.detail, r.target])).toEqual([
       ["Ramp · 99 to 135 W with a power meter", "HR under 139"],
       ["Z2-3 · 135-146 W with a power meter", "HR 139-152"],
-      ["Z1 · under 97 W with a power meter", "Effort 2"],
+      // Effort 2 with its words (4.2).
+      ["Z1 · under 97 W with a power meter", "Effort 2 · easy spin"],
       ["Z2-3 · 135-146 W with a power meter", "HR 139-152"],
       ["Z2 · 101-135 W with a power meter", "HR 139-152"],
     ]);
