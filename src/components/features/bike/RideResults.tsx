@@ -114,7 +114,8 @@ export function RideResults({
     // In order, one at a time: a failed write goes to the offline queue and is sent later.
     if (hand) for (const id of handUnlogs(steps, edits)) await unlogWithRetry({ sessionId, exerciseId, setNumber: setNumbers[id] ?? 1, programSetId: id });
     for (const p of payloads) await logWithRetry(p);
-    if (hand) router.push(`/programs/${programId}/workout`);
+    // Replace: Back from the workout does not come back to the filled table.
+    if (hand) router.replace(`/programs/${programId}/workout`);
     else {
       router.replace(pathname);
       router.refresh();

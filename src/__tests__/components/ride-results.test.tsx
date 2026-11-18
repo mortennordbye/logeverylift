@@ -15,6 +15,7 @@ const refresh = vi.fn();
 const push = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ replace, refresh, push }), usePathname: () => "/programs/1/workout/exercises/2" }));
 vi.mock("@/components/ui/BackLink", () => ({ BackLink: () => <span>Workout</span> }));
+vi.mock("@/lib/actions/rides", () => ({ startRide: vi.fn() }));
 vi.mock("@/lib/actions/ride-garmin", () => ({ undoRideGarminFill: vi.fn(), pickRideGarminActivity: vi.fn() }));
 vi.mock("@/lib/actions/ride-ftp", () => ({ saveRideFtp: vi.fn() }));
 const setActiveWorkout = vi.fn();
@@ -160,7 +161,7 @@ describe("RideResults", () => {
     results("indoor", { 1: log(), 2: log() }, { hand: true, sessionId: 9 });
     fireEvent.change(screen.getByLabelText("Time step 1"), { target: { value: "" } });
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
-    await waitFor(() => expect(push).toHaveBeenCalled());
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/programs/1/workout"));
     expect(unlogWithRetry).toHaveBeenCalledWith({ sessionId: 9, exerciseId: 3, setNumber: 1, programSetId: 1 });
     expect(logWithRetry.mock.calls.map((c) => c[0].programSetId)).not.toContain(1);
   });
@@ -169,7 +170,7 @@ describe("RideResults", () => {
     results("indoor", { 1: log() }, { hand: true, sessionId: 12, sessionStart: "2026-11-17T10:00:00.000Z" });
     fireEvent.change(screen.getByLabelText("Avg W step 1"), { target: { value: "120" } });
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
-    await waitFor(() => expect(push).toHaveBeenCalled());
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/programs/1/workout"));
     expect(logWithRetry.mock.calls.every((c) => c[0].sessionId === 12)).toBe(true);
     expect(setActiveWorkout).toHaveBeenCalledWith(1, "2026-11-17T10:00:00.000Z", 12);
   });
@@ -181,7 +182,9 @@ describe("RideResults", () => {
     fireEvent.change(screen.getByLabelText("Time step 2"), { target: { value: "14:30" } });
     fireEvent.change(screen.getByLabelText("Time step 3"), { target: { value: "" } });
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
-    await waitFor(() => expect(push).toHaveBeenCalledWith("/programs/1/workout"));
+    // Replace: Back from the workout does not return to the filled table.
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/programs/1/workout"));
+    expect(push).not.toHaveBeenCalled();
     expect(logWithRetry.mock.calls.map((c) => [c[0].sessionId, c[0].programSetId, c[0].durationSeconds, c[0].sources.durationSeconds])).toEqual([
       [9, 1, 900, "typed"],
       [9, 2, 870, "typed"],
