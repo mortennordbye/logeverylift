@@ -288,10 +288,12 @@ test("skip, undo, +1 min, ±5 W, pause and End ride save the right status, time 
   await page.getByRole("link", { name: "Later" }).click();
   await expect(page).toHaveURL(/\/$/);
   await page.goto(`/programs/${s.programId}/workout/exercises/${s.peId}`);
-  await expect(page.getByTestId("summary-line")).toContainText("Ended early");
-  await expect(page.getByTestId("summary-plan-only")).toContainText("Plan only · no ride numbers");
-  await expect(page.getByTestId("summary-row").nth(1)).toContainText("Skipped");
-  await expect(page.getByTestId("summary-row").nth(3)).toContainText("Not ridden");
+  // A streamed copy of the page can sit hidden for a moment: look at the visible one.
+  const visible = (id: string) => page.getByTestId(id).filter({ visible: true });
+  await expect(visible("summary-line")).toContainText("Ended early");
+  await expect(visible("summary-plan-only")).toContainText("Plan only · no ride numbers");
+  await expect(visible("summary-row").nth(1)).toContainText("Skipped");
+  await expect(visible("summary-row").nth(3)).toContainText("Not ridden");
   await expect
     .poll(async () => (await savedSteps(s.userId)).map((r) => [r.programSetId, r.stepStatus, r.isCompleted, r.targetOffsetW, r.extendedSeconds]))
     .toEqual([
