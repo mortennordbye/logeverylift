@@ -8,7 +8,7 @@
  */
 
 import { DEFAULT_UNITS, type Units } from "@/lib/utils/units";
-import { mainTarget, resolveTarget, type ResolvedTarget, type ThresholdValues, type WorkoutStep, type WorkoutTarget } from "@/lib/utils/workout-steps";
+import { mainTarget, resolveTarget, type ResolvedTarget, type RideTest, type ThresholdValues, type WorkoutStep, type WorkoutTarget } from "@/lib/utils/workout-steps";
 
 /**
  * Coggan power zone (1-7) of a percent of FTP: zone 1 up to 55, 2 up to 75,
@@ -95,14 +95,38 @@ export type OutdoorTarget = { main: ResolvedTarget; second: ResolvedTarget | nul
  * Without a bike LTHR each heart rate target becomes its effort. A rest step,
  * and a work step whose zone is unknown, get none.
  *
+ * An FTP test ride (`test`, 4.9) is ridden by effort outdoors, never by a
+ * heart rate cap or range: each step gets the effort of its zone, as without
+ * a bike LTHR; a step whose own target is an effort keeps it; a work ramp
+ * takes the effort of the zone of its top end, as it is ridden to failure.
+ *
  * `seconds` is the step's time, or its estimate for a distance or lap step.
  */
-export function outdoorTarget(step: WorkoutStep, seconds: number, thresholds: ThresholdValues, units: Units = DEFAULT_UNITS): OutdoorTarget | null {
+export function outdoorTarget(
+  step: WorkoutStep,
+  seconds: number,
+  thresholds: ThresholdValues,
+  units: Units = DEFAULT_UNITS,
+  test?: RideTest,
+): OutdoorTarget | null {
   if (step.outdoor) {
     const r = resolveTarget(step.outdoor, "bike", thresholds, units);
     if (!r.missing) return { main: { ...r, text: writtenText(step.outdoor, r) }, second: null };
   }
   if (step.type === "rest") return null;
+  if (test) {
+    if (step.target?.metric === "rpe") {
+      const r = resolveTarget(step.target, "bike", thresholds, units);
+      return { main: { ...r, text: writtenText(step.target, r) }, second: null };
+    }
+    if (step.type === "work" && step.ramp) {
+      const top = powerLowPct({ target: { metric: "power", anchor: step.ramp.anchor, low: step.ramp.to, high: step.ramp.to } }, thresholds.ftp);
+      return top === null ? null : { main: effort(EFFORT[powerZone(top)]), second: null };
+    }
+    const { lthr_bike: _hr, ...noHr } = thresholds;
+    void _hr;
+    return outdoorTarget(step, seconds, noHr, units);
+  }
   const lthr = thresholds.lthr_bike;
   const cap = lthr ? hrCap(lthr) : effort(EFFORT[1]);
   if (step.type === "warmup" || step.type === "cooldown" || step.ramp) {

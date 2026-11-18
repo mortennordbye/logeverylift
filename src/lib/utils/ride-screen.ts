@@ -9,6 +9,7 @@
 import type { RideEventKind, RideMode } from "@/db/schema/rides";
 import type { RideView } from "@/lib/actions/rides";
 import { bikeStepRows, rideChart, wattsText } from "@/lib/utils/bike-ride-view";
+import { isRampTestStep } from "@/lib/utils/ftp-tests";
 import { NUDGE_CAP_W, eventTime, type RideEventInput, type RidePlan, type RidePlanStep, type RideStepResult, type RideTimeline } from "@/lib/utils/ride-timeline";
 import { DEFAULT_UNITS, type Units } from "@/lib/utils/units";
 import type { ResolvedTarget } from "@/lib/utils/workout-steps";
@@ -71,8 +72,10 @@ export type RideScreen = {
   canRaise: boolean;
   /** +1 min on a step that ends on time. */
   canExtend: boolean;
-  /** Lap outdoors, and indoors on a step that ends on the lap button. */
+  /** Lap outdoors, and indoors on a step that ends on the lap button or a ramp test step (4.9). */
   lap: boolean;
+  /** The line under the clock on a lap step or a ramp test step; null on others. */
+  lapHint: string | null;
   /** The mini profile: bars in the chart's units and the marker's x. */
   profile: { bars: { key: string; x: number; w: number; h: number; current: boolean }[]; markerX: number | null };
 };
@@ -127,7 +130,8 @@ export function rideScreen(plan: RidePlan, t: RideTimeline, units: Units = DEFAU
     canLower: s.power !== null && cur.offsetW > -NUDGE_CAP_W,
     canRaise: s.power !== null && cur.offsetW < NUDGE_CAP_W,
     canExtend: s.seconds !== null,
-    lap: outdoor || s.seconds === null,
+    lap: outdoor || s.seconds === null || isRampTestStep(plan.test, s),
+    lapHint: isRampTestStep(plan.test, s) ? "Tap Lap when you cannot hold the watts" : remaining === null ? "Tap Lap when done" : null,
     profile: { bars, markerX },
   };
 }

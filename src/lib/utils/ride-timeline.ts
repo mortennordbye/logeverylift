@@ -19,6 +19,7 @@ import {
   resolveStepTarget,
   resolveTarget,
   type ResolvedTarget,
+  type RideTest,
   type ThresholdValues,
   type Workout,
   type WorkoutStep,
@@ -66,6 +67,8 @@ export type RidePlan = {
   v: 1;
   mode: RideMode;
   name: string;
+  /** An FTP test ride (4.9); absent on other rides and on a plan frozen before it existed. */
+  test?: RideTest;
   thresholds: ThresholdValues;
   steps: RidePlanStep[];
   /**
@@ -133,7 +136,7 @@ export function buildRidePlan(workout: Workout, setIds: number[], thresholds: Th
       seconds = est.durationComplete && est.durationSeconds > 0 ? est.durationSeconds : null;
     }
     const estSeconds = seconds ?? (s.end.type === "distance" ? Math.round(s.end.meters / OPEN_STEP_SPEED_MS) : LAP_STEP_EST_S);
-    const outdoor = outdoorTarget(s, estSeconds, thresholds);
+    const outdoor = outdoorTarget(s, estSeconds, thresholds, undefined, workout.test);
     steps.push({
       key: p.key,
       programSetId: setIds[k],
@@ -148,13 +151,13 @@ export function buildRidePlan(workout: Workout, setIds: number[], thresholds: Th
       power: stepWatts(s, thresholds),
     });
   });
-  return { v: 1, mode, name: workout.name, thresholds, steps, dropped };
+  return { v: 1, mode, name: workout.name, ...(workout.test && { test: workout.test }), thresholds, steps, dropped };
 }
 
 // ── The clock ────────────────────────────────────────────────────────────────
 
 /** What the timeline needs of a plan step. */
-export type TimelineStep = Pick<RidePlanStep, "key" | "programSetId" | "seconds" | "power"> & { estSeconds?: number };
+export type TimelineStep = Pick<RidePlanStep, "key" | "programSetId" | "seconds" | "power"> & { estSeconds?: number; step?: Pick<WorkoutStep, "type"> };
 
 export type RideEventInput = {
   seq: number;
@@ -234,13 +237,16 @@ const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(mi
  * - `lap` ends the step: done on a lap step, partial on a time step.
  * - `end` on the last step finishes the ride; before it, the ride ends early.
  *   The step it ends is partial (left out with no time ridden).
+ * - In a ramp test (4.9) the rider rides the 1 min steps until they cannot
+ *   hold the watts: `lap` or `end` on one of them finishes the ride, and that
+ *   step is partial.
  * - An extend taken back after the step's time is up ends the step then.
  * - The ride ends on its own 2 hours after the latest of its planned end
  *   (start, plus each step's time or estimate and the extensions, plus the
  *   pauses already over), its last event and its last heartbeat, at its last
  *   ended step. The step that ran is left out.
  */
-export function rideTimeline(plan: { steps: TimelineStep[] }, events: RideEventInput[], now: number, opts: { heartbeatAt?: number | null } = {}): RideTimeline {
+export function rideTimeline(plan: { steps: TimelineStep[]; test?: RideTest }, events: RideEventInput[], now: number, opts: { heartbeatAt?: number | null } = {}): RideTimeline {
   const steps = plan.steps;
   const sorted = [...events].sort((a, b) => a.at - b.at || a.seq - b.seq);
 
@@ -308,6 +314,7 @@ export function rideTimeline(plan: { steps: TimelineStep[] }, events: RideEventI
     live = { index: l.index + 1, startAt: t, pausedMs: 0, pausedAt: status === "paused" ? t : null, extendS: 0, offsetW: 0 };
   };
   const isLive = () => status === "running" || status === "paused";
+  const rampStep = (s: TimelineStep) => plan.test === "ramp" && s.step?.type === "work";
   /** Let time run to `t`: close the time steps that ended, then the auto end. */
   const advance = (t: number) => {
     while (live && status === "running") {
@@ -358,6 +365,12 @@ export function rideTimeline(plan: { steps: TimelineStep[] }, events: RideEventI
         next(t, "skipped");
         break;
       case "lap":
+        if (rampStep(step)) {
+          close(t, activeMs(l, t) >= 1000 ? "partial" : null);
+          status = "finished";
+          endedAt = t;
+          break;
+        }
         next(t, step.seconds === null ? "done" : "partial");
         break;
       case "extend":
@@ -369,7 +382,7 @@ export function rideTimeline(plan: { steps: TimelineStep[] }, events: RideEventI
         if (step.power) l.offsetW = clamp(l.offsetW + (e.value ?? 0), -NUDGE_CAP_W, NUDGE_CAP_W);
         break;
       case "end": {
-        const last = l.index === steps.length - 1;
+        const last = l.index === steps.length - 1 || rampStep(step);
         close(t, activeMs(l, t) >= 1000 ? "partial" : null);
         status = last ? "finished" : "ended_early";
         endedAt = t;

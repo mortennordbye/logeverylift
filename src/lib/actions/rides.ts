@@ -206,7 +206,7 @@ export async function startRide(data: unknown): Promise<ActionResult<RideView>> 
     if (session.isCompleted) return { success: false, error: "This workout is finished" };
 
     const [slot] = await db
-      .select({ programId: programExercises.programId, discipline: exercises.discipline, name: programs.name })
+      .select({ programId: programExercises.programId, discipline: exercises.discipline, name: programs.name, rideTest: programExercises.rideTest })
       .from(programExercises)
       .innerJoin(programs, eq(programs.id, programExercises.programId))
       .innerJoin(exercises, eq(exercises.id, programExercises.exerciseId))
@@ -219,7 +219,7 @@ export async function startRide(data: unknown): Promise<ActionResult<RideView>> 
       .from(programSets)
       .where(and(eq(programSets.programExerciseId, programExerciseId), isNotNull(programSets.stepKind), liveProgramSets))
       .orderBy(asc(programSets.setNumber), asc(programSets.id));
-    const built = rows.length ? buildWorkout(rows as StepRow[], { sport: "bike", name: slot.name }) : null;
+    const built = rows.length ? buildWorkout(rows as StepRow[], { sport: "bike", name: slot.name, test: slot.rideTest }) : null;
     const tree = built && "workout" in built ? parseWorkout(built.workout) : null;
     if (!tree?.ok) return { success: false, error: "This exercise has no steps to ride" };
     const plan = buildRidePlan(tree.workout, rows.map((r) => r.id), await thresholdValues(userId), mode);

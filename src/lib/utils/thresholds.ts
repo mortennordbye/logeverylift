@@ -168,6 +168,9 @@ const bike30 = (key: string, label: string, kind: ProtocolInput["kind"], last: s
   evidence,
 });
 
+/** Ramp test: FTP is this share of the best 1 minute power. */
+export const RAMP_FTP_FACTOR = 0.75;
+
 /**
  * The field tests for each kind, the usual one first. Max HR has none: the
  * research gives no protocol, so it is typed in or taken from the watch.
@@ -182,6 +185,8 @@ const bike30 = (key: string, label: string, kind: ProtocolInput["kind"], last: s
  *   FTP_FACTOR).
  * - 30-minute all-out test: FTP = the average power of the whole 30 minutes,
  *   no factor (Friel, "Quick guide to setting zones", TrainingPeaks).
+ * - Ramp test: FTP = 0.75 x the best 1 minute power (docs/plans/bike-ride-logger.md,
+ *   4.9; the factor of the common 1 minute ramp tests).
  */
 export const PROTOCOLS: Partial<Record<ThresholdKind, ProtocolSpec[]>> = {
   lthr_run: [run30("avgHrLast20", "Average HR, last 20 min", "bpm", "Enter the average heart rate of the last 20 minutes.")],
@@ -208,6 +213,17 @@ export const PROTOCOLS: Partial<Record<ThresholdKind, ProtocolSpec[]>> = {
       "Enter the average power of the whole 30 minutes. That is your FTP.",
       "Friel 30-minute test, FTP = average power (Coach convention)",
     ),
+    {
+      protocol: "ftp_ramp",
+      name: "Ramp test",
+      steps: [
+        "Warm up for 10 minutes, easy.",
+        "Ride 1 minute steps that each go up by 20 W, from 100 W, until you cannot hold the watts.",
+        "Enter the average power of your best minute. FTP is 75% of it.",
+      ],
+      inputs: [{ key: "best1MinPower", label: "Best 1 min power", kind: "watts" }],
+      evidence: "Ramp test, FTP = 0.75 x best 1 min power (Coach convention)",
+    },
   ],
   // CSS = (400 - 200) / (T400 - T200), or Friel's T-time from 1000 m (research line 92).
   swim_css: [
@@ -245,6 +261,7 @@ export const PROTOCOL_KINDS: Record<ThresholdProtocol, ThresholdKind[]> = {
   run_30min: ["lthr_run", "run_threshold_pace"],
   bike_30min: ["lthr_bike", "ftp"],
   ftp_20min: ["ftp"],
+  ftp_ramp: ["ftp"],
   css_400_200: ["swim_css"],
   swim_t1000: ["swim_css"],
 };
@@ -288,6 +305,11 @@ export function valueFromTest(
     const p = pos(data.avgPower20);
     if (!p) return { error: "Enter the average power of the 20 minutes" };
     return { value: Math.round(p * FTP_FACTOR) };
+  }
+  if (protocol === "ftp_ramp") {
+    const p = pos(data.best1MinPower);
+    if (!p) return { error: "Enter the average power of your best minute" };
+    return { value: Math.round(p * RAMP_FTP_FACTOR) };
   }
   if (kind === "run_threshold_pace") {
     const d = pos(data.distanceLast20Meters);

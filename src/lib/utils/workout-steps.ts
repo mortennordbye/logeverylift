@@ -28,6 +28,7 @@ export const SWIM_STROKES = ["free", "back", "breast", "fly", "im", "choice", "k
 export const SWIM_EQUIPMENT = ["pull_buoy", "paddles", "fins", "kickboard", "snorkel"] as const;
 /** FTP test rides a bike workout can be (docs/plans/bike-ride-logger.md, 4.9). */
 export const RIDE_TESTS = ["ramp", "20min"] as const;
+export type RideTest = (typeof RIDE_TESTS)[number];
 
 export type WorkoutSport = (typeof WORKOUT_SPORTS)[number];
 

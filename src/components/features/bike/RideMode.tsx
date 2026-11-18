@@ -438,7 +438,7 @@ export function RideMode({
       {plan.mode === "indoor" && <MiniProfile profile={s.profile} />}
       {title}
       <div className="flex justify-center">{clock}</div>
-      {s.remaining === null && <p className="-mt-2 text-center text-sm text-muted-foreground">Tap Lap when done</p>}
+      {s.lapHint && <p className="-mt-2 text-center text-sm text-muted-foreground">{s.lapHint}</p>}
       <TargetCard s={s} />
       {toastRow}
       {(s.power || s.canExtend) && <div className="grid auto-cols-fr grid-flow-col gap-2">{nudges(true)}</div>}
