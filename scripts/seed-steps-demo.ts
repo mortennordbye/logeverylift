@@ -21,6 +21,9 @@
  *                           here, no real FIT file) that filled its steps:
  *                           the summary with stream numbers. Admin role, as
  *                           Garmin is for Premium (admin) accounts only.
+ *   steps-ftp@demo.local    FTP 180 W: the app's 20 min FTP test, ridden in
+ *                           ride mode and ended 10 min ago, the all-out step
+ *                           typed at 196 W: the summary offers New FTP 186 W.
  *
  * Dates are relative to the run day. Each run deletes the demo accounts (and
  * with them all their data) and makes them again. No other account is touched.
@@ -39,6 +42,7 @@ const RIDE = "steps-ride@demo.local";
 const NOFTP = "steps-noftp@demo.local";
 const HAND = "steps-hand@demo.local";
 const GARMIN = "steps-garmin@demo.local";
+const FTP_TEST = "steps-ftp@demo.local";
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "postgres"]);
 const DEMO_TZ = "Europe/Oslo";
 
@@ -137,11 +141,12 @@ async function main() {
   const { assertStepRows } = await import("../src/lib/program-steps-db");
   const { buildRidePlan } = await import("../src/lib/utils/ride-timeline");
   const { fillRidesFromGarmin } = await import("../src/lib/ride-garmin");
+  const { allOutStep, ftpTestWorkout } = await import("../src/lib/utils/ftp-tests");
   const { eq, isNull, and } = await import("drizzle-orm");
 
   type Ctx = { userId: string; writer: "user" };
 
-  const old = await db.select({ id: s.users.id }).from(s.users).where(inArray(s.users.email, [TRI, LIFT, RIDE, NOFTP, HAND, GARMIN]));
+  const old = await db.select({ id: s.users.id }).from(s.users).where(inArray(s.users.email, [TRI, LIFT, RIDE, NOFTP, HAND, GARMIN, FTP_TEST]));
   if (old.length) {
     const ids = old.map((u) => u.id);
     await db.delete(s.planRevisions).where(inArray(s.planRevisions.userId, ids));
@@ -173,7 +178,7 @@ async function main() {
       for (const [i, part] of parts.entries()) {
         const [pe] = await w.tx
           .insert(s.programExercises)
-          .values({ programId: p.id, exerciseId: await sportExercise(part.exercise), orderIndex: i, progressionAdvance: "manual", poolLengthM: part.workout.poolLengthM ?? null })
+          .values({ programId: p.id, exerciseId: await sportExercise(part.exercise), orderIndex: i, progressionAdvance: "manual", poolLengthM: part.workout.poolLengthM ?? null, rideTest: part.workout.test ?? null })
           .returning({ id: s.programExercises.id });
         await w.tx.insert(s.programSets).values(workoutToRows(part.workout).map((r) => ({ ...r, programExerciseId: pe.id, restTimeSeconds: 0 })));
         await assertStepRows(w.tx, pe.id);
@@ -346,7 +351,45 @@ async function main() {
     console.log(`steps-garmin: ${filled} ride filled from Garmin`);
   }
 
-  console.log(`Demo accounts ready (password "${DEMO_PASSWORD}"): ${TRI}, ${LIFT}, ${RIDE}, ${NOFTP}, ${HAND}, ${GARMIN}`);
+  // ── steps-ftp: a ridden 20 min FTP test with typed watts ──────────────────
+  {
+    const id = await makeUser(FTP_TEST, "FTP Demo", true);
+    const ctx: Ctx = { userId: id, writer: "user" };
+    await db.insert(s.athleteThresholds).values([
+      { userId: id, kind: "ftp", value: 180, measuredOn: today, source: "manual" },
+      { userId: id, kind: "lthr_bike", value: 171, measuredOn: today, source: "manual" },
+    ]);
+    const test = ftpTestWorkout("20min", "Bike · FTP test");
+    const programId = await stepProgram(ctx, test.name, [{ exercise: "Bike", workout: test }]);
+    await weekdayCycle(ctx, "Base · Week 1", [{ dayOfWeek: dow(today), programId }], mondayOf(today));
+    const [pe] = await db.select().from(s.programExercises).where(eq(s.programExercises.programId, programId));
+    const sets = await db.select().from(s.programSets).where(eq(s.programSets.programExerciseId, pe.id)).orderBy(s.programSets.setNumber);
+    const plan = buildRidePlan(test, sets.map((x) => x.id), { ftp: 180, lthr_bike: 171 }, "indoor");
+    const total = plan.steps.reduce((a, x) => a + (x.seconds ?? 0), 0);
+    const end = new Date(Date.now() - 10 * 60_000);
+    const start = new Date(end.getTime() - total * 1000);
+    const [session] = await db
+      .insert(s.workoutSessions)
+      .values({ userId: id, programId, date: today, startTime: start, endTime: end, isCompleted: true, rideMode: "indoor" })
+      .returning();
+    const [ride] = await db
+      .insert(s.rides)
+      .values({ userId: id, sessionId: session.id, programExerciseId: pe.id, mode: "indoor", status: "finished", plan, seq: 1, startedAt: start, endedAt: end })
+      .returning();
+    await db.insert(s.rideEvents).values({ rideId: ride.id, seq: 1, clientId: "seed-start", kind: "start", at: start });
+    const allOut = allOutStep(plan.steps)!;
+    // Warm-up, two hard minutes, easy, the all-out 20 min at 196 W, cool-down.
+    const watts = [125, 290, 95, 295, 100, 196, 105];
+    for (const [n, st] of plan.steps.entries()) {
+      await db.insert(s.workoutSets).values({
+        sessionId: session.id, exerciseId: pe.exerciseId, programExerciseId: pe.id, programSetId: st.programSetId, setNumber: n + 1,
+        actualReps: 0, weightKg: "0", restTimeSeconds: 0, durationSeconds: st.seconds, isCompleted: true, stepStatus: "done",
+        targetOffsetW: 0, extendedSeconds: 0, rpe: 9, avgPower: st === allOut ? 196 : watts[n], sources: { durationSeconds: "clock", avgPower: "typed" },
+      });
+    }
+  }
+
+  console.log(`Demo accounts ready (password "${DEMO_PASSWORD}"): ${TRI}, ${LIFT}, ${RIDE}, ${NOFTP}, ${HAND}, ${GARMIN}, ${FTP_TEST}`);
   process.exit(0);
 }
 

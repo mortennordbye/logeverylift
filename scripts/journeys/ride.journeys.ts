@@ -1,5 +1,5 @@
 // Journeys of ride mode in the bike exercise (docs/plans/bike-ride-logger.md, steps 3, 4 and 7).
-// Data: the steps demo seed (steps-ride, steps-noftp, steps-hand and steps-garmin). Run: pnpm journeys ride --seed
+// Data: the steps demo seed (steps-ride, steps-noftp, steps-hand, steps-garmin and steps-ftp). Run: pnpm journeys ride --seed
 import type { Ctx, JourneySet } from "./types";
 
 const PASSWORD = "steps-demo-password";
@@ -24,14 +24,42 @@ const set: JourneySet = {
     noftp: { email: "steps-noftp@demo.local", password: PASSWORD, about: "the same ride, no thresholds set" },
     hand: { email: "steps-hand@demo.local", password: PASSWORD, about: "the same ride with FTP 180 W, logged by hand" },
     garmin: { email: "steps-garmin@demo.local", password: PASSWORD, about: "the same ride, ridden 10 min ago and filled from a synthetic Garmin activity" },
+    ftp: { email: "steps-ftp@demo.local", password: PASSWORD, about: "FTP 180 W, the 20 min FTP test ridden 10 min ago with the all-out step typed at 196 W" },
   },
   journeys: [
     { id: 1, title: "Indoor ride", summary: "Start the ride, change the target, add a minute, skip with undo, pause, reload, landscape, end early, type the results and see the summary." },
     { id: 2, title: "Outdoor ride with no thresholds", summary: "Change to Outdoor, start, the effort target and Lap, end, the outdoor results with more numbers, Later, and the plan-only summary." },
     { id: 3, title: "Log by hand", summary: "Log the ride by hand from the bike screen: times, watts, effort, and back to the workout." },
     { id: 4, title: "Filled from Garmin", summary: "The summary of a ride Garmin filled: NP, IF, the plan-against-done chart, zones, time on target, drift, then Undo." },
+    { id: 5, title: "FTP test result", summary: "The summary of a 20 min FTP test: New FTP 186 W · Save, then Saved, and the bike screen in the new watts." },
   ],
   flows: [
+    {
+      name: "ftp",
+      account: "ftp",
+      journeys: [5],
+      async run(c: Ctx) {
+        const { page, step, shot, settle } = c;
+        await step("J5 summary", async () => {
+          await c.go("/");
+          await page.getByRole("link", { name: "Do Again" }).click();
+          const guided = page.getByTestId("start-choice").getByRole("link", { name: /^Guided/ });
+          if (await guided.isVisible().catch(() => false)) await guided.click();
+          await page.waitForURL(/\/workout/);
+          if (!/\/exercises\//.test(page.url())) await page.getByRole("link", { name: /Bike/ }).first().click();
+          await page.waitForURL(/\/workout\/exercises\/\d+/);
+          await settle(2000);
+          await page.getByTestId("summary-ftp").waitFor();
+          await shot(5, 1, "summary-ftp", "The test summary with New FTP 186 W · Save");
+        });
+        await step("J5 save", async () => {
+          await page.getByTestId("summary-ftp").getByRole("button", { name: "Save" }).click();
+          await page.getByTestId("summary-ftp").getByText("Saved").waitFor();
+          await settle(500);
+          await shot(5, 2, "summary-ftp-saved", "After Save: New FTP 186 W · Saved");
+        });
+      },
+    },
     {
       name: "garmin",
       account: "garmin",

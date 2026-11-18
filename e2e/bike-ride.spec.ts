@@ -4,6 +4,7 @@ import { athleteThresholds, plannedSessions, programExercises, programSets, ride
 import { e2eUser } from "./fixtures/env";
 import { testDb } from "./fixtures/reset";
 import { insertStepProgram } from "./fixtures/step-program";
+import { ftpTestWorkout } from "../src/lib/utils/ftp-tests";
 import { expect, test } from "./fixtures/test";
 
 /**
@@ -42,7 +43,7 @@ const workout = {
   ],
 };
 
-async function setup(parallelIndex: number, priority: "key" | "support" = "support") {
+async function setup(parallelIndex: number, priority: "key" | "support" = "support", steps: unknown = workout) {
   const db = testDb();
   const user = await db.query.users.findFirst({ where: eq(users.email, e2eUser(parallelIndex).email) });
   const userId = user!.id;
@@ -54,7 +55,7 @@ async function setup(parallelIndex: number, priority: "key" | "support" = "suppo
     { userId, kind: "ftp", value: 180, measuredOn: today(), source: "manual" },
     { userId, kind: "lthr_bike", value: 171, measuredOn: today(), source: "manual" },
   ]);
-  const programId = await insertStepProgram(db, userId, workout);
+  const programId = await insertStepProgram(db, userId, steps);
   const [pe] = await db.select({ id: programExercises.id }).from(programExercises).where(eq(programExercises.programId, programId));
   const setIds = (await db.select({ id: programSets.id }).from(programSets).where(eq(programSets.programExerciseId, pe.id)).orderBy(asc(programSets.setNumber))).map((r) => r.id);
   const [cycle] = await db
@@ -109,7 +110,7 @@ async function advance(page: Page, userId: string, seconds: number) {
 }
 
 /** Open the program's bike exercise, wait for its workout, and start the ride indoors. */
-async function startRide(page: Page, s: { userId: string; programId: number; peId: number }, opts: { open?: boolean } = {}) {
+async function startRide(page: Page, s: { userId: string; programId: number; peId: number }, opts: { open?: boolean; steps?: number } = {}) {
   if (opts.open !== false) await page.goto(`/programs/${s.programId}/workout/exercises/${s.peId}`);
   // A streamed copy of the page can sit hidden for a moment: look at the visible one.
   await expect(page.getByTestId("bike-exercise").filter({ visible: true })).toBeVisible();
@@ -119,7 +120,7 @@ async function startRide(page: Page, s: { userId: string; programId: number; peI
   shifted.set(s.userId, 0);
   await page.getByRole("button", { name: "Start ride" }).click();
   await expect(page.getByTestId("ride-screen")).toBeVisible();
-  await expect(page.getByTestId("ride-header")).toContainText("Indoor · step 1 of 5");
+  await expect(page.getByTestId("ride-header")).toContainText(`Indoor · step 1 of ${opts.steps ?? 5}`);
   await freeze(page);
 }
 
@@ -417,4 +418,48 @@ test("Log by hand: the results table with no ride saves each step with its typed
   expect([step2.avgPower, step2.distanceMeters, step2.sources]).toEqual([150, 1500, { durationSeconds: "typed", avgPower: "typed", distanceMeters: "typed" }]);
   // No ride was started.
   expect(await testDb().select().from(rides).where(eq(rides.userId, s.userId))).toEqual([]);
+});
+
+test("FTP ramp test: Lap ends the test, typed watts give the new FTP, Save stores it and the bike screen shows the new watts", async ({ page }, testInfo) => {
+  test.setTimeout(90_000);
+  const s = await setup(testInfo.parallelIndex, "support", { ...ftpTestWorkout("ramp"), name: "FTP ramp e2e" });
+  await startRide(page, s, { steps: 22 });
+
+  // The 1 min steps start after the 10 min warm-up: 100, 120, 140 W, each with Lap and its line.
+  await advance(page, s.userId, 600);
+  await expect(header(page)).toContainText("step 2 of 22");
+  await expect(page.getByTestId("ride-target-value")).toHaveText("100");
+  await expect(page.getByText("Tap Lap when you cannot hold the watts")).toBeVisible();
+  await advance(page, s.userId, 60);
+  await advance(page, s.userId, 60);
+  await expect(header(page)).toContainText("step 4 of 22");
+  await advance(page, s.userId, 60);
+  await expect(page.getByTestId("ride-target-value")).toHaveText("160");
+  await advance(page, s.userId, 20);
+  await page.clock.resume();
+  await page.getByRole("button", { name: "Lap" }).click();
+
+  // Lap ended the test as finished, the step it ended partial.
+  await expect(page.getByTestId("ride-results")).toBeVisible();
+  const [ride] = await testDb().select().from(rides).where(eq(rides.userId, s.userId));
+  expect(ride.status).toBe("finished");
+  await expect.poll(async () => (await savedSteps(s.userId)).map((r) => r.stepStatus)).toEqual(["done", "done", "done", "done", "partial"]);
+
+  // The best minute: the 140 W step, ridden at 248 W.
+  await page.getByLabel("Avg W step 4").fill("248");
+  await page.getByRole("button", { name: "Done" }).click();
+  await expect(page.getByTestId("ride-summary-screen")).toBeVisible();
+  const line = page.getByTestId("summary-ftp");
+  await expect(line).toHaveText("New FTP 186 WSave");
+  await line.getByRole("button", { name: "Save" }).click();
+  await expect(line).toHaveText("New FTP 186 WSaved");
+  const rows = await testDb().select().from(athleteThresholds).where(and(eq(athleteThresholds.userId, s.userId), eq(athleteThresholds.kind, "ftp"), eq(athleteThresholds.source, "test")));
+  expect(rows.map((r) => [r.value, r.protocol, r.measuredOn, r.testData])).toEqual([[186, "ftp_ramp", today(), { best1MinPower: 248 }]]);
+
+  // Another bike program in % FTP now shows the new watts: 50-60% of 186 W.
+  const other = await insertStepProgram(testDb(), s.userId, workout);
+  const [pe] = await testDb().select({ id: programExercises.id }).from(programExercises).where(eq(programExercises.programId, other));
+  await page.goto(`/programs/${other}/workout/exercises/${pe.id}`);
+  await expect(page.getByTestId("ride-summary").filter({ visible: true })).toContainText("FTP 186 W");
+  await expect(page.getByTestId("ride-step-target").filter({ visible: true }).first()).toContainText("93-112");
 });
