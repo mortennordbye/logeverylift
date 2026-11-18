@@ -16,10 +16,11 @@ import { thresholdValues } from "@/lib/session-compliance";
 import { getUserSettings, userToday } from "@/lib/user-settings";
 import { bikeStepRows, defaultRideMode, plannedRideNumbers, rideChart, type BikeStepRow, type RideChart, type RideNumbers } from "@/lib/utils/bike-ride-view";
 import { toDateStr } from "@/lib/utils/cycle-position";
+import { ftpTestView, type FtpTestView } from "@/lib/utils/ftp-tests";
 import { buildWorkout, type StepRow } from "@/lib/utils/program-steps";
 import type { StepLog } from "@/lib/utils/ride-results";
 import { buildRidePlan, rideTimeline, type RideEventInput, type RidePlan } from "@/lib/utils/ride-timeline";
-import { parseWorkout } from "@/lib/utils/workout-steps";
+import { parseWorkout, type RideTest } from "@/lib/utils/workout-steps";
 import { and, desc, eq, gt, inArray, sql } from "drizzle-orm";
 
 export type BikeModeView = { numbers: RideNumbers; chart: RideChart; rows: BikeStepRow[] };
@@ -91,11 +92,12 @@ export async function bikeExerciseView(
   programExerciseId: number,
   name: string,
   sets: (StepRow & { id: number })[],
+  test: RideTest | null = null,
 ): Promise<BikeExerciseData | null> {
   // The order startRide reads the rows in, so each step keeps its program set.
   const rows = sets.filter((s) => s.stepKind != null).sort((a, b) => a.setNumber - b.setNumber || a.id - b.id);
   if (!rows.length) return null;
-  const built = buildWorkout(rows, { sport: "bike", name });
+  const built = buildWorkout(rows, { sport: "bike", name, test });
   const tree = "workout" in built ? parseWorkout(built.workout) : null;
   if (!tree?.ok) return null;
 
@@ -146,6 +148,8 @@ export type RideAfterData = {
   garminWaiting: boolean;
   /** The ride's Garmin fill, matches and stream numbers (4.8). */
   garmin: RideGarminView;
+  /** An FTP test ride: the FTP it gives and whether it is saved (4.9); null on other rides. */
+  ftpTest: FtpTestView | null;
 };
 
 /** The logged steps of a session for these program sets. */
@@ -227,11 +231,12 @@ export async function rideAfterView(userId: string, programExerciseId: number): 
   if (!r.success || !r.data) return null;
   const view = r.data;
   const status = view.ride.status as RideAfterData["status"];
-  const [{ logs, timeline }, garmin, fill, { timeZone }] = await Promise.all([
+  const [{ logs, timeline }, garmin, fill, { timeZone }, thresholds] = await Promise.all([
     rideStepLogs(userId, view),
     garminAllowedFor(userId),
     rideGarminView(userId, view.ride.id),
     getUserSettings(userId),
+    thresholdValues(userId),
   ]);
   const endedAt = view.ride.endedAt ?? timeline.endedAt;
   const at = endedAt
@@ -247,6 +252,7 @@ export async function rideAfterView(userId: string, programExerciseId: number): 
     doneLine: [`${status === "ended_early" ? "Ended early" : "Done"}${at ? ` ${at}` : ""}`, MODE_LINE[view.plan.mode], ...(fill.state === "filled" ? ["from Garmin"] : [])].join(" · "),
     garminWaiting: garmin && fill.state === "none" && !fill.declined && !Object.values(logs).some((l) => Object.values(l.sources ?? {}).includes("garmin")),
     garmin: fill,
+    ftpTest: ftpTestView(view.plan, logs, fill.stream?.numbers ?? null, thresholds.ftp ?? null),
   };
 }
 

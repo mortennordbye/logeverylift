@@ -194,7 +194,33 @@ export type StreamNumbers = {
   drift: RideDrift | null;
   /** Percent of each step's seconds inside its target, by program set: power indoors, heart rate outdoors. */
   onTarget: Record<number, number | null>;
+  /** The best rolling 60 s mean power (an FTP ramp test, 4.9); null without a minute of power. */
+  best60sPower: number | null;
+  /** Each step's window average power, by program set (an FTP 20 min test, 4.9). */
+  stepPower: Record<number, number | null>;
 };
+
+/**
+ * The best mean power over `seconds` in a row: the samples are held for their
+ * duration as 1 s values (gaps over 10 s count nothing, as in NP). Null with
+ * less data than the window.
+ */
+export function bestRollingPower(t: Series, power: Series, seconds = 60): number | null {
+  const d = sampleDurations(t);
+  const perSecond: number[] = [];
+  power.forEach((p, i) => {
+    for (let k = 0; k < d[i]; k++) perSecond.push(p !== null && p > 0 ? p : 0);
+  });
+  if (perSecond.length < seconds) return null;
+  let sum = 0;
+  let best = 0;
+  perSecond.forEach((p, i) => {
+    sum += p;
+    if (i >= seconds) sum -= perSecond[i - seconds];
+    if (i >= seconds - 1) best = Math.max(best, sum);
+  });
+  return best / seconds;
+}
 
 type PlanStepLike = Pick<RidePlanStep, "programSetId" | "power" | "outdoor" | "step">;
 
@@ -271,7 +297,9 @@ export function rideStreamNumbers(
 
   const byId = new Map(steps.map((s) => [s.programSetId, s]));
   const onTarget: Record<number, number | null> = {};
+  const stepPower: Record<number, number | null> = {};
   for (const w of windows) {
+    stepPower[w.programSetId] = hasPower ? weightedMean(power, indices(t, w), d, (v) => v >= 0) : null;
     const s = byId.get(w.programSetId);
     const b = s ? targetBounds(s, opts.mode) : null;
     const series = b?.series === "hr" ? hr : power;
@@ -310,6 +338,8 @@ export function rideStreamNumbers(
     hrZoneMinutes: hrZoneSeconds.map((z) => Math.round(z / 60)),
     drift,
     onTarget,
+    best60sPower: hasPower ? bestRollingPower(t, power!) : null,
+    stepPower,
   };
 }
 

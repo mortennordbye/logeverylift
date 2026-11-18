@@ -15,7 +15,10 @@ import { db } from "@/db";
 import { rideEvents, rides, workoutSessions } from "@/db/schema";
 import { rideStepLogs } from "@/lib/bike-exercise-view";
 import { rideGarminView } from "@/lib/ride-garmin";
+import { thresholdValues } from "@/lib/session-compliance";
 import { getUserSettings } from "@/lib/user-settings";
+import { ftpTestThreshold, ftpTestView } from "@/lib/utils/ftp-tests";
+import { localDateStr } from "@/lib/utils/user-date";
 import { bikeStepRows, plannedRideNumbers } from "@/lib/utils/bike-ride-view";
 import { rideSummary } from "@/lib/utils/ride-results";
 import type { RidePlan } from "@/lib/utils/ride-timeline";
@@ -26,22 +29,26 @@ const r2 = (n: number | null) => (n === null ? null : Math.round(n * 100) / 100)
 const iso = (ms: number | null) => (ms === null ? null : new Date(ms).toISOString());
 const zones = (minutes: number[]) => minutes.map((m, i) => ({ zone: i + 1, minutes: m })).filter((z) => z.minutes > 0);
 
-/** The user's ride of a workout session, or the latest ride of a program exercise; null when there is none. */
-export async function rideReport(userId: string, by: { workoutSessionId?: number; programExerciseId?: number }) {
+/** The user's ride by id, of a workout session, or the latest ride of a program exercise; null when there is none. */
+export async function rideReport(userId: string, by: { rideId?: number; workoutSessionId?: number; programExerciseId?: number }) {
   const [ride] = await db
     .select()
     .from(rides)
     .where(
       and(
         eq(rides.userId, userId),
-        by.workoutSessionId != null ? eq(rides.sessionId, by.workoutSessionId) : eq(rides.programExerciseId, by.programExerciseId ?? -1),
+        by.rideId != null
+          ? eq(rides.id, by.rideId)
+          : by.workoutSessionId != null
+            ? eq(rides.sessionId, by.workoutSessionId)
+            : eq(rides.programExerciseId, by.programExerciseId ?? -1),
       ),
     )
     .orderBy(desc(rides.startedAt), desc(rides.id))
     .limit(1);
   if (!ride) return null;
 
-  const [events, [session], { units }, garmin] = await Promise.all([
+  const [events, [session], { units, timeZone }, garmin, thresholds] = await Promise.all([
     db.select().from(rideEvents).where(eq(rideEvents.rideId, ride.id)).orderBy(asc(rideEvents.seq)),
     db
       .select({ plannedSessionId: workoutSessions.plannedSessionId, date: workoutSessions.date, isCompleted: workoutSessions.isCompleted })
@@ -49,6 +56,7 @@ export async function rideReport(userId: string, by: { workoutSessionId?: number
       .where(and(eq(workoutSessions.id, ride.sessionId), eq(workoutSessions.userId, userId))),
     getUserSettings(userId),
     rideGarminView(userId, ride.id),
+    thresholdValues(userId),
   ]);
   const plan = ride.plan as RidePlan;
   const { logs, timeline } = await rideStepLogs(userId, {
@@ -63,6 +71,7 @@ export async function rideReport(userId: string, by: { workoutSessionId?: number
   const rows = bikeStepRows(plan, units);
   const n = summary.numbers;
   const live = timeline.status === "running" || timeline.status === "paused";
+  const test = live ? null : ftpTestView(plan, logs, stream?.numbers ?? null, thresholds.ftp ?? null);
 
   return {
     rideId: ride.id,
@@ -152,6 +161,29 @@ export async function rideReport(userId: string, by: { workoutSessionId?: number
         ? plan.steps.flatMap((s, i) => (summary.rows[i].onTarget === null ? [] : [{ key: s.key, pct: summary.rows[i].onTarget }]))
         : null,
     },
+    // An FTP test ride (ramp: 75% of the best 1 min power; 20 min: 95% of the all-out step's average power).
+    ftpTest: plan.test
+      ? {
+          test: plan.test,
+          // "garmin": the stream; "typed": a step average; "target": the ramp step's planned watts.
+          power: test?.result?.power ?? null,
+          powerBasis: test?.result?.basis ?? null,
+          proposedFtp: test?.result?.ftp ?? null,
+          currentFtp: test?.currentFtp ?? null,
+          saved: test?.saved ?? false,
+          measuredOn: localDateStr(ride.startedAt, timeZone),
+          note: live
+            ? "The test is still running."
+            : test?.result
+              ? test.saved
+                ? "The current FTP is the one this test gives."
+                : "The rider saves it with Save on the ride summary, or you add it with manage_thresholds (kind ftp, source test, its protocol and testData)."
+              : plan.test === "ramp"
+                ? "No 1 min step was ridden to its end, so the test gives no FTP."
+                : "The all-out step has no average power or was not ridden to its end, so the test gives no FTP.",
+          ...(test?.result && { protocol: ftpTestThreshold(test.result).protocol, testData: ftpTestThreshold(test.result).testData }),
+        }
+      : null,
     garmin: {
       // "filled": the steps hold Garmin numbers (Undo in the app); "pick": two or more Garmin rides match and the rider picks one in the app.
       state: garmin.state,

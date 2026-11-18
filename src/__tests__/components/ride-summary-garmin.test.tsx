@@ -18,6 +18,7 @@ vi.mock("@/lib/actions/ride-garmin", () => ({
   undoRideGarminFill: (d: unknown) => undoRideGarminFill(d),
   pickRideGarminActivity: (d: unknown) => pickRideGarminActivity(d),
 }));
+vi.mock("@/lib/actions/ride-ftp", () => ({ saveRideFtp: vi.fn() }));
 
 const parsed = parseWorkout({
   v: 2,

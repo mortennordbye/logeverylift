@@ -16,6 +16,7 @@ const push = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ replace, refresh, push }), usePathname: () => "/programs/1/workout/exercises/2" }));
 vi.mock("@/components/ui/BackLink", () => ({ BackLink: () => <span>Workout</span> }));
 vi.mock("@/lib/actions/ride-garmin", () => ({ undoRideGarminFill: vi.fn(), pickRideGarminActivity: vi.fn() }));
+vi.mock("@/lib/actions/ride-ftp", () => ({ saveRideFtp: vi.fn() }));
 const setActiveWorkout = vi.fn();
 let phoneSession: { sessionId: number | null; programId: number } = { sessionId: 9, programId: 1 };
 vi.mock("@/contexts/workout-session-context", () => ({ useWorkoutSession: () => ({ ...phoneSession, setActiveWorkout }) }));

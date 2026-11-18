@@ -9,12 +9,15 @@
  * target, heart rate drift, and the effort. Estimates say "est.". With nothing
  * but times, "Plan only" offers Add numbers. An ended-early ride says so and
  * counts only the ridden steps. A Garmin fill offers Undo; two matching
- * Garmin rides offer Pick.
+ * Garmin rides offer Pick. An FTP test ride shows "New FTP 186 W · Save"
+ * (4.9), which adds the threshold row.
  */
 
 import { RideDoneChart, RideZoneBar } from "@/components/features/bike/RideProfileChart";
 import { BackLink } from "@/components/ui/BackLink";
 import { pickRideGarminActivity, undoRideGarminFill } from "@/lib/actions/ride-garmin";
+import { saveRideFtp } from "@/lib/actions/ride-ftp";
+import type { FtpTestView } from "@/lib/utils/ftp-tests";
 import type { RideGarminView } from "@/lib/ride-garmin";
 import type { RideSummary as Summary } from "@/lib/utils/ride-results";
 import { callAction } from "@/lib/utils/stale-bundle";
@@ -40,6 +43,7 @@ export function RideSummary({
   rideId,
   garmin,
   timeZone = null,
+  ftpTest = null,
 }: {
   programId: number;
   exerciseName: string;
@@ -51,6 +55,7 @@ export function RideSummary({
   rideId?: number;
   garmin?: Pick<RideGarminView, "state" | "candidates">;
   timeZone?: string | null;
+  ftpTest?: FtpTestView | null;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -118,6 +123,24 @@ export function RideSummary({
             </p>
           )}
         </div>
+
+        {rideId !== undefined && ftpTest?.result && (
+          <div className="flex items-center justify-between gap-2 rounded-xl bg-muted pl-4 pr-2 min-h-12 text-sm" data-testid="summary-ftp">
+            <span className="font-semibold tabular-nums">New FTP {ftpTest.result.ftp} W</span>
+            {ftpTest.saved ? (
+              <span className="min-h-11 px-3 inline-flex items-center text-muted-foreground">Saved</span>
+            ) : (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => run(() => saveRideFtp({ rideId }))}
+                className="min-h-11 px-3 font-semibold text-primary whitespace-nowrap active:opacity-70 disabled:opacity-50"
+              >
+                Save
+              </button>
+            )}
+          </div>
+        )}
 
         {(s.planOnly || s.noLoad) && (
           <div className="flex items-center justify-between gap-2 rounded-xl bg-muted pl-4 pr-2 min-h-12 text-sm" data-testid="summary-plan-only">

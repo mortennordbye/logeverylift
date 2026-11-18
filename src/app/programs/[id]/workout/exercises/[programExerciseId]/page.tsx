@@ -70,7 +70,7 @@ export default async function WorkoutExerciseSetsPage({ params, searchParams }: 
         />
       );
     }
-    const bike = await bikeExerciseView(user.id, peId, pe.exercise.name, sets);
+    const bike = await bikeExerciseView(user.id, peId, pe.exercise.name, sets, pe.rideTest);
     if (bike && hand === "1" && !bike.liveRide) {
       const byHand = await handResultsView(user.id, programId, pe.exercise.name, sets, mode === "outdoor" || mode === "indoor" ? mode : bike.defaultMode);
       if (byHand) {
@@ -120,6 +120,7 @@ export default async function WorkoutExerciseSetsPage({ params, searchParams }: 
           rideId={after.rideId}
           garmin={{ state: after.garmin.state, candidates: after.garmin.candidates }}
           timeZone={timeZone}
+          ftpTest={after.ftpTest}
           doneHref={doneHref}
           saveTheRide={onlyExercise && after.sessionOpen}
         />
