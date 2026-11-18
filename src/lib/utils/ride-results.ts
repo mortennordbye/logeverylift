@@ -96,16 +96,32 @@ export function parseField(f: ResultField, text: string, units: Units = DEFAULT_
   return v >= lo && v <= hi ? v : undefined;
 }
 
-/** "15:00", "1:05:00" or "45" (minutes) as seconds; null when empty, undefined when unreadable. */
-export function parseStepTime(text: string): number | null | undefined {
+/** The longest time a step can take by hand: 4 x its planned time, at least 10 h. */
+export const stepTimeMax = (plannedSeconds: number | null | undefined) => Math.max(4 * (plannedSeconds ?? 0), 10 * 3600);
+
+/**
+ * A typed step time as seconds: "15:30", "15.30", "15,30" or "1:05:00";
+ * 1 or 2 digits are minutes ("45"), 3 or 4 digits are minutes and seconds
+ * ("1530" is 15:30). Null when empty; undefined when unreadable or longer
+ * than `stepTimeMax` of the planned time.
+ */
+export function parseStepTime(text: string, plannedSeconds?: number | null): number | null | undefined {
   const t = text.trim();
   if (!t) return null;
-  if (/^\d+$/.test(t)) return Number(t) * 60;
-  const parts = t.split(":");
-  if (parts.length < 2 || parts.length > 3 || !parts.every((p) => /^\d+$/.test(p))) return undefined;
-  const n = parts.map(Number);
-  if (n.slice(1).some((x) => x >= 60)) return undefined;
-  return n.reduce((a, x) => a * 60 + x, 0);
+  let seconds: number;
+  if (/^\d{1,2}$/.test(t)) seconds = Number(t) * 60;
+  else if (/^\d{3,4}$/.test(t)) {
+    const sec = Number(t.slice(-2));
+    if (sec >= 60) return undefined;
+    seconds = Number(t.slice(0, -2)) * 60 + sec;
+  } else {
+    const parts = t.split(/[:.,]/);
+    if (parts.length < 2 || parts.length > 3 || !parts.every((p) => /^\d+$/.test(p))) return undefined;
+    const n = parts.map(Number);
+    if (n.slice(1).some((x) => x >= 60)) return undefined;
+    seconds = n.reduce((a, x) => a * 60 + x, 0);
+  }
+  return seconds <= stepTimeMax(plannedSeconds) ? seconds : undefined;
 }
 
 // ── Rows ────────────────────────────────────────────────────────────────────
@@ -169,7 +185,7 @@ export function resultPayloads(steps: ResultStep[], edits: ResultEdits, effort: 
     let seconds: number | null;
     let timeTyped = false;
     if (hand) {
-      const t = e.time !== undefined ? parseStepTime(e.time) : (log?.durationSeconds ?? s.plannedSeconds);
+      const t = e.time !== undefined ? parseStepTime(e.time, s.plannedSeconds) : (log?.durationSeconds ?? s.plannedSeconds);
       if (!t) continue;
       seconds = t;
       timeTyped = e.time !== undefined || !log;
@@ -182,7 +198,8 @@ export function resultPayloads(steps: ResultStep[], edits: ResultEdits, effort: 
     for (const [f, text] of Object.entries(e) as [ResultField | "time", string][]) {
       if (f === "time") continue;
       const v = parseField(f, text, units);
-      if (v === undefined || v === (log?.[f] ?? null)) continue;
+      // Unchanged at the precision the field shows (a speed at one decimal).
+      if (v === undefined || text.trim() === fieldText(f, log?.[f] ?? null, units)) continue;
       values[f] = v;
       if (v !== null) sources[f] = "typed";
     }
@@ -210,6 +227,11 @@ export function resultPayloads(steps: ResultStep[], edits: ResultEdits, effort: 
     });
   }
   return out;
+}
+
+/** By hand: the logged steps whose time the rider cleared. They are un-logged, not saved. */
+export function handUnlogs(steps: ResultStep[], edits: ResultEdits): number[] {
+  return steps.filter((s) => s.log && edits[s.programSetId]?.time !== undefined && parseStepTime(edits[s.programSetId]!.time!) === null).map((s) => s.programSetId);
 }
 
 /** True when a field has an error: text that is not a number in range. */
@@ -275,7 +297,8 @@ export function rideSummary(plan: RidePlan, logs: Record<number, StepLog>, units
   if (numbers.avgPower !== null) tiles.push({ label: "Avg W", value: `${Math.round(numbers.avgPower)}` });
   if (numbers.np !== null) tiles.push({ label: "NP", value: `${Math.round(numbers.np)}` });
   if (numbers.intensityFactor !== null) tiles.push({ label: "IF", value: numbers.intensityFactor.toFixed(2) });
-  if (numbers.load) tiles.push({ label: "Load", value: `${Math.round(numbers.load.value)}`, est: numbers.load.estimated });
+  // A load that rounds to 0 (a ride of seconds) says nothing.
+  if (numbers.load && Math.round(numbers.load.value) > 0) tiles.push({ label: "Load", value: `${Math.round(numbers.load.value)}`, est: numbers.load.estimated });
   if (numbers.kj !== null) tiles.push({ label: "kJ", value: `${numbers.kj}` });
   if (effort !== null) tiles.push({ label: "Effort", value: `${effort}` });
 

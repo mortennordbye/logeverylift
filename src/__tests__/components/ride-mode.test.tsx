@@ -30,7 +30,8 @@ vi.mock("@/contexts/pending-queue-context", () => ({
   usePendingQueue: () => ({ enqueue }),
 }));
 const clearActiveWorkout = vi.fn();
-vi.mock("@/contexts/workout-session-context", () => ({ useWorkoutSession: () => ({ sessionId: 7, clearActiveWorkout }) }));
+const addCompletedSet = vi.fn();
+vi.mock("@/contexts/workout-session-context", () => ({ useWorkoutSession: () => ({ sessionId: 7, clearActiveWorkout, addCompletedSet }) }));
 const sendRideEvent = vi.fn();
 const getRide = vi.fn();
 vi.mock("@/lib/actions/rides", () => ({ sendRideEvent: (d: unknown) => sendRideEvent(d), getRide: (d: unknown) => getRide(d) }));
@@ -248,6 +249,8 @@ describe("RideMode", () => {
     expect(completeWorkoutSession).toHaveBeenCalledWith({ sessionId: 7, endTime: new Date(T0 + 820_000).toISOString() });
     expect(clearActiveWorkout).toHaveBeenCalled();
     expect(replace).toHaveBeenCalledWith("/programs/1/workout/exercises/2?results=1");
+    // The workout list reads the ridden steps as handled; step 3 was never reached.
+    expect(addCompletedSet.mock.calls.map((c) => c[0]).sort()).toEqual([11, 12]);
   });
 
   it("outdoors: heart rate as the big number, the power meter below, and Lap", async () => {

@@ -5,6 +5,7 @@
  * Users can check off exercises and see their progress.
  */
 
+import { enduranceEnabledFor } from "@/lib/endurance";
 import { WorkoutSessionClient } from "@/components/features/WorkoutSessionClient";
 import { getProgramWithExercises } from "@/lib/actions/programs";
 import {
@@ -62,7 +63,7 @@ export default async function WorkoutSessionPage({ params }: Props) {
   // Structured endurance steps (docs/plans/one-program-model.md, 3): a summary
   // per exercise, the session's totals, and the guided player when today's
   // planned session runs this program.
-  const steps = await programStepsView(user.id, programId);
+  const [steps, endurance] = await Promise.all([programStepsView(user.id, programId), enduranceEnabledFor(user.id)]);
 
   const exercises = program.programExercises.map((pe) => ({
     id: pe.id,
@@ -73,6 +74,8 @@ export default async function WorkoutSessionPage({ params }: Props) {
     discipline: pe.exercise.discipline,
     sets: pe.programSets,
     stepSummary: steps?.summaries.get(pe.id) ?? null,
+    // A ride (docs/plans/bike-ride-logger.md): the ring opens the bike exercise.
+    opensExercise: endurance && pe.exercise.discipline === "bike" && pe.programSets.some((s) => s.stepKind != null),
   }));
 
   return (

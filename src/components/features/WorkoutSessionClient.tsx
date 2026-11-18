@@ -31,6 +31,8 @@ type Exercise = {
   discipline?: Discipline | null;
   /** A structured endurance exercise's steps in one line (docs/plans/one-program-model.md). */
   stepSummary?: string | null;
+  /** A ride's bike exercise: the ring opens it (docs/plans/bike-ride-logger.md). */
+  opensExercise?: boolean;
 };
 
 type LastSession = {

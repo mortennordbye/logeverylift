@@ -245,6 +245,13 @@ export function RideMode({
   useEffect(() => {
     if (!ready || !ended || queued > 0 || !online || undoPending || wrapped.current) return;
     wrapped.current = true;
+    // The workout list reads the ridden steps, and the sets the ride never runs
+    // (the server logs them as not done), as handled.
+    if (workoutSession?.sessionId === initial.ride.sessionId) {
+      const inPlan = new Set(plan.steps.map((p) => p.programSetId));
+      for (const r of timeline.steps) workoutSession.addCompletedSet(r.programSetId);
+      for (const id of Object.keys(setNumbers).map(Number)) if (!inPlan.has(id)) workoutSession.addCompletedSet(id);
+    }
     void (async () => {
       if (onlyExercise && !sessionCompleted) {
         const payload = { sessionId: initial.ride.sessionId, endTime: new Date(timeline.endedAt ?? Date.now()).toISOString() };
@@ -256,7 +263,7 @@ export function RideMode({
       router.replace(`${pathname}?results=1`);
       router.refresh();
     })();
-  }, [ready, ended, queued, online, undoPending, onlyExercise, sessionCompleted, initial.ride.sessionId, timeline.endedAt, enqueue, workoutSession, router, pathname]);
+  }, [ready, ended, queued, online, undoPending, onlyExercise, sessionCompleted, initial.ride.sessionId, timeline.endedAt, timeline.steps, plan.steps, setNumbers, enqueue, workoutSession, router, pathname]);
 
   if (!ready) return <div data-ride-mode className="fixed inset-0 z-50 bg-background" aria-busy="true" />;
 

@@ -1,4 +1,5 @@
 import {
+  handUnlogs,
   fieldText,
   parseField,
   parseStepTime,
@@ -87,6 +88,23 @@ describe("parsing typed numbers", () => {
     expect(parseField("distanceMeters", "1", mi)).toBe(1609);
     expect(fieldText("avgSpeed", 1609.344 / 3600, mi)).toBe("1");
   });
+  it("step times: 1-2 digits are minutes, 3-4 digits are mmss, a dot or comma is a colon", () => {
+    expect(parseStepTime("1530")).toBe(930);
+    expect(parseStepTime("930")).toBe(570);
+    expect(parseStepTime("5")).toBe(300);
+    expect(parseStepTime("15.30")).toBe(930);
+    expect(parseStepTime("15,30")).toBe(930);
+    expect(parseStepTime("12345")).toBeUndefined();
+    expect(parseStepTime("1575")).toBeUndefined();
+  });
+
+  it("step times: at most 4 x the planned time or 10 h, whichever is more", () => {
+    expect(parseStepTime("10:00:00", 900)).toBe(36000);
+    expect(parseStepTime("10:00:01", 900)).toBeUndefined();
+    expect(parseStepTime("11:00:00", 3 * 3600)).toBe(39600);
+    expect(parseStepTime("13:00:00", null)).toBeUndefined();
+  });
+
   it("step times: mm:ss, h:mm:ss or minutes", () => {
     expect(parseStepTime("14:30")).toBe(870);
     expect(parseStepTime("1:05:00")).toBe(3900);
@@ -120,6 +138,25 @@ describe("resultPayloads", () => {
     const out = resultPayloads(resultSteps(plan(), filled()), {}, null, ctx, false);
     expect(out).toHaveLength(5);
     expect(out.every((p) => p.rpe === null)).toBe(true);
+  });
+
+  it("a value typed back as it shows (speed at one decimal) is no change", () => {
+    const logs = filled();
+    logs[1] = log({ avgPower: 124, rpe: 6, avgSpeed: 8.3 });
+    expect(fieldText("avgSpeed", 8.3)).toBe("29.9");
+    expect(resultPayloads(resultSteps(plan("outdoor"), logs), { 1: { avgSpeed: "29.9" } }, 6, ctx, false)).toEqual([]);
+  });
+
+  it("by hand: a cleared time un-logs a logged step; it is not saved", () => {
+    const logs = { 1: log(), 2: log() };
+    const steps = resultSteps(plan(), logs);
+    expect(handUnlogs(steps, { 1: { time: "" }, 3: { time: "" }, 2: { time: "10:00" } })).toEqual([1]);
+    expect(resultPayloads(steps, { 1: { time: "" } }, null, ctx, true).map((p) => p.programSetId)).not.toContain(1);
+  });
+
+  it("by hand: 1530 is 15:30", () => {
+    const out = resultPayloads(resultSteps(plan(), {}), { 1: { time: "1530" } }, null, ctx, true);
+    expect(out[0]).toMatchObject({ programSetId: 1, durationSeconds: 930 });
   });
 
   it("an unchanged table sends nothing", () => {
@@ -191,6 +228,12 @@ describe("rideSummary", () => {
     expect(s.planOnly).toBe(true);
     expect(s.noLoad).toBe(true);
     expect(s.tiles.map((t) => t.label)).toEqual(["Time"]);
+  });
+
+  it("a load that rounds to 0 shows no Load tile", () => {
+    const s = rideSummary(plan(), { 1: log({ durationSeconds: 8, avgPower: 128, rpe: 6 }) });
+    expect(s.numbers.load?.value).toBeLessThan(0.5);
+    expect(s.tiles.map((t) => t.label)).not.toContain("Load");
   });
 
   it("effort but no power: the effort load, marked est.", () => {

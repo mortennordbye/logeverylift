@@ -80,6 +80,7 @@ export default async function WorkoutExerciseSetsPage({ params, searchParams }: 
             mode={byHand.plan.mode}
             setNumbers={setNumbers}
             sessionId={byHand.sessionId}
+            sessionStart={byHand.sessionStart}
             hand
             garminWaiting={false}
             laterHref={doneHref}

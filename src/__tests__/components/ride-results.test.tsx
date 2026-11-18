@@ -15,9 +15,12 @@ const refresh = vi.fn();
 const push = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ replace, refresh, push }), usePathname: () => "/programs/1/workout/exercises/2" }));
 vi.mock("@/components/ui/BackLink", () => ({ BackLink: () => <span>Workout</span> }));
-vi.mock("@/contexts/workout-session-context", () => ({ useWorkoutSession: () => ({ sessionId: 9 }) }));
+const setActiveWorkout = vi.fn();
+let phoneSession: { sessionId: number | null; programId: number } = { sessionId: 9, programId: 1 };
+vi.mock("@/contexts/workout-session-context", () => ({ useWorkoutSession: () => ({ ...phoneSession, setActiveWorkout }) }));
 const logWithRetry = vi.fn();
-vi.mock("@/contexts/pending-queue-context", () => ({ useWorkoutSetWriter: () => ({ logWithRetry }) }));
+const unlogWithRetry = vi.fn();
+vi.mock("@/contexts/pending-queue-context", () => ({ useWorkoutSetWriter: () => ({ logWithRetry, unlogWithRetry }) }));
 
 const parsed = parseWorkout({
   v: 2,
@@ -69,6 +72,7 @@ function results(mode: "indoor" | "outdoor", logs: Record<number, StepLog>, extr
 
 beforeEach(() => {
   vi.clearAllMocks();
+  phoneSession = { sessionId: 9, programId: 1 };
   logWithRetry.mockResolvedValue({ success: true, data: {} });
 });
 
@@ -137,6 +141,35 @@ describe("RideResults", () => {
     unmount();
     results("indoor", { 1: log() });
     expect(screen.queryByTestId("garmin-waiting")).toBeNull();
+  });
+
+  it("by hand: the time field says Minutes when empty and marks a time it cannot read or that is too long", () => {
+    results("indoor", {}, { hand: true, sessionId: null });
+    const t = screen.getByLabelText("Time step 1") as HTMLInputElement;
+    expect(t.placeholder).toBe("Minutes");
+    fireEvent.change(t, { target: { value: "1530" } });
+    expect(t.getAttribute("aria-invalid")).toBe("false");
+    fireEvent.change(t, { target: { value: "11:00:00" } });
+    expect(t.getAttribute("aria-invalid")).toBe("true");
+    expect((screen.getByRole("button", { name: "Done" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("by hand: a cleared time un-logs that step through the queue", async () => {
+    results("indoor", { 1: log(), 2: log() }, { hand: true, sessionId: 9 });
+    fireEvent.change(screen.getByLabelText("Time step 1"), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    await waitFor(() => expect(push).toHaveBeenCalled());
+    expect(unlogWithRetry).toHaveBeenCalledWith({ sessionId: 9, exerciseId: 3, setNumber: 1, programSetId: 1 });
+    expect(logWithRetry.mock.calls.map((c) => c[0].programSetId)).not.toContain(1);
+  });
+
+  it("by hand: writes to the session the table read, and points the phone at it", async () => {
+    results("indoor", { 1: log() }, { hand: true, sessionId: 12, sessionStart: "2026-11-17T10:00:00.000Z" });
+    fireEvent.change(screen.getByLabelText("Avg W step 1"), { target: { value: "120" } });
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    await waitFor(() => expect(push).toHaveBeenCalled());
+    expect(logWithRetry.mock.calls.every((c) => c[0].sessionId === 12)).toBe(true);
+    expect(setActiveWorkout).toHaveBeenCalledWith(1, "2026-11-17T10:00:00.000Z", 12);
   });
 
   it("by hand: times start at the plan, are typed, and Done goes back to the workout with the phone's session", async () => {

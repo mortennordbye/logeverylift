@@ -20,6 +20,7 @@ import {
   badField,
   fieldLabel,
   fieldText,
+  handUnlogs,
   moreNumbersText,
   parseStepTime,
   resultFields,
@@ -46,6 +47,7 @@ export function RideResults({
   mode,
   setNumbers,
   sessionId: serverSessionId,
+  sessionStart = null,
   hand,
   garminWaiting,
   laterHref,
@@ -56,8 +58,10 @@ export function RideResults({
   steps: ResultStep[];
   mode: RideMode;
   setNumbers: Record<number, number>;
-  /** The ride's workout session; by hand, the open workout the server found (the phone's own wins). */
+  /** The ride's workout session; by hand, the open workout the table read (else the phone's). */
   sessionId: number | null;
+  /** By hand: when that workout started, to point the phone's active workout at it. */
+  sessionStart?: string | null;
   hand: boolean;
   garminWaiting: boolean;
   /** Where "Later" goes. */
@@ -67,7 +71,7 @@ export function RideResults({
   const router = useRouter();
   const pathname = usePathname();
   const workoutSession = useWorkoutSession();
-  const { logWithRetry } = useWorkoutSetWriter();
+  const { logWithRetry, unlogWithRetry } = useWorkoutSetWriter();
   const fields = resultFields(mode);
   const [edits, setEdits] = useState<ResultEdits>({});
   const [more, setMore] = useState(false);
@@ -89,20 +93,26 @@ export function RideResults({
   const open = (s: ResultStep) => hand || (!!s.log && s.log.status !== "skipped" && (s.log.durationSeconds ?? 0) > 0);
   const bad = steps.some((s) => {
     const e = edits[s.programSetId] ?? {};
-    return [...fields.main, ...fields.more].some((f) => badField(f, e[f], units)) || (e.time !== undefined && parseStepTime(e.time) === undefined);
+    return [...fields.main, ...fields.more].some((f) => badField(f, e[f], units)) || (e.time !== undefined && parseStepTime(e.time, s.plannedSeconds) === undefined);
   });
 
   async function done() {
     if (saving || bad) return;
-    const sessionId = (hand ? workoutSession?.sessionId : null) ?? serverSessionId;
+    // The session the table read; by hand with none open on the server, the phone's.
+    const sessionId = serverSessionId ?? (hand ? workoutSession?.sessionId : null) ?? null;
     if (sessionId == null) {
       setError("The workout is still starting. Try again in a moment.");
       return;
     }
     setSaving(true);
     setError(null);
+    // By hand the phone follows the workout the rows go to.
+    if (hand && serverSessionId != null && sessionStart && workoutSession && workoutSession.sessionId !== serverSessionId) {
+      workoutSession.setActiveWorkout(programId, sessionStart, serverSessionId);
+    }
     const payloads = resultPayloads(steps, edits, effort, { sessionId, exerciseId, setNumbers, units }, hand);
     // In order, one at a time: a failed write goes to the offline queue and is sent later.
+    if (hand) for (const id of handUnlogs(steps, edits)) await unlogWithRetry({ sessionId, exerciseId, setNumber: setNumbers[id] ?? 1, programSetId: id });
     for (const p of payloads) await logWithRetry(p);
     if (hand) router.push(`/programs/${programId}/workout`);
     else {
@@ -173,10 +183,10 @@ export function RideResults({
                       <input
                         inputMode="numeric"
                         value={value(s, "time")}
-                        placeholder="mm:ss"
+                        placeholder="Minutes"
                         onChange={(e) => edit(s.programSetId, "time", e.target.value)}
                         aria-label={`Time step ${s.n}`}
-                        aria-invalid={edits[s.programSetId]?.time !== undefined && parseStepTime(edits[s.programSetId]!.time!) === undefined}
+                        aria-invalid={edits[s.programSetId]?.time !== undefined && parseStepTime(edits[s.programSetId]!.time!, s.plannedSeconds) === undefined}
                         className={`${FIELD} mt-1 w-20`}
                         data-testid={`result-time-${s.n}`}
                       />

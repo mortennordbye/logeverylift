@@ -246,7 +246,7 @@ export async function handResultsView(
   name: string,
   sets: (StepRow & { id: number })[],
   mode: RideMode,
-): Promise<{ plan: RidePlan; logs: Record<number, StepLog>; sessionId: number | null } | null> {
+): Promise<{ plan: RidePlan; logs: Record<number, StepLog>; sessionId: number | null; sessionStart: string | null } | null> {
   const rows = sets.filter((s) => s.stepKind != null).sort((a, b) => a.setNumber - b.setNumber || a.id - b.id);
   if (!rows.length) return null;
   const built = buildWorkout(rows, { sport: "bike", name });
@@ -254,7 +254,7 @@ export async function handResultsView(
   if (!tree?.ok) return null;
   const plan = buildRidePlan(tree.workout, rows.map((r) => r.id), await thresholdValues(userId), mode);
   const [open] = await db
-    .select({ id: workoutSessions.id })
+    .select({ id: workoutSessions.id, startTime: workoutSessions.startTime })
     .from(workoutSessions)
     .where(
       and(
@@ -267,5 +267,5 @@ export async function handResultsView(
     .orderBy(desc(workoutSessions.startTime))
     .limit(1);
   const logs = open ? await stepLogs(userId, open.id, plan.steps.map((s) => s.programSetId)) : {};
-  return { plan, logs, sessionId: open?.id ?? null };
+  return { plan, logs, sessionId: open?.id ?? null, sessionStart: open?.startTime.toISOString() ?? null };
 }

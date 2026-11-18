@@ -37,6 +37,8 @@ type Exercise = {
   discipline?: Discipline | null;
   /** A structured endurance exercise's steps in one line (docs/plans/one-program-model.md). */
   stepSummary?: string | null;
+  /** A ride's bike exercise (docs/plans/bike-ride-logger.md): the ring opens it, it never logs sets in bulk. */
+  opensExercise?: boolean;
 };
 
 type Props = {
@@ -96,7 +98,8 @@ export function WorkoutExerciseList({
   }
 
   async function toggleExercise(exercise: Exercise) {
-    if (!workoutSession) return;
+    // A ride's steps are logged in the bike exercise, never in bulk.
+    if (!workoutSession || exercise.opensExercise) return;
     if (isExerciseCompleted(exercise)) {
       const { sessionId } = workoutSession;
       exercise.sets.forEach((s) => workoutSession.removeCompletedSet(s.id));
@@ -110,6 +113,7 @@ export function WorkoutExerciseList({
               exerciseId: exercise.exerciseId,
               setNumber: exercise.sets.indexOf(s) + 1,
               programSetId: s.id,
+              bulk: true,
             }),
           ),
         );
@@ -149,6 +153,7 @@ export function WorkoutExerciseList({
               setNumber: exercise.sets.indexOf(s) + 1,
               programSetId: s.id,
               ...buildSetLog(s, ov, { restTimeSeconds: s.restTimeSeconds ?? 0 }),
+              bulk: true,
             });
           }),
         );
@@ -297,6 +302,14 @@ function SortableExerciseRow({
 
       {isEditing ? (
         <div className="w-7 h-7 rounded-full border-2 border-muted-foreground/30 shrink-0" />
+      ) : exercise.opensExercise ? (
+        <Link
+          href={`/programs/${programId}/workout/exercises/${exercise.id}`}
+          aria-label={`Open ${exercise.name}`}
+          className={`tap-slop w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${completionCircleClass(isCompleted, isPartial)}`}
+        >
+          <CompletionCircle isCompleted={isCompleted} isPartial={isPartial} />
+        </Link>
       ) : exercise.isRunning ? (
         // Running exercises: non-interactive circle — must log per-set via LogRunModal
         <div
