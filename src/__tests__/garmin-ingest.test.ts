@@ -49,6 +49,10 @@ describe("parseFit", () => {
     expect(parsed.session?.garminVo2Max).toBeNull();
   });
 
+  it("keeps the first record's time: stream time 0, for splitting a ride on the wall clock", () => {
+    expect(parsed.session?.firstRecordTime).toBe("2026-11-04T06:00:00.000Z");
+  });
+
   it("refuses a file that isn't FIT", () => {
     expect(() => parseFit(Buffer.from("definitely not a fit file"))).toThrow();
   });

@@ -20,6 +20,7 @@ import { thresholdValues } from "@/lib/session-compliance";
 import { userToday } from "@/lib/user-settings";
 import { toDateStr } from "@/lib/utils/cycle-position";
 import { addDaysStr } from "@/lib/utils/seasons";
+import { doneRideNumbers } from "@/lib/utils/ride-numbers";
 import { loadAnchors } from "@/lib/utils/step-results";
 import { appPmc, loadSource, sessionLoad, weightedRpe, type AppSessionLoad, type EnduranceSport, type LoadMethod } from "@/lib/utils/training-load";
 import { and, asc, eq, gte, inArray, lte, sql } from "drizzle-orm";
@@ -62,6 +63,7 @@ export async function appSessionLoads(userId: string, from: string | null, to: s
       rpe: workoutSets.rpe,
       plannedStep: workoutSets.plannedStep,
       stepStatus: workoutSets.stepStatus,
+      avgPower: workoutSets.avgPower,
     })
     .from(workoutSessions)
     .innerJoin(workoutSets, eq(workoutSets.sessionId, workoutSessions.id))
@@ -103,6 +105,14 @@ export async function appSessionLoads(userId: string, from: string | null, to: s
       enduranceSeconds += seconds;
       const incline = Math.max(0, ...g.map((s) => s.inclinePercent ?? 0));
       const rpe = weightedRpe(g);
+      // A ride's steps with power on 90% of the time and an FTP: the estimated
+      // power load (docs/plans/bike-ride-logger.md, 4.6). The FTP is the one
+      // the steps were planned with.
+      const power = sport === "bike" ? ridePowerLoad(g, anchors.ftp ?? null) : null;
+      if (power !== null) {
+        out.push({ id, date: first.date, sport: "bike", load: power, method: "bike_power", durationS: seconds });
+        continue;
+      }
       // "other" (cardio with no discipline) can only use session RPE.
       const l = sessionLoad(
         { sport: (ENDURANCE.includes(sport) ? sport : "bike") as EnduranceSport, seconds, meters, inclinePercent: incline, rpe, movingSeconds: sport === "swim" ? (moving.get(id) ?? null) : null },
@@ -119,6 +129,21 @@ export async function appSessionLoads(userId: string, from: string | null, to: s
     }
   }
   return out;
+}
+
+/** The estimated power load of a ride's logged steps, or null when the 4.6 power rule does not apply. */
+function ridePowerLoad(
+  sets: { plannedStep: unknown; stepStatus: string | null; durationSeconds: number | null; avgPower: number | null }[],
+  currentFtp: number | null,
+): number | null {
+  const steps = sets.filter((s) => s.plannedStep != null && s.stepStatus !== "skipped" && s.stepStatus !== "not_done");
+  if (!steps.length || !steps.some((s) => s.avgPower !== null)) return null;
+  const planned = (steps[0].plannedStep as { thresholds?: { ftp?: number } }).thresholds?.ftp;
+  const n = doneRideNumbers(
+    steps.map((s) => ({ seconds: s.durationSeconds ?? 0, avgPower: s.avgPower })),
+    { ftp: planned ?? currentFtp, rpe: null },
+  );
+  return n.load?.method === "power" ? n.load.value : null;
 }
 
 export type LoadDayView = { date: string; calibrating: boolean; tracks: Record<Track, PmcPoint> };

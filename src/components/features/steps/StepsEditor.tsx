@@ -11,14 +11,17 @@ import { BackLink } from "@/components/ui/BackLink";
 import { PlanSheetPanel } from "@/components/features/PlanSheetPanel";
 import { saveExerciseSteps } from "@/lib/actions/program-steps";
 import { formatSessionLength, loadText } from "@/lib/utils/format";
+import { TEST_NAME, ftpTestWorkout } from "@/lib/utils/ftp-tests";
 import { callAction } from "@/lib/utils/stale-bundle";
 import { workoutPlannedLoad } from "@/lib/utils/step-results";
 import type { Units } from "@/lib/utils/units";
 import {
   SWIM_EQUIPMENT,
   SWIM_STROKES,
+  RIDE_TESTS,
   estimateWorkout,
   parseWorkout,
+  resolveStepTarget,
   resolveTarget,
   type ThresholdValues,
   type Workout,
@@ -38,6 +41,11 @@ type At = { node: number; inner: number | null };
 
 const KIND_WORD: Record<Kind, string> = { warmup: "Warm-up", work: "Work", recovery: "Easy", cooldown: "Cool-down", rest: "Rest" };
 const KINDS: Kind[] = ["warmup", "work", "recovery", "cooldown", "rest"];
+/** The FTP tests in a line each (docs/plans/bike-ride-logger.md, 4.9). */
+const TEST_TEXT: Record<(typeof RIDE_TESTS)[number], string> = {
+  ramp: "10 min warm-up, then 1 min steps up by 20 W until you cannot hold them · FTP is 75% of your best minute",
+  "20min": "20 min warm-up with two hard efforts, 5 min easy, 20 min all-out, 10 min cool-down · FTP is 95% of the 20 min",
+};
 /** Pool lengths; open water has none. 25 yd is 22.86 m. */
 const POOLS: { label: string; meters: number | undefined }[] = [
   { label: "25 m pool", meters: 25 },
@@ -157,6 +165,7 @@ export function StepsEditor({
   const [workout, setWorkout] = useState<Workout>(initial);
   const [dirty, setDirty] = useState(unsaved);
   const [editing, setEditing] = useState<At | null>(null);
+  const [testSheet, setTestSheet] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const sport = workout.sport;
@@ -297,6 +306,11 @@ export function StepsEditor({
         <button type="button" onClick={addBlock} className="min-h-11 rounded-2xl border border-border px-3 text-sm font-medium active:opacity-70">
           Add repeat block
         </button>
+        {sport === "bike" && (
+          <button type="button" onClick={() => setTestSheet(true)} className="col-span-2 min-h-11 rounded-2xl border border-border px-3 text-sm font-medium active:opacity-70">
+            Insert FTP test
+          </button>
+        )}
       </div>
 
       <div className="mt-auto px-4 pt-4 pb-6 flex flex-col gap-2">
@@ -314,6 +328,25 @@ export function StepsEditor({
           {saving ? "Saving" : dirty ? "Save steps" : "Saved"}
         </button>
       </div>
+
+      <BottomSheet open={testSheet} onClose={() => setTestSheet(false)}>
+        <PlanSheetPanel label="Insert FTP test" title="Insert FTP test" sub={<p className="text-sm text-muted-foreground">The test takes the place of these steps. Nothing changes until you save.</p>} testId="ftp-test-sheet">
+          {RIDE_TESTS.map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => {
+                change(ftpTestWorkout(t, workout.name));
+                setTestSheet(false);
+              }}
+              className="min-h-12 rounded-2xl bg-widget-2 px-4 py-2.5 text-left active:opacity-70"
+            >
+              <span className="block text-base font-semibold">{TEST_NAME[t]}</span>
+              <span className="block text-xs text-muted-foreground">{TEST_TEXT[t]}</span>
+            </button>
+          ))}
+        </PlanSheetPanel>
+      </BottomSheet>
 
       <BottomSheet open={editingStep != null} onClose={() => setEditing(null)}>
         {editing && editingStep && (
@@ -354,7 +387,7 @@ function endText(step: WorkoutStep, sport: Sport, units: Units): string {
 }
 
 function targetText(step: WorkoutStep, sport: Sport, thresholds: ThresholdValues, units: Units): string | null {
-  const parts = [step.target, step.target2].filter((t): t is WorkoutTarget => !!t).map((t) => resolveTarget(t, sport, thresholds, units).text);
+  const parts = [resolveStepTarget(step, sport, thresholds, units)?.text, step.target2 && resolveTarget(step.target2, sport, thresholds, units).text].filter((t): t is string => !!t);
   return parts.length ? parts.join(" · ") : null;
 }
 
@@ -444,15 +477,16 @@ function StepSheet({
   onDelete: () => void;
 }) {
   const [s, setS] = useState<WorkoutStep>(step);
-  const choice = choiceOf(s.target);
+  // A ramp or a free spin (written by the assistant) is none of the choices.
+  const choice = s.ramp || s.free ? null : choiceOf(s.target);
   const yards = sport === "swim" && units.swim === "yd";
   const miles = sport !== "swim" && units.distance === "mi";
   const distUnit = sport === "swim" ? (yards ? "yd" : "m") : miles ? "mi" : "km";
   const toMeters = (v: number) => (sport === "swim" ? (yards ? v * 0.9144 : v) : miles ? v * 1609.344 : v * 1000);
   const fromMeters = (m: number) => (sport === "swim" ? (yards ? Math.round(m / 0.9144) : Math.round(m)) : miles ? +(m / 1609.344).toFixed(2) : +(m / 1000).toFixed(2));
   const set = (patch: Partial<WorkoutStep>) => setS((x) => ({ ...x, ...patch }));
-  const target = s.target ? resolveTarget(s.target, sport, thresholds, units) : null;
-  const one = parseWorkout({ v: 1, sport, name: "Step", steps: inBlock ? [{ type: "repeat", count: 2, steps: [s] }] : [s] });
+  const target = resolveStepTarget(s, sport, thresholds, units);
+  const one = parseWorkout({ v: 2, sport, name: "Step", steps: inBlock ? [{ type: "repeat", count: 2, steps: [s] }] : [s] });
   const problem = one.ok ? null : plainProblem(one.errors[0]);
 
   return (
@@ -519,7 +553,7 @@ function StepSheet({
         <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Target</h3>
         <div className="flex flex-wrap gap-2">
           {CHOICES[sport].map((c) => (
-            <button key={c.id} type="button" aria-pressed={choice === c.id} onClick={() => set({ target: defaultTarget(c.id), ...(c.id === "none" && { target2: undefined }) })} className={chip(choice === c.id)}>
+            <button key={c.id} type="button" aria-pressed={choice === c.id} onClick={() => set({ target: defaultTarget(c.id), ramp: undefined, free: undefined, ...(c.id === "none" && { target2: undefined }) })} className={chip(choice === c.id)}>
               {c.label}
             </button>
           ))}

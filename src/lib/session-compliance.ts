@@ -164,6 +164,7 @@ async function completedWithDisciplines(userId: string, from: string, to: string
       plannedSessionId: workoutSessions.plannedSessionId,
       readiness: workoutSessions.readiness,
       source: workoutSessions.source,
+      endedEarly: workoutSessions.endedEarly,
     })
     .from(workoutSessions)
     .where(
@@ -312,10 +313,15 @@ export async function sessionCompliance(userId: string, from: string, to: string
     views.map((v) => ({ id: v.row.id, date: v.row.date!, sport: v.sport, hard: v.hard, plannedDurationS: v.planned.durationSeconds, stored: v.row.priority })),
   );
 
+  // A ride ended early does not make a key session done (docs/plans/bike-ride-logger.md, 4.3).
+  const endedEarly = new Set(completed.filter((c) => c.endedEarly).map((c) => c.id));
   return views.map((v) => {
     const r = v.row;
-    const linkedId = linkedTo.get(r.id) ?? null;
-    const m = match.get(r.id);
+    const key = priorities.get(r.id) === "key";
+    const counts = (id: number | null | undefined) => (id != null && key && endedEarly.has(id) ? null : (id ?? null));
+    const linkedId = counts(linkedTo.get(r.id));
+    const appMatch = match.get(r.id);
+    const m = appMatch && counts(appMatch.sessionId) != null ? appMatch : undefined;
     const gId = garminMatch.get(r.id);
     const { state, matchedBy } = sessionState({
       date: r.date!,

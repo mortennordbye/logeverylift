@@ -22,7 +22,7 @@ export async function insertStepProgram(db: ReturnType<typeof testDb>, userId: s
   const [program] = await db.insert(programs).values({ userId, name: w.name }).returning({ id: programs.id });
   const [pe] = await db
     .insert(programExercises)
-    .values({ programId: program.id, exerciseId: ex.id, orderIndex: 0, progressionAdvance: "manual", poolLengthM: w.poolLengthM ?? null })
+    .values({ programId: program.id, exerciseId: ex.id, orderIndex: 0, progressionAdvance: "manual", poolLengthM: w.poolLengthM ?? null, rideTest: w.test ?? null })
     .returning({ id: programExercises.id });
   await db.insert(programSets).values(workoutToRows(w).map((r) => ({ ...r, programExerciseId: pe.id, restTimeSeconds: 0 })));
   return program.id;

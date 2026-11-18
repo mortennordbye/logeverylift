@@ -58,9 +58,13 @@ export function flattenWorkout(w: PlayableWorkout): PlayStep[] {
   return out;
 }
 
-/** A short, stable hash of the workout JSON (FNV-1a), to tell a changed workout from the one a run started with. */
+/**
+ * A short, stable hash of the workout JSON (FNV-1a), to tell a changed
+ * workout from the one a run started with. The schema version `v` is left
+ * out: a new version of the same steps is the same workout.
+ */
 export function workoutHash(w: unknown): string {
-  const text = JSON.stringify(w);
+  const text = JSON.stringify(w, (k, val) => (k === "v" ? undefined : val));
   let h = 0x811c9dc5;
   for (let i = 0; i < text.length; i++) {
     h ^= text.charCodeAt(i);

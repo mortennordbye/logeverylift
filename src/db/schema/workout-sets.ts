@@ -53,6 +53,14 @@ import { workoutSessions } from "./workout-sessions";
 /** How a logged endurance step went (docs/plans/one-program-model.md, 1.2). */
 export const STEP_STATUS_VALUES = ["done", "partial", "skipped", "not_done"] as const;
 
+/**
+ * Who wrote a result field (docs/plans/bike-ride-logger.md, 4.5). "assistant"
+ * is an MCP log_step_results write (step 5): it fills empty, clock or
+ * assistant values and never replaces typed or Garmin ones.
+ */
+export const RESULT_SOURCES = ["typed", "clock", "garmin", "assistant"] as const;
+export type ResultSource = (typeof RESULT_SOURCES)[number];
+
 export const workoutSets = pgTable("workout_sets", {
   id: serial("id").primaryKey(),
   sessionId: integer("session_id")
@@ -131,6 +139,17 @@ export const workoutSets = pgTable("workout_sets", {
   // The measured value of the main target's metric (average W, bpm, m/s, rpm or RPE).
   measuredValue: real("measured_value"),
   avgHr: integer("avg_hr"),
+  // Bike ride results per step (docs/plans/bike-ride-logger.md, 4.1 and 4.5).
+  avgPower: integer("avg_power"),
+  maxHr: integer("max_hr"),
+  avgCadence: integer("avg_cadence"),
+  // m/s, as pace is stored.
+  avgSpeed: real("avg_speed"),
+  climbM: integer("climb_m"),
+  // Watts the rider moved the target by in ride mode (±50 at most).
+  targetOffsetW: integer("target_offset_w"),
+  // Where each result field came from: { avgPower: "garmin", durationSeconds: "clock", ... }.
+  sources: jsonb("sources").$type<Partial<Record<string, ResultSource>>>(),
   // The step as planned when it was logged: kind, end, targets and the
   // threshold values used, so a later edit, the weekly sync or a retest does
   // not change what this session was asked to do.

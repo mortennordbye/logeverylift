@@ -216,6 +216,9 @@ const SET_FIELDS: Record<string, string> = {
   equipment: "equipment",
   sendOffSeconds: "send-off",
   note: "step note",
+  ramp: "ramp",
+  free: "free spin",
+  outdoorTarget: "outdoor target",
 };
 
 const UNITS: Record<string, string> = {
@@ -256,6 +259,7 @@ const EXERCISE_FIELDS: Record<string, string> = {
   exerciseType: "exercise type",
   weightStack: "weight stack",
   poolLengthM: "pool length",
+  rideTest: "FTP test",
 };
 
 /** A Plan field on the history page: its label, and how a value reads (plain text when absent). */
@@ -377,7 +381,7 @@ function fieldLines(prefix: string, labels: Record<string, string>, before: Row,
   const out: string[] = [];
   for (const [field, label] of Object.entries(labels)) {
     if (sameValue(before[field], after[field])) continue;
-    if (field === "notes" || field === "endMessage" || field === "targets" || field === "equipment" || field === "note") {
+    if (field === "notes" || field === "endMessage" || field === "targets" || field === "equipment" || field === "note" || field === "ramp" || field === "outdoorTarget") {
       out.push(`${prefix}${label} changed`);
       continue;
     }
@@ -653,6 +657,8 @@ export function syncOwnedSetFields(set: Row): string[] {
     // old zone field (docs/plans/one-program-model.md, decision 4).
     const targets = set.stepKind != null && Array.isArray(set.targets) ? (set.targets as { zone?: number }[]) : null;
     if (targets?.length) out.push(...(targets[0].zone !== undefined ? ["targets"] : []), "restTimeSeconds");
+    // A ramp or a free spin keeps its target (docs/plans/bike-ride-logger.md, step 0).
+    else if (set.stepKind != null && (set.ramp != null || set.free === true)) out.push("restTimeSeconds");
     else out.push("targetHeartRateZone", "restTimeSeconds");
   }
   return out;
@@ -701,7 +707,13 @@ export function restoredSetValues(
   const values: Record<string, unknown> = { ...targetSet };
   delete values.id;
   if (!currentSet) return values;
-  for (const field of syncOwnedSetFields(targetSet)) values[field] = currentSet[field];
+  // A restore across the bike move (docs/plans/bike-ride-logger.md, step 1)
+  // turns a step back into a plain set: the current row holds the sync's zone
+  // and rest in the other shape, so only the scaled end is kept.
+  const sameShape = (targetSet.stepKind == null) === (currentSet.stepKind == null);
+  for (const field of syncOwnedSetFields(targetSet)) {
+    if (sameShape || field === "distanceMeters" || field === "durationSeconds") values[field] = currentSet[field];
+  }
   const syncOwned = new Set(syncOwnedSetFields(targetSet));
   for (const field of PROGRESSION_FIELDS) {
     if (syncOwned.has(field)) continue;

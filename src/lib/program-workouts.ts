@@ -33,6 +33,7 @@ export async function programWorkouts(ex: Executor, programIds: number[]): Promi
       programExerciseId: programExercises.id,
       orderIndex: programExercises.orderIndex,
       poolLengthM: programExercises.poolLengthM,
+      rideTest: programExercises.rideTest,
       notes: programExercises.notes,
       discipline: exercises.discipline,
       set: programSets,
@@ -51,7 +52,7 @@ export async function programWorkouts(ex: Executor, programIds: number[]): Promi
     if (first.discipline == null) continue;
     const built = buildWorkout(
       list.map((r) => r.set as StepRow),
-      { sport: first.discipline, name: first.programName, poolLengthM: first.poolLengthM, description: first.notes },
+      { sport: first.discipline, name: first.programName, poolLengthM: first.poolLengthM, description: first.notes, test: first.rideTest },
     );
     const parsed = "workout" in built ? parseWorkout(built.workout) : null;
     if (!parsed?.ok) {

@@ -35,4 +35,12 @@ describe("unsyncedChangeCount", () => {
     localStorage.setItem("pendingMutationQueue", '[{"id":1},{"id":2}]');
     expect(unsyncedChangeCount()).toBe(2);
   });
+
+  it("counts ride mode taps not yet sent too", () => {
+    localStorage.setItem("pendingMutationQueue", '[{"id":1}]');
+    localStorage.setItem("rideEventQueue", '{"5":[{"clientId":"a"},{"clientId":"b"}],"6":[{"clientId":"c"}]}');
+    expect(unsyncedChangeCount()).toBe(4);
+    localStorage.setItem("rideEventQueue", "not json");
+    expect(unsyncedChangeCount()).toBe(1);
+  });
 });

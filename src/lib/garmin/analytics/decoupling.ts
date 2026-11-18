@@ -59,6 +59,13 @@ export function runClimbPerKm(input: { altitude?: Series; distance?: Series; ele
   const alt = input.altitude ? nonNull(input.altitude) : [];
   const dist = input.distance ? nonNull(input.distance) : [];
   if (alt.length < 2 || dist.length < 2) return null;
+  const climb = climbMeters(alt);
+  const km = (dist.at(-1)! - dist[0]) / 1000;
+  return km > 0 ? climb / km : null;
+}
+
+/** Metres climbed in an altitude series, with the deadband, so sensor noise doesn't add up to hills. */
+export function climbMeters(alt: number[]): number {
   let climb = 0;
   let anchor = alt[0];
   for (const a of alt) {
@@ -69,8 +76,7 @@ export function runClimbPerKm(input: { altitude?: Series; distance?: Series; ele
       anchor = a;
     }
   }
-  const km = (dist.at(-1)! - dist[0]) / 1000;
-  return km > 0 ? climb / km : null;
+  return climb;
 }
 
 export function decoupling(input: {

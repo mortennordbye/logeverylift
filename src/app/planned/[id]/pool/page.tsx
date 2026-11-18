@@ -3,7 +3,7 @@ import { enduranceEnabledFor } from "@/lib/endurance";
 import { plannedSessionView } from "@/lib/planned-view";
 import { thresholdValues } from "@/lib/session-compliance";
 import { requireSession } from "@/lib/utils/session";
-import { describeWorkout, resolveTarget, type WorkoutStep } from "@/lib/utils/workout-steps";
+import { describeWorkout, resolveStepTarget, type WorkoutStep } from "@/lib/utils/workout-steps";
 import { notFound, redirect } from "next/navigation";
 
 const EQUIPMENT: Record<string, string> = { pull_buoy: "pull buoy", paddles: "paddles", fins: "fins", kickboard: "kickboard", snorkel: "snorkel" };
@@ -20,7 +20,7 @@ export default async function PoolPage({ params }: { params: Promise<{ id: strin
   const [v, anchors] = await Promise.all([plannedSessionView(user.id, id), thresholdValues(user.id)]);
   if (!v) notFound();
   const { workout, units } = v;
-  const target = (s: WorkoutStep) => (s.target ? resolveTarget(s.target, workout.sport, anchors, units).text : null);
+  const target = (s: WorkoutStep) => resolveStepTarget(s, workout.sport, anchors, units)?.text ?? null;
   const blocks: PoolBlock[] = workout.steps.map((n, i) => {
     const steps = n.type === "repeat" ? n.steps : [n];
     return {

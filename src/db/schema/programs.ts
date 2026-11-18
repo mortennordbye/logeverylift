@@ -157,6 +157,10 @@ export const programExercises = pgTable("program_exercises", {
   // Swim exercises: the pool length in metres (a 25 yd pool is 22.86). Null
   // for open water, other sports and strength.
   poolLengthM: real("pool_length_m"),
+  // Bike exercises: the FTP test the ride is, "ramp" or "20min" (RIDE_TESTS in
+  // src/lib/utils/workout-steps.ts; docs/plans/bike-ride-logger.md, 4.9). The
+  // step tree carries it as `test`. Null for any other ride or exercise.
+  rideTest: text("ride_test", { enum: ["ramp", "20min"] }),
   deletedAt: timestamp("deleted_at"),
 });
 
@@ -235,6 +239,13 @@ export const programSets = pgTable("program_sets", {
   sendOffSeconds: integer("send_off_seconds"),
   // A short cue shown with the step ("high elbow", "build each 25").
   note: text("note"),
+  // Bike steps (docs/plans/bike-ride-logger.md, step 0). A ramp
+  // ({anchor, from, to}) is the main target in place of `targets`; a free
+  // step has no target; the outdoor target is for an outdoor ride. Checked by
+  // the step schema in workout-steps.ts.
+  ramp: jsonb("ramp"),
+  free: boolean("free").notNull().default(false),
+  outdoorTarget: jsonb("outdoor_target"),
   // Soft delete, as on programs. A logged set keeps pointing at a deleted set.
   deletedAt: timestamp("deleted_at"),
 });

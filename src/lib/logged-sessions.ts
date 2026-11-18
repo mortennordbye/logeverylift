@@ -31,7 +31,20 @@ export type LoggedSet = {
    */
   step?: Pick<
     typeof workoutSets.$inferInsert,
-    "programExerciseId" | "programSetId" | "isCompleted" | "stepStatus" | "extendedSeconds" | "measuredValue" | "avgHr" | "plannedStep"
+    | "programExerciseId"
+    | "programSetId"
+    | "isCompleted"
+    | "stepStatus"
+    | "extendedSeconds"
+    | "measuredValue"
+    | "avgHr"
+    | "plannedStep"
+    | "avgPower"
+    | "maxHr"
+    | "avgCadence"
+    | "avgSpeed"
+    | "climbM"
+    | "sources"
   >;
 };
 

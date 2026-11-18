@@ -860,6 +860,13 @@ export async function setUserEndurance(data: unknown): Promise<ActionResult<null
       .where(eq(users.id, parsed.data.userId))
       .returning({ id: users.id });
     if (!row) return { success: false, error: "User not found" };
+    // Their plain rides become steps now, not at the next deploy (docs/plans/bike-ride-logger.md, D3).
+    if (parsed.data.enabled) {
+      const { migrateBikeSetsToSteps } = await import("@/lib/bike-sets-to-steps");
+      await migrateBikeSetsToSteps({ userId: row.id }).catch((err) =>
+        console.error("[setUserEndurance] bike steps failed", err instanceof Error ? err.message : "unknown"),
+      );
+    }
     revalidatePath("/more/admin/users");
     return { success: true, data: null };
   } catch (e) {

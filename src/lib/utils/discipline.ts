@@ -40,8 +40,12 @@ export type DisciplineConfig = {
   distanceLabels: string[];
   /** Unit the free-text distance input accepts ("m" or "km"). */
   inputUnit: "m" | "km";
-  /** Sensible default distance in meters when none is set yet. */
-  defaultDistanceM: number;
+  /**
+   * Sensible default distance in meters when none is set yet. Null for the
+   * bike: a ride indoors has no distance, and a guess showed a false speed
+   * (docs/plans/bike-ride-logger.md, D2), so the field starts empty.
+   */
+  defaultDistanceM: number | null;
   /** Which pace/speed formatter to use. */
   paceFormatter: PaceFormatter;
   /** Whether the incline picker is shown (treadmill running only). */
@@ -77,7 +81,7 @@ export const DISCIPLINE_CONFIG: Record<Discipline, DisciplineConfig> = {
     distancePresetsM: [5000, 10000, 20000, 40000, 90000, 180000],
     distanceLabels: ["5km", "10km", "20km", "40km", "90km", "180km"],
     inputUnit: "km",
-    defaultDistanceM: 40000,
+    defaultDistanceM: null,
     paceFormatter: "kmh",
     showIncline: false,
     paceBrackets: [

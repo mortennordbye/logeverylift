@@ -11,7 +11,7 @@ import { estimateWorkout, isHardWorkout, parseWorkout, type Workout } from "@/li
 const row = (setNumber: number, f: Partial<StepRow>): StepRow => ({ ...EMPTY_STEP_FIELDS, setNumber, ...f });
 
 const intervals: Workout = {
-  v: 1,
+  v: 2,
   sport: "run",
   name: "Run · Threshold",
   steps: [
@@ -50,7 +50,7 @@ describe("workoutToRows and buildWorkout", () => {
 
   it("keeps a second target, swim fields and cadence", () => {
     const swim: Workout = {
-      v: 1,
+      v: 2,
       sport: "swim",
       name: "Swim",
       poolLengthM: 25,
@@ -142,7 +142,7 @@ describe("one step list: a program reads like the same workout", () => {
     const { workoutPlannedLoad, loadAnchors } = await import("@/lib/utils/step-results");
     const thresholds = { run_threshold_pace: 4.2, ftp: 260, swim_css: 1.4 };
     const bike: Workout = {
-      v: 1,
+      v: 2,
       sport: "bike",
       name: "Sweet spot",
       steps: [
@@ -151,9 +151,9 @@ describe("one step list: a program reads like the same workout", () => {
         { type: "cooldown", end: { type: "time", seconds: 600 } },
       ],
     };
-    const steady: Workout = { v: 1, sport: "run", name: "Easy", steps: [{ type: "work", end: { type: "time", seconds: 3600 }, target: { metric: "hr", anchor: "lthr", zone: 2 } }] };
-    const tempo: Workout = { v: 1, sport: "run", name: "Tempo", steps: [{ type: "work", end: { type: "distance", meters: 8000 }, target: { metric: "pace", anchor: "threshold_pace", low: 95, high: 100 } }] };
-    const swimSet: Workout = { v: 1, sport: "swim", name: "CSS", poolLengthM: 25, steps: [{ type: "repeat", count: 8, steps: [{ type: "work", end: { type: "distance", meters: 100 }, target: { metric: "pace", anchor: "css", offsetLow: 1, offsetHigh: 3 } }, { type: "rest", end: { type: "time", seconds: 15 } }] }] };
+    const steady: Workout = { v: 2, sport: "run", name: "Easy", steps: [{ type: "work", end: { type: "time", seconds: 3600 }, target: { metric: "hr", anchor: "lthr", zone: 2 } }] };
+    const tempo: Workout = { v: 2, sport: "run", name: "Tempo", steps: [{ type: "work", end: { type: "distance", meters: 8000 }, target: { metric: "pace", anchor: "threshold_pace", low: 95, high: 100 } }] };
+    const swimSet: Workout = { v: 2, sport: "swim", name: "CSS", poolLengthM: 25, steps: [{ type: "repeat", count: 8, steps: [{ type: "work", end: { type: "distance", meters: 100 }, target: { metric: "pace", anchor: "css", offsetLow: 1, offsetHigh: 3 } }, { type: "rest", end: { type: "time", seconds: 15 } }] }] };
 
     for (const w of [intervals, bike, steady, tempo, swimSet]) {
       const sets = workoutToRows(w).map((r) => ({ ...r, discipline: w.sport, sessionRole: null, targetHeartRateZone: null }));
@@ -193,13 +193,59 @@ describe("plainSetsToWorkout", () => {
     ]);
     expect(parseWorkout(w).ok).toBe(true);
   });
+
+  it("keeps a warm-up set as a warm-up step", async () => {
+    const { plainSetsToWorkout } = await import("@/lib/utils/program-steps");
+    const w = plainSetsToWorkout([{ setNumber: 1, distanceMeters: null, durationSeconds: 600, targetHeartRateZone: 1, sessionRole: null, setType: "warmup" }], { sport: "bike", name: "Ride" });
+    expect(w.steps).toEqual([{ type: "warmup", end: { type: "time", seconds: 600 }, target: { metric: "hr", anchor: "lthr", zone: 1 } }]);
+  });
+});
+
+describe("plainSetsToStepRows (bike-ride-logger, step 1)", () => {
+  const plain = (setNumber: number, f: Partial<{ durationSeconds: number | null; distanceMeters: number | null; targetHeartRateZone: number | null; sessionRole: string | null; setType: string | null; restTimeSeconds: number }>) => ({
+    setNumber,
+    durationSeconds: null,
+    distanceMeters: null,
+    targetHeartRateZone: null,
+    sessionRole: null,
+    setType: "working",
+    restTimeSeconds: 0,
+    ...f,
+  });
+
+  it("puts a rest step after a set with rest, but not after the last set, and names each row's set", async () => {
+    const { plainSetsToStepRows } = await import("@/lib/utils/program-steps");
+    const out = plainSetsToStepRows(
+      [
+        plain(1, { durationSeconds: 900, targetHeartRateZone: 2, setType: "warmup", restTimeSeconds: 60 }),
+        plain(2, { durationSeconds: 900, targetHeartRateZone: 3, restTimeSeconds: 3 }),
+        plain(3, { durationSeconds: 300, targetHeartRateZone: 4, sessionRole: "work", restTimeSeconds: 120 }),
+      ],
+      { sport: "bike", name: "Bike tempo" },
+    );
+    if ("error" in out) throw new Error(out.error);
+    expect(out.rows.map((r) => [r.setNumber, r.from, r.stepKind, r.durationSeconds, r.targets])).toEqual([
+      [1, 1, "warmup", 900, [{ metric: "hr", anchor: "lthr", zone: 2 }]],
+      [2, null, "rest", 60, null],
+      [3, 2, "work", 900, [{ metric: "hr", anchor: "lthr", zone: 3 }]],
+      // A rest under 5 s rounds up to the 5 s a step needs.
+      [4, null, "rest", 5, null],
+      [5, 3, "work", 300, [{ metric: "hr", anchor: "lthr", zone: 4 }]],
+    ]);
+  });
+
+  it("returns the schema problem for a set no step can hold", async () => {
+    const { plainSetsToStepRows } = await import("@/lib/utils/program-steps");
+    const out = plainSetsToStepRows([plain(1, { durationSeconds: 13 * 3600 })], { sport: "bike", name: "Ride" });
+    expect("error" in out && out.error).toMatch(/seconds/);
+  });
 });
 
 describe("programPlay (one-program-model journey review)", () => {
   it("names the leg of each step in a brick, and keys steps by exercise", async () => {
     const { programPlay } = await import("@/lib/utils/program-steps");
-    const ride: Workout = { v: 1, sport: "bike", name: "B", steps: [{ type: "work", end: { type: "time", seconds: 3600 } }] };
-    const run: Workout = { v: 1, sport: "run", name: "B", steps: [{ type: "work", end: { type: "time", seconds: 1200 } }] };
+    const ride: Workout = { v: 2, sport: "bike", name: "B", steps: [{ type: "work", end: { type: "time", seconds: 3600 } }] };
+    const run: Workout = { v: 2, sport: "run", name: "B", steps: [{ type: "work", end: { type: "time", seconds: 1200 } }] };
     const plays = programPlay([{ programExerciseId: 1, sport: "bike", workout: ride }, { programExerciseId: 2, sport: "run", workout: run }], {});
     expect(plays.flatMap((p) => p.rows.map((r) => [r.key, r.text]))).toEqual([["e1:n1", "Ride · 1 h"], ["e2:n1", "Run · 20 min"]]);
     const single = programPlay([{ programExerciseId: 1, sport: "run", workout: run }], {});

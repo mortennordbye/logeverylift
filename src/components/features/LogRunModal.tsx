@@ -51,9 +51,9 @@ export function LogRunModal({
     if (isNaN(n) || n < 0) return null;
     return fieldToMeters(n, unit, targetDistanceMeters);
   };
-  const [distanceMeters, setDistanceMeters] = useState(
-    targetDistanceMeters ?? cfg.defaultDistanceM,
-  );
+  // A ride has no default distance: the field starts empty (0).
+  const startDistance = targetDistanceMeters ?? cfg.defaultDistanceM;
+  const [distanceMeters, setDistanceMeters] = useState(startDistance ?? 0);
   const [durationSeconds, setDurationSeconds] = useState(
     targetDurationSeconds ?? 0,
   );
@@ -68,7 +68,7 @@ export function LogRunModal({
     String((targetDurationSeconds ?? 0) % 60).padStart(2, "0"),
   );
   const [distanceStr, setDistanceStr] = useState(
-    metersToInput(targetDistanceMeters ?? cfg.defaultDistanceM),
+    startDistance != null ? metersToInput(startDistance) : "",
   );
 
   // Reset when opened with new target values
@@ -76,9 +76,9 @@ export function LogRunModal({
     if (!open) return;
     const dist = targetDistanceMeters ?? cfg.defaultDistanceM;
     const dur = targetDurationSeconds ?? 0;
-    setDistanceMeters(dist);
+    setDistanceMeters(dist ?? 0);
     setDurationSeconds(dur);
-    setDistanceStr(metersToInput(dist));
+    setDistanceStr(dist != null ? metersToInput(dist) : "");
     setMinStr(String(Math.floor(dur / 60)));
     setSecStr(String(dur % 60).padStart(2, "0"));
     setRpe(7);
@@ -318,12 +318,15 @@ export function LogRunModal({
         <div className="px-5 pt-6">
           <button
             onClick={handleConfirm}
-            disabled={distanceMeters <= 0}
+            // A ride logs on its time alone; a run or swim needs its distance.
+            disabled={distanceMeters <= 0 && (cfg.defaultDistanceM != null || durationSeconds <= 0)}
             className="w-full rounded-xl bg-primary py-4 text-base font-semibold text-primary-foreground transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {pace
-              ? `${cfg.logVerb} — ${formatEnduranceDistance(cfg.inputUnit, distanceMeters, units)} at ${pace}`
-              : `${cfg.logVerb} — ${formatEnduranceDistance(cfg.inputUnit, distanceMeters, units)}`}
+            {distanceMeters <= 0 && cfg.defaultDistanceM == null
+              ? cfg.logVerb
+              : pace
+                ? `${cfg.logVerb} · ${formatEnduranceDistance(cfg.inputUnit, distanceMeters, units)} at ${pace}`
+                : `${cfg.logVerb} · ${formatEnduranceDistance(cfg.inputUnit, distanceMeters, units)}`}
           </button>
         </div>
       </div>

@@ -24,6 +24,7 @@
  * ```
  */
 
+import { logDroppedStepsByHand } from "@/lib/ride-settle";
 import { db } from "@/db";
 import { liveProgramExercises, liveProgramSets, livePrograms } from "@/lib/plan-live";
 import { exercisePrs, exercises, programExercises, programSets, programs, users, workoutReactions, workoutSessions, workoutSets } from "@/db/schema";
@@ -69,6 +70,8 @@ import type {
     WorkoutStats,
 } from "@/types/workout";
 import { plannedStepSnapshot } from "@/lib/program-steps-db";
+import { rideStepSnapshot } from "@/lib/ride-plan-db";
+import { WORKOUT_LIMITS } from "@/lib/utils/workout-steps";
 import { and, asc, desc, eq, gte, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -270,7 +273,9 @@ export async function getActiveSessionCompletedProgramSetIds(
         and(
           eq(workoutSets.sessionId, sessionId),
           eq(workoutSessions.userId, auth.user.id),
-          eq(workoutSets.isCompleted, true),
+          // A step with any status is handled: a ride's skipped step and its
+          // dropped last recovery (not done) leave nothing to do.
+          or(eq(workoutSets.isCompleted, true), isNotNull(workoutSets.stepStatus)),
           isNotNull(workoutSets.programSetId),
         ),
       );
@@ -330,6 +335,17 @@ export async function logWorkoutSet(
       isCompleted,
       isFailed,
       wasEasy,
+      stepStatus,
+      targetOffsetW,
+      extendedSeconds,
+      sources,
+      avgPower,
+      avgHr,
+      maxHr,
+      avgCadence,
+      avgSpeed,
+      climbM,
+      bulk,
     } = validation.data;
 
     // RIR is the primary effort input; derive RPE from it so all downstream
@@ -369,7 +385,16 @@ export async function logWorkoutSet(
     }
     const slot = resolved.slot;
     // An endurance step keeps its plan with the log (docs/plans/one-program-model.md, 1.2).
-    const plannedStep = slot?.stepKind != null && slot.programSetId != null ? await plannedStepSnapshot(db, slot.programSetId, auth.user.id) : null;
+    // A step of the session's ride keeps the plan the ride froze at its start (D9), not the program as edited since.
+    const plannedStep =
+      slot?.stepKind != null && slot.programSetId != null
+        ? ((await rideStepSnapshot(db, auth.user.id, sessionId, slot.programSetId)) ?? (await plannedStepSnapshot(db, slot.programSetId, auth.user.id)))
+        : null;
+
+    // A step is at most 12 hours, as the step model allows (a typo in a typed time).
+    if (plannedStep && durationSeconds != null && durationSeconds > WORKOUT_LIMITS.seconds.max) {
+      return { success: false, error: "A step is at most 12 hours", fieldErrors: { durationSeconds: ["A step is at most 12 hours"] } };
+    }
 
     // Timed exercises must record a duration. Without this guard, a quick-tap
     // completion (no override, program had no planned duration) silently logs
@@ -409,6 +434,23 @@ export async function logWorkoutSet(
     // Replays from the offline queue land here too and are idempotent: the row
     // is rewritten with the same values, and PR detection below only inserts
     // when a value strictly beats the current record.
+    // A ride's step write (ride mode, the ride results table) sends `sources`.
+    // It keeps what it does not send: the clock's save of a step leaves the
+    // numbers typed or filled since, and the results table sends only the
+    // fields the rider changed (docs/plans/bike-ride-logger.md, 4.5). Sources
+    // merge into the stored map; a field sent as null loses its source.
+    const rideWrite = plannedStep != null && sources !== undefined;
+    const results = plannedStep
+      ? Object.fromEntries(Object.entries({ avgPower, avgHr, maxHr, avgCadence, avgSpeed, climbM }).filter(([, v]) => v !== undefined))
+      : {};
+    const cleared = [
+      ...Object.entries(results).filter(([, v]) => v === null).map(([k]) => k),
+      ...(rideWrite && distanceMeters === null ? ["distanceMeters"] : []),
+    ];
+    const addSources = sources ? Object.fromEntries(Object.entries(sources).filter(([k]) => !cleared.includes(k))) : undefined;
+    const keepRpe = rideWrite && rir === undefined && rpe === undefined;
+    const keepDistance = rideWrite && distanceMeters === undefined;
+
     const setValues = {
       sessionId,
       exerciseId,
@@ -431,12 +473,25 @@ export async function logWorkoutSet(
       isCompleted,
       isFailed,
       wasEasy,
-      ...(plannedStep && { plannedStep, stepStatus: isCompleted ? ("done" as const) : null }),
+      ...(plannedStep && { plannedStep, stepStatus: stepStatus ?? (isCompleted ? ("done" as const) : null) }),
+      // Ride mode's own fields, only when sent: a re-log from the set list keeps them.
+      ...(plannedStep && targetOffsetW !== undefined && { targetOffsetW }),
+      ...(plannedStep && extendedSeconds !== undefined && { extendedSeconds }),
+      ...(plannedStep && sources !== undefined && { sources: addSources }),
+      ...results,
     };
     // One transaction for the row and the records it earns, under a per-user,
     // per-exercise lock (lockRecords).
     const { set, newPRs } = await db.transaction(async (tx) => {
       await lockRecords(tx, auth.user.id, exerciseId);
+      // A bulk log (the workout list's ring) leaves a ride's step or typed results as they are.
+      if (bulk && setValues.programSetId != null) {
+        const [kept] = await tx
+          .select()
+          .from(workoutSets)
+          .where(and(eq(workoutSets.sessionId, sessionId), eq(workoutSets.programSetId, setValues.programSetId), or(isNotNull(workoutSets.stepStatus), isNotNull(workoutSets.sources))));
+        if (kept) return { set: kept, newPRs: [] };
+      }
       const conflict =
         setValues.programSetId != null
           ? { target: [workoutSets.sessionId, workoutSets.programSetId] }
@@ -460,17 +515,28 @@ export async function logWorkoutSet(
             actualReps: setValues.actualReps,
             weightKg: setValues.weightKg,
             durationSeconds: setValues.durationSeconds ?? null,
-            distanceMeters: setValues.distanceMeters ?? null,
+            ...(!keepDistance && { distanceMeters: setValues.distanceMeters ?? null }),
             inclinePercent: setValues.inclinePercent ?? null,
             heartRateZone: setValues.heartRateZone ?? null,
             rir: setValues.rir ?? null,
-            rpe: setValues.rpe,
+            ...(!keepRpe && { rpe: setValues.rpe }),
             restTimeSeconds: setValues.restTimeSeconds,
             notes: setValues.notes ?? null,
             isCompleted: setValues.isCompleted,
             isFailed: setValues.isFailed,
             wasEasy: setValues.wasEasy,
-            ...(plannedStep && { plannedStep, stepStatus: isCompleted ? ("done" as const) : null }),
+            // A ride's write (results typed later) keeps the step as planned when it was ridden:
+            // an FTP changed since must not move its targets or its load.
+            ...(plannedStep && {
+              plannedStep: rideWrite ? sql`coalesce(${workoutSets.plannedStep}, ${JSON.stringify(plannedStep)}::jsonb)` : plannedStep,
+              stepStatus: setValues.stepStatus,
+            }),
+            ...(setValues.targetOffsetW !== undefined && { targetOffsetW: setValues.targetOffsetW }),
+            ...(setValues.extendedSeconds !== undefined && { extendedSeconds: setValues.extendedSeconds }),
+            ...(addSources !== undefined && {
+              sources: sql`(coalesce(${workoutSets.sources}, '{}'::jsonb) || ${JSON.stringify(addSources)}::jsonb) - array(select jsonb_array_elements_text(${JSON.stringify(cleared)}::jsonb))`,
+            }),
+            ...results,
           },
         })
         .returning();
@@ -541,6 +607,16 @@ export async function logWorkoutSet(
     // /programs/[id]/workout (and its exercise subtree, covered by the layout
     // segment). Without this the router cache served up-to-30s-stale insight
     // and suggestions after logging a set.
+    // A ride logged by hand: once every step it would ride is in, the steps a
+    // repeat drops are logged as not done (docs/plans/bike-ride-logger.md, 4.4).
+    if (rideWrite && setValues.programExerciseId != null) {
+      try {
+        await logDroppedStepsByHand(auth.user.id, sessionId, setValues.programExerciseId);
+      } catch {
+        console.error("[logWorkoutSet] dropped_steps_failed", { sessionId });
+      }
+    }
+
     if (session.programId != null) {
       revalidatePath(`/programs/${session.programId}/workout`, "layout");
     }
@@ -585,7 +661,7 @@ export async function unlogWorkoutSet(
       fieldErrors: validation.error.flatten().fieldErrors,
     };
   }
-  const { sessionId, exerciseId, setNumber, programSetId } = validation.data;
+  const { sessionId, exerciseId, setNumber, programSetId, bulk } = validation.data;
 
   try {
     const [session] = await db
@@ -614,10 +690,13 @@ export async function unlogWorkoutSet(
     await db.transaction(async (tx) => {
       await lockRecords(tx, auth.user.id, exerciseId);
       const [existing] = await tx
-        .select({ id: workoutSets.id, createdAt: workoutSets.createdAt })
+        .select({ id: workoutSets.id, createdAt: workoutSets.createdAt, stepStatus: workoutSets.stepStatus, sources: workoutSets.sources })
         .from(workoutSets)
         .where(and(eq(workoutSets.sessionId, sessionId), setRowKey(resolved.slot, exerciseId, setNumber)))
         .limit(1);
+
+      // A bulk un-log (the workout list's ring) leaves a ride's step or typed results.
+      if (existing && bulk && (existing.stepStatus != null || existing.sources != null)) return;
 
       // Already absent — the user un-logged a set that never reached the server
       // (offline queue, failed write). Nothing to do, and reporting success keeps
@@ -1008,6 +1087,8 @@ export async function getCompletedSessions(
         source: workoutSessions.source,
         pausedSeconds: workoutSessions.pausedSeconds,
         clientKey: workoutSessions.clientKey,
+        endedEarly: workoutSessions.endedEarly,
+        rideMode: workoutSessions.rideMode,
         programName: programs.name,
         setCount: sql<number>`COUNT(${workoutSets.id})`,
         exerciseCount: sql<number>`COUNT(DISTINCT ${workoutSets.exerciseId})`,
@@ -1042,6 +1123,8 @@ export async function getCompletedSessions(
         workoutSessions.source,
         workoutSessions.pausedSeconds,
         workoutSessions.clientKey,
+        workoutSessions.endedEarly,
+        workoutSessions.rideMode,
         programs.name,
       )
       .orderBy(desc(workoutSessions.startTime));
@@ -1099,6 +1182,8 @@ export async function getSessionDetail(
           source: workoutSessions.source,
           pausedSeconds: workoutSessions.pausedSeconds,
           clientKey: workoutSessions.clientKey,
+          endedEarly: workoutSessions.endedEarly,
+          rideMode: workoutSessions.rideMode,
           programName: programs.name,
         })
         .from(workoutSessions)

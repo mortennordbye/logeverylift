@@ -17,7 +17,7 @@ import { and, eq, isNull, or } from "drizzle-orm";
 export const NAME_TAKEN = "An exercise with this name already exists";
 
 /** Postgres unique_violation: a concurrent create of the same name. */
-function isUniqueViolation(e: unknown): boolean {
+export function isUniqueViolation(e: unknown): boolean {
   const code = (e as { code?: string; cause?: { code?: string } })?.code ?? (e as { cause?: { code?: string } })?.cause?.code;
   return code === "23505";
 }

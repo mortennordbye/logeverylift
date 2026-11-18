@@ -1,6 +1,6 @@
 # LogEveryLift rules for assistants
 
-Version: 2026-11-14
+Version: 2026-11-18
 
 This document is served to connected AI assistants as an MCP resource
 (`logeverylift://docs/app-rules`). It describes the app as it is today. It holds no personal
@@ -105,6 +105,17 @@ what it describes, that package updates this file and the server instructions in
   resolved with the thresholds of that day. They are logged data: no revision, no restore.
   `log_step_results` logs the session first when it is not logged yet, as
   `confirm_planned_session` does.
+- **Bike rides** (endurance features only). A bike exercise is ridden in ride mode, indoors or
+  outdoors. The ride keeps its plan as it was at the start, so a program edit applies from the
+  next ride, and no tool changes a running ride. Each step saves when it ends; after the ride the
+  athlete can type avg power, heart rate, cadence, speed and climbing per step. Each of these
+  numbers keeps its source: `clock` (ride mode's time), `typed`, `garmin` or `assistant`
+  (`RESULT_SOURCES`, `src/db/schema/workout-sets.ts`). `log_step_results` writes yours as
+  `assistant` and never replaces a typed or Garmin number; RPE and notes only fill empty ones
+  (`assistantStepWrite`, `src/lib/utils/step-results.ts`). A ride with no planned session takes
+  results by `workoutSessionId`. `get_ride` gives the mode, the status (`ended_early` does not count
+  as a done key session), planned against done per step, and the ride's numbers: NP, IF and heart
+  rate zones only from a Garmin power stream, else an estimated power load or an effort load.
 - **Fueling and race plans** (endurance features only). A fuel log belongs to one completed
   session logged in the app (`workoutSessionId`) or one Garmin activity: carbohydrate, fluid,
   sodium, caffeine, the products used and a GI score (0 = no gut symptoms, 10 = worst). Gut
@@ -156,7 +167,7 @@ what it describes, that package updates this file and the server instructions in
   (bpm), threshold run pace and swim CSS (stored as m/s; tools also give and take seconds per km
   or per 100 m). One row per value with its date and source (`manual`, `test`, `garmin`), so the
   rows are the history; the latest date is current, and a value older than 8 weeks is stale.
-  A field test (`run_30min`, `bike_30min`, `ftp_20min`, `css_400_200`, `swim_t1000`) sends its inputs, and the
+  A field test (`run_30min`, `bike_30min`, `ftp_20min`, `ftp_ramp`, `css_400_200`, `swim_t1000`) sends its inputs, and the
   app computes the value. Garmin estimates show as suggestions for accounts with Garmin; they
   are stored only when taken. `get_athlete_profile`, `manage_thresholds`.
 - **Athlete profile** (endurance features only). Endurance experience, available days, hours

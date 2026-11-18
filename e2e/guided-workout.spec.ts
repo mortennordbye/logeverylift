@@ -8,7 +8,7 @@ import { expect, test } from "./fixtures/test";
 
 /**
  * The guided player and the pool view (docs/plans/endurance-app.md, 3-5): an
- * endurance user starts today's ride from home, the steps change on their own,
+ * endurance user starts today's run from home, the steps change on their own,
  * pause, resume, skip and lap work, the results save as a logged session
  * linked to the plan, and the week view shows it done. A swim opens the pool
  * view and its send-off clock. Each session runs a program with steps
@@ -27,19 +27,19 @@ function today(): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-const ride: Workout = {
-  v: 1,
-  sport: "bike",
-  name: "Quick ride",
+const run: Workout = {
+  v: 2,
+  sport: "run",
+  name: "Quick run",
   steps: [
-    { type: "warmup", end: { type: "time", seconds: 5 }, target: { metric: "power", anchor: "ftp", low: 50, high: 70 } },
-    { type: "work", end: { type: "time", seconds: 6 }, target: { metric: "power", anchor: "ftp", low: 88, high: 93 } },
-    { type: "work", end: { type: "time", seconds: 600 }, target: { metric: "power", anchor: "ftp", low: 75, high: 80 } },
+    { type: "warmup", end: { type: "time", seconds: 5 }, target: { metric: "hr", anchor: "absolute", low: 125, high: 145 } },
+    { type: "work", end: { type: "time", seconds: 6 }, target: { metric: "hr", anchor: "absolute", low: 150, high: 160 } },
+    { type: "work", end: { type: "time", seconds: 600 }, target: { metric: "hr", anchor: "absolute", low: 140, high: 150 } },
     { type: "cooldown", end: { type: "lap" } },
   ],
 };
 const swim: Workout = {
-  v: 1,
+  v: 2,
   sport: "swim",
   name: "Pool set",
   poolLengthM: 25,
@@ -91,9 +91,9 @@ test.afterEach(() => {
   expect(hydrationErrors, "hydration errors in the browser console").toEqual([]);
 });
 
-test("a guided ride from home: steps change on time, pause, skip, lap, results saved and linked", async ({ page }, testInfo) => {
+test("a guided run from home: steps change on time, pause, skip, lap, results saved and linked", async ({ page }, testInfo) => {
   test.setTimeout(90_000);
-  const { userId, plannedId } = await setup(testInfo.parallelIndex, ride);
+  const { userId, plannedId } = await setup(testInfo.parallelIndex, run);
 
   // Playwright's clock: time still flows, and runFor jumps ahead with no sleep.
   await page.clock.install();
@@ -105,12 +105,12 @@ test("a guided ride from home: steps change on time, pause, skip, lap, results s
   await expect(page.getByTestId("player-ready")).toBeVisible();
   await page.getByRole("button", { name: "Start", exact: true }).click();
   await expect(page.getByTestId("player-step-count")).toHaveText("Step 1 of 4");
-  await expect(page.getByTestId("player-target")).toHaveText("125-175 W");
+  await expect(page.getByTestId("player-target")).toHaveText("125-145 bpm");
 
   // The 5 s warm-up ends by itself.
   await page.clock.runFor(5_500);
   await expect(page.getByTestId("player-step-count")).toHaveText("Step 2 of 4");
-  await expect(page.getByTestId("player-target")).toHaveText("220-233 W");
+  await expect(page.getByTestId("player-target")).toHaveText("150-160 bpm");
 
   await page.getByRole("button", { name: "Pause" }).click();
   const frozen = await page.getByTestId("player-time").textContent();
@@ -144,7 +144,7 @@ test("a guided ride from home: steps change on time, pause, skip, lap, results s
   await page.goto("/week");
   await expect(page.getByTestId("load-card")).toBeVisible();
   // Done and linked, with the logged time. The lap step leaves the plan's time open, so the band is "done".
-  const week = page.getByTestId("week-session").filter({ hasText: "Quick ride" });
+  const week = page.getByTestId("week-session").filter({ hasText: "Quick run" });
   await expect(week).toContainText("done 00:1");
   await expect(week).not.toContainText("planned");
 });

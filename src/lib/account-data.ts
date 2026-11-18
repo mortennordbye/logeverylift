@@ -52,6 +52,11 @@ import {
   fuelProducts,
   sweatTests,
   racePlans,
+  pushSubscriptions,
+  rideEvents,
+  rideGarminFills,
+  ridePushes,
+  rides,
 } from "@/db/schema";
 import { eq, getTableColumns, inArray, lt, or, sql } from "drizzle-orm";
 import type { PgTable } from "drizzle-orm/pg-core";
@@ -86,6 +91,8 @@ export async function collectUserData(userId: string) {
 
   const sessionRows = await db.select().from(workoutSessions).where(eq(workoutSessions.userId, userId));
   const sessionIds = sessionRows.map((s) => s.id);
+  const rideRows = await db.select().from(rides).where(eq(rides.userId, userId));
+  const rideIds = rideRows.map((r) => r.id);
 
   // plan-read: includes deleted (the export holds all of the user's data)
   const cycleRows = await db.select().from(trainingCycles).where(eq(trainingCycles.userId, userId));
@@ -116,6 +123,18 @@ export async function collectUserData(userId: string) {
     workout_sets: sessionIds.length
       ? await db.select().from(workoutSets).where(inArray(workoutSets.sessionId, sessionIds))
       : [],
+    // Bike rides in ride mode and what the rider did in them (docs/plans/bike-ride-logger.md, 4.3).
+    rides: rideRows,
+    ride_events: rideIds.length ? await db.select().from(rideEvents).where(inArray(rideEvents.rideId, rideIds)) : [],
+    // Garmin fills of ride steps (4.8): what each filled field held before, and whether the rider undid it.
+    ride_garmin_fills: await db.select().from(rideGarminFills).where(eq(rideGarminFills.userId, userId)),
+    // Step alerts (4.7): the devices that turned them on, without the keys that
+    // encrypt their pushes, and the alerts of a running ride not yet sent.
+    push_subscriptions: await db
+      .select(columnsWithout(pushSubscriptions, ["p256dh", "auth"]))
+      .from(pushSubscriptions)
+      .where(eq(pushSubscriptions.userId, userId)),
+    ride_pushes: await db.select().from(ridePushes).where(eq(ridePushes.userId, userId)),
     exercise_prs: await db.select().from(exercisePrs).where(eq(exercisePrs.userId, userId)),
     exercises: await db.select().from(exercises).where(eq(exercises.userId, userId)),
     exercise_notes: await db.select().from(exerciseNotes).where(eq(exerciseNotes.userId, userId)),

@@ -680,6 +680,48 @@
       "when": 1794821979010,
       "tag": "0096_drop_structured_workouts",
       "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "7",
+      "when": 1794947211283,
+      "tag": "0097_bike_ride_groundwork",
+      "breakpoints": true
+    },
+    {
+      "idx": 98,
+      "version": "7",
+      "when": 1794948677239,
+      "tag": "0098_rides_user_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 99,
+      "version": "7",
+      "when": 1794961080899,
+      "tag": "0099_program_exercise_ride_test",
+      "breakpoints": true
+    },
+    {
+      "idx": 100,
+      "version": "7",
+      "when": 1794962384517,
+      "tag": "0100_push_alerts",
+      "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": "7",
+      "when": 1794989528561,
+      "tag": "0101_ride_garmin_fills",
+      "breakpoints": true
+    },
+    {
+      "idx": 102,
+      "version": "7",
+      "when": 1794993303264,
+      "tag": "0102_ride_garmin_fills_standing",
+      "breakpoints": true
     }
   ]
 }

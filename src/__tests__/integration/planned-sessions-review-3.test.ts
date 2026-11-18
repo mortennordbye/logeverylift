@@ -226,7 +226,9 @@ describe("review round 4", () => {
     const r = await mcpTools(registerProgramTools, me)("edit_program_exercise", {
       operation: "update",
       programExerciseId: easy.slots[0].programExerciseId,
-      sets: [{ id: easy.slots[0].setIds[0], setNumber: 1, durationSeconds: 300, sessionRole: "work" }],
+      // A bike set becomes a step for an endurance user (bike-ride-logger D3), and a
+      // step is hard by its target, so the edit gives it zone 4.
+      sets: [{ id: easy.slots[0].setIds[0], setNumber: 1, durationSeconds: 300, sessionRole: "work", targetHeartRateZone: 4 }],
       reason: "Make Friday intervals",
       expectedVersion: v,
     });

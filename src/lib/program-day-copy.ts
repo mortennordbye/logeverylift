@@ -13,7 +13,7 @@
 
 import { exercises, programExercises, programSets, programs } from "@/db/schema";
 import { PlanStateError, type PlanWriteSession } from "@/lib/plan-revisions";
-import { assertStepRows } from "@/lib/program-steps-db";
+import { assertStepRows, settleStepRows } from "@/lib/program-steps-db";
 import { workoutToRows } from "@/lib/utils/program-steps";
 import type { Workout } from "@/lib/utils/workout-steps";
 import { and, asc, eq, isNull } from "drizzle-orm";
@@ -51,6 +51,7 @@ export async function copyProgramForDay(w: PlanWriteSession, userId: string, ses
           return { ...s, programExerciseId: newPe.id, peakDistanceMeters: null, peakDurationSeconds: null };
         }),
       );
+      await settleStepRows(tx, newPe.id);
     }
   }
   return copy.id;
@@ -70,7 +71,7 @@ export async function dayProgramFromWorkout(w: PlanWriteSession, userId: string,
   w.create({ type: "program", id: program.id });
   const [pe] = await tx
     .insert(programExercises)
-    .values({ programId: program.id, exerciseId: sport.id, orderIndex: 0, progressionAdvance: "manual", poolLengthM: workout.poolLengthM ?? null })
+    .values({ programId: program.id, exerciseId: sport.id, orderIndex: 0, progressionAdvance: "manual", poolLengthM: workout.poolLengthM ?? null, rideTest: workout.test ?? null })
     .returning({ id: programExercises.id });
   await tx.insert(programSets).values(workoutToRows(workout).map((r) => ({ ...r, programExerciseId: pe.id, restTimeSeconds: 0 })));
   await assertStepRows(tx, pe.id);

@@ -20,12 +20,14 @@ import { plannedRows, type PlannedRow } from "@/lib/utils/step-results";
 import { DEFAULT_UNITS, type Units } from "@/lib/utils/units";
 import { flattenWorkout, type PlayStep } from "@/lib/utils/workout-player";
 import {
+  WORKOUT_LIMITS,
   parseWorkout,
   type Workout,
   type WorkoutNode,
   type WorkoutSport,
   type WorkoutStep,
   type ThresholdValues,
+  type WorkoutRamp,
   type WorkoutTarget,
 } from "@/lib/utils/workout-steps";
 
@@ -46,6 +48,10 @@ export type StepRow = {
   equipment: string[] | null;
   sendOffSeconds: number | null;
   note: string | null;
+  // Bike only (docs/plans/bike-ride-logger.md, step 0).
+  ramp: unknown;
+  free: boolean;
+  outdoorTarget: unknown;
 };
 
 /** The step fields of a row, as written: everything StepRow has except id and setNumber. */
@@ -66,6 +72,9 @@ export const EMPTY_STEP_FIELDS: StepFields = {
   equipment: null,
   sendOffSeconds: null,
   note: null,
+  ramp: null,
+  free: false,
+  outdoorTarget: null,
 };
 
 /** The program_sets columns that make a row a step, for every path that copies sets field by field. */
@@ -81,6 +90,9 @@ export const STEP_FIELD_KEYS = [
   "equipment",
   "sendOffSeconds",
   "note",
+  "ramp",
+  "free",
+  "outdoorTarget",
 ] as const satisfies readonly (keyof StepFields)[];
 
 /** The step columns of a row (the end columns are copied with the set's own fields). */
@@ -124,6 +136,9 @@ function rowStep(r: StepRow): { step: WorkoutStep } | { problem: string } {
     ...(r.stroke != null && { stroke: r.stroke as WorkoutStep["stroke"] }),
     ...(r.equipment != null && r.equipment.length > 0 && { equipment: r.equipment as WorkoutStep["equipment"] }),
     ...(r.note != null && { note: r.note }),
+    ...(r.ramp != null && { ramp: r.ramp as WorkoutRamp }),
+    ...(r.free && { free: true as const }),
+    ...(r.outdoorTarget != null && { outdoor: r.outdoorTarget as WorkoutTarget }),
   };
   if ((r.cadenceLow == null) !== (r.cadenceHigh == null)) return { problem: "give both cadence bounds" };
   return { step };
@@ -142,7 +157,8 @@ export function stepOfRow(r: StepRow): WorkoutStep | null {
  * with, so a later edit, the weekly sync or a retest never changes it.
  */
 export type PlannedStepSnapshot = {
-  v: 1;
+  // 2 from the bike ride logger: the step can hold ramp, free and outdoor.
+  v: 1 | 2;
   sport: WorkoutSport;
   step: WorkoutStep;
   blockId: number | null;
@@ -163,7 +179,7 @@ function sameStep(a: WorkoutStep, b: WorkoutStep): boolean {
  */
 export function buildWorkout(
   rows: StepRow[],
-  meta: { sport: WorkoutSport; name: string; poolLengthM?: number | null; description?: string | null },
+  meta: { sport: WorkoutSport; name: string; poolLengthM?: number | null; description?: string | null; test?: Workout["test"] | null },
 ): Built {
   const sorted = [...rows].sort((a, b) => a.setNumber - b.setNumber);
   const problems: StepProblem[] = [];
@@ -242,11 +258,12 @@ export function buildWorkout(
   if (problems.length) return { problems };
   return {
     workout: {
-      v: 1,
+      v: 2,
       sport: meta.sport,
       name: meta.name.trim().slice(0, 80) || "Session",
       ...(meta.description ? { description: meta.description.slice(0, 1000) } : {}),
       ...(meta.poolLengthM != null ? { poolLengthM: meta.poolLengthM } : {}),
+      ...(meta.test != null ? { test: meta.test } : {}),
       steps: nodes,
     },
     nodeSets,
@@ -270,7 +287,7 @@ function locate(path: string, nodeSets: number[][]): { setNumber: number | null;
  */
 export function checkStepRows(
   rows: StepRow[],
-  meta: { sport: WorkoutSport | null; name: string; poolLengthM?: number | null },
+  meta: { sport: WorkoutSport | null; name: string; poolLengthM?: number | null; test?: Workout["test"] | null },
 ): StepProblem[] {
   const steps = rows.filter(isStepRow);
   if (steps.length === 0) return [];
@@ -279,7 +296,7 @@ export function checkStepRows(
     const plain = rows.find((r) => !isStepRow(r))!;
     return [{ setNumber: plain.setNumber, message: "every set of a structured exercise needs a step kind" }];
   }
-  const built = buildWorkout(steps, { sport: meta.sport, name: meta.name, poolLengthM: meta.poolLengthM });
+  const built = buildWorkout(steps, { sport: meta.sport, name: meta.name, poolLengthM: meta.poolLengthM, test: meta.test });
   if ("problems" in built) return built.problems;
   const parsed = parseWorkout(built.workout);
   if (parsed.ok) return [];
@@ -317,6 +334,9 @@ export function workoutToRows(w: Workout): (StepFields & { setNumber: number })[
     equipment: s.equipment ?? null,
     sendOffSeconds: s.sendOffSeconds ?? null,
     note: s.note ?? null,
+    ramp: s.ramp ?? null,
+    free: s.free ?? false,
+    outdoorTarget: s.outdoor ?? null,
   });
   let block = 0;
   for (const n of w.steps) {
@@ -339,31 +359,73 @@ export type PlainEnduranceSet = {
   distanceMeters: number | null;
   targetHeartRateZone: number | null;
   sessionRole: string | null;
+  setType?: string | null;
+  peakDurationSeconds?: number | null;
+  peakDistanceMeters?: number | null;
 };
 
 /**
  * Older plain endurance sets as a step tree (docs/plans/one-program-model.md,
- * step 4): each set becomes one step, a work rep or zone 4-5 a work step,
- * zone 1 an easy step, the rest steady work. Its zone becomes an HR zone
- * target on LTHR (bike and run). A set with a distance ends on it, else on
- * its time, else on the lap button. Rest after a set stays on the set.
+ * step 4): each set becomes one step, a warm-up set a warm-up step, a work
+ * rep or zone 4-5 a work step, zone 1 an easy step, the rest steady work. Its
+ * zone becomes an HR zone target on LTHR (bike and run). A set ends on the
+ * end its weekly-sync anchor scales (time or distance), else on its distance,
+ * else on its time, else on the lap button. Rest after a set stays on the set.
  */
 export function plainSetsToWorkout(sets: PlainEnduranceSet[], meta: { sport: WorkoutSport; name: string; poolLengthM?: number | null }): Workout {
   const steps: WorkoutStep[] = [...sets]
     .sort((a, b) => a.setNumber - b.setNumber)
     .map((s) => {
       const zone = s.targetHeartRateZone;
-      const type: WorkoutStep["type"] = s.sessionRole === "work" || (zone ?? 0) >= 4 ? "work" : zone === 1 ? "recovery" : "work";
-      const end: WorkoutStep["end"] =
-        s.distanceMeters != null && s.distanceMeters > 0
-          ? { type: "distance", meters: s.distanceMeters }
-          : s.durationSeconds != null && s.durationSeconds > 0
-            ? { type: "time", seconds: s.durationSeconds }
-            : { type: "lap" };
+      const type: WorkoutStep["type"] = s.setType === "warmup" ? "warmup" : s.sessionRole === "work" || (zone ?? 0) >= 4 ? "work" : zone === 1 ? "recovery" : "work";
+      const hasDistance = s.distanceMeters != null && s.distanceMeters > 0;
+      const hasTime = s.durationSeconds != null && s.durationSeconds > 0;
+      const onTime = hasTime && (!hasDistance || (s.peakDurationSeconds != null && s.peakDistanceMeters == null));
+      const end: WorkoutStep["end"] = onTime
+        ? { type: "time", seconds: s.durationSeconds! }
+        : hasDistance
+          ? { type: "distance", meters: s.distanceMeters! }
+          : { type: "lap" };
       const target: WorkoutTarget | undefined = zone != null && meta.sport !== "swim" ? { metric: "hr", anchor: "lthr", zone } : undefined;
       return { type, end, ...(target && { target }) };
     });
-  return { v: 1, sport: meta.sport, name: meta.name.trim().slice(0, 80) || "Session", ...(meta.poolLengthM != null && { poolLengthM: meta.poolLengthM }), steps: steps.length ? steps : [{ type: "work", end: { type: "lap" } }] };
+  return { v: 2, sport: meta.sport, name: meta.name.trim().slice(0, 80) || "Session", ...(meta.poolLengthM != null && { poolLengthM: meta.poolLengthM }), steps: steps.length ? steps : [{ type: "work", end: { type: "lap" } }] };
+}
+
+/**
+ * Plain bike sets as the step rows of the one-time move
+ * (docs/plans/bike-ride-logger.md, D3): plainSetsToWorkout, and a rest after
+ * a set becomes a rest step after it, because no step reader reads a step
+ * row's own rest. The last set's rest is dropped. A time or distance under a
+ * step's minimum (5 s, 10 m) is raised to it, a rest too. `from` is the setNumber of the plain set a row came from
+ * (null on a rest step). The error is the schema check's first problems.
+ */
+export function plainSetsToStepRows(
+  sets: (PlainEnduranceSet & { restTimeSeconds: number })[],
+  meta: { sport: WorkoutSport; name: string },
+): { rows: (StepFields & { setNumber: number; from: number | null })[] } | { error: string } {
+  const { seconds, meters } = WORKOUT_LIMITS;
+  const sorted = [...sets]
+    .sort((a, b) => a.setNumber - b.setNumber)
+    .map((s) => ({
+      ...s,
+      durationSeconds: s.durationSeconds != null && s.durationSeconds > 0 ? Math.max(seconds.min, s.durationSeconds) : s.durationSeconds,
+      distanceMeters: s.distanceMeters != null && s.distanceMeters > 0 ? Math.max(meters.min, s.distanceMeters) : s.distanceMeters,
+    }));
+  const steps = plainSetsToWorkout(sorted, meta).steps;
+  const nodes: WorkoutNode[] = [];
+  const from: (number | null)[] = [];
+  for (const [i, s] of sorted.entries()) {
+    nodes.push(steps[i]);
+    from.push(s.setNumber);
+    if (i < sorted.length - 1 && s.restTimeSeconds > 0) {
+      nodes.push({ type: "rest", end: { type: "time", seconds: Math.max(seconds.min, s.restTimeSeconds) } });
+      from.push(null);
+    }
+  }
+  const parsed = parseWorkout({ ...plainSetsToWorkout([], meta), steps: nodes });
+  if (!parsed.ok) return { error: parsed.errors.slice(0, 3).map((e) => `${e.path} ${e.message}`).join("; ") };
+  return { rows: workoutToRows(parsed.workout).map((r, i) => ({ ...r, from: from[i] })) };
 }
 
 /** Each structured exercise's play steps and planned rows, keys prefixed when there are several (one guided run, docs/plans/one-program-model.md). */

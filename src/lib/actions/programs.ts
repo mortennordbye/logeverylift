@@ -57,7 +57,7 @@ import type {
   ProgramSet,
   ProgramWithExercises,
 } from "@/types/workout";
-import { assertStepRows } from "@/lib/program-steps-db";
+import { settleStepRows } from "@/lib/program-steps-db";
 import { stepFieldsOf } from "@/lib/utils/program-steps";
 import { and, asc, desc, eq, inArray, isNull, or } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
@@ -82,7 +82,7 @@ async function writeSlot<T>(
   const { result } = await planWrite({ userId, writer }, async (w) => {
     await w.touch({ type: "program", id: programId });
     const out = await fn(w.tx, programId);
-    await assertStepRows(w.tx, programExerciseId);
+    await settleStepRows(w.tx, programExerciseId);
     return out;
   });
   return { programId, result };
@@ -1092,8 +1092,11 @@ export async function updateProgramSet(
         return { kind: "applied", ps } as const;
       }
       const [ps] = await w.tx.update(programSets).set(updates).where(eq(programSets.id, id)).returning();
-      await assertStepRows(w.tx, check.programExerciseId);
-      return { kind: "applied", ps } as const;
+      // A bike slot may have become steps: return the row as it is now.
+      if (!(await settleStepRows(w.tx, check.programExerciseId))) return { kind: "applied", ps } as const;
+      // plan-read: includes deleted (re-reads the row this write just changed)
+      const [after] = await w.tx.select().from(programSets).where(eq(programSets.id, id));
+      return { kind: "applied", ps: after } as const;
     });
     if (result.kind === "conflict") {
       return {
@@ -1194,7 +1197,7 @@ export async function deleteProgramSet(
         .set({ deletedAt: new Date() })
         .where(eq(programSets.id, validation.data.programSetId))
         .returning({ programExerciseId: programSets.programExerciseId });
-      if (gone) await assertStepRows(tx, gone.programExerciseId);
+      if (gone) await settleStepRows(tx, gone.programExerciseId);
     });
     revalidatePath(`/programs/${programId}/workout/exercises/${programExerciseId}`);
     revalidatePath(`/programs/${programId}/workout`);
@@ -1387,6 +1390,7 @@ export async function exportProgram(
         applyToPlan: pe.progressionApplyToPlan ?? false,
         suppressEffortPrompt: pe.progressionSuppressEffortPrompt ?? false,
         ...(pe.poolLengthM != null && { poolM: pe.poolLengthM }),
+        ...(pe.rideTest != null && { rideTest: pe.rideTest }),
         exercise: {
           name: pe.exercise.name,
           category: pe.exercise.category,
@@ -1460,6 +1464,7 @@ export async function exportAllPrograms(): Promise<ActionResult<ExportedPrograms
             applyToPlan: pe.progressionApplyToPlan ?? false,
             suppressEffortPrompt: pe.progressionSuppressEffortPrompt ?? false,
             ...(pe.poolLengthM != null && { poolM: pe.poolLengthM }),
+            ...(pe.rideTest != null && { rideTest: pe.rideTest }),
             exercise: {
               name: pe.exercise.name,
               category: pe.exercise.category,
@@ -1639,6 +1644,7 @@ export async function importProgram(
               progressionSuppressEffortPrompt: slot.suppressEffortPrompt ?? false,
               exerciseType: overrideType,
               ...(slot.poolM != null ? { poolLengthM: slot.poolM } : {}),
+              ...(slot.rideTest != null ? { rideTest: slot.rideTest } : {}),
             })
             .returning({ id: programExercises.id });
 
@@ -1663,7 +1669,7 @@ export async function importProgram(
                 ...(s.step ?? {}),
               })),
             );
-            await assertStepRows(tx, pe.id);
+            await settleStepRows(tx, pe.id);
           }
         }
       });

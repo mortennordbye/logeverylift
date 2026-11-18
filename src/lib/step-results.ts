@@ -10,11 +10,12 @@
  */
 
 import { db } from "@/db";
+import type { ResultSource } from "@/db/schema/workout-sets";
 import { plannedSessions, workoutSessions } from "@/db/schema";
 import { DuplicateSession } from "@/lib/logged-sessions";
 import { PlanStateError } from "@/lib/plan-revisions";
 import type { SessionLoadRow } from "@/lib/training-load";
-import type { PlannedRow, StepCompare, StepResult } from "@/lib/utils/step-results";
+import type { KeptField, PlannedRow, StepCompare, StepResult } from "@/lib/utils/step-results";
 import type { ThresholdValues, Workout } from "@/lib/utils/workout-steps";
 import { and, eq, isNull } from "drizzle-orm";
 
@@ -54,7 +55,13 @@ export type SaveStepResultsInput = {
   durationSeconds?: number | null;
 };
 
-export type SaveStepResultsResult = { workoutSessionId: number; resultId: number; created: "session" | "attached" | "repeat" };
+export type SaveStepResultsResult = {
+  workoutSessionId: number;
+  resultId: number;
+  created: "session" | "attached" | "repeat";
+  /** An assistant write: per step, the fields it left as the rider typed them or Garmin filled them. */
+  kept?: { key: string; fields: KeptField[] }[];
+};
 
 export async function saveStepResults(userId: string, input: SaveStepResultsInput, source: "player" | "manual" | "assistant"): Promise<SaveStepResultsResult> {
   const program = await import("@/lib/program-step-results");
@@ -73,7 +80,8 @@ export type StepResultsView = {
   source: "player" | "manual" | "assistant";
   workout: Workout;
   anchors: ThresholdValues;
-  rows: (PlannedRow & { result: StepResult | null; compare: StepCompare })[];
+  /** `sources`: who wrote each result field (typed, clock, garmin, assistant); null on steps logged without. */
+  rows: (PlannedRow & { result: StepResult | null; sources: Partial<Record<string, ResultSource>> | null; compare: StepCompare })[];
   sessionRpe: number | null;
   durationSeconds: number | null;
   distanceMeters: number | null;
@@ -89,6 +97,8 @@ export async function getStepResults(userId: string, by: { plannedSessionId?: nu
     const [ws] = await db.select({ plannedSessionId: workoutSessions.plannedSessionId }).from(workoutSessions).where(and(eq(workoutSessions.id, by.workoutSessionId), eq(workoutSessions.userId, userId)));
     plannedId = ws?.plannedSessionId ?? undefined;
   }
-  if (plannedId == null || !(await program.isProgramStepSession(userId, plannedId))) return null;
+  // A session with no planned session (a ride started from the program) reads by itself.
+  if (plannedId == null) return by.workoutSessionId != null ? program.getSessionStepResults(userId, by.workoutSessionId) : null;
+  if (!(await program.isProgramStepSession(userId, plannedId))) return null;
   return program.getProgramStepResults(userId, plannedId);
 }

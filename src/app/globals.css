@@ -248,6 +248,11 @@ select {
   .portrait-only-overlay {
     display: flex;
   }
+  /* Ride mode has a landscape layout for a phone on a trainer mount
+     (docs/plans/bike-ride-logger.md, section 5). */
+  body:has([data-ride-mode]) .portrait-only-overlay {
+    display: none;
+  }
 }
 
 @layer utilities {

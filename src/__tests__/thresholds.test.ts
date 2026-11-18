@@ -36,7 +36,12 @@ describe("field tests", () => {
 
   it("FTP from the 30-minute test is its average power, no factor", () => {
     expect(valueFromTest("ftp", "bike_30min", { avgPower30: 270.4 })).toEqual({ value: 270 });
-    expect(protocolsFor("ftp").map((p) => p.protocol)).toEqual(["ftp_20min", "bike_30min"]);
+    expect(protocolsFor("ftp").map((p) => p.protocol)).toEqual(["ftp_20min", "bike_30min", "ftp_ramp"]);
+  });
+
+  it("FTP from the ramp test is 0.75 x the best 1 min power, rounded", () => {
+    expect(valueFromTest("ftp", "ftp_ramp", { best1MinPower: 248 })).toEqual({ value: 186 });
+    expect(valueFromTest("ftp", "ftp_ramp", {})).toEqual({ error: "Enter the average power of your best minute" });
   });
 
   it("LTHR and pace from the 30-minute run", () => {

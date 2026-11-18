@@ -43,6 +43,8 @@ export * from "./workout-sets";
 export * from "./session-priority";
 export * from "./illness";
 export * from "./nutrition";
+export * from "./rides";
+export * from "./push";
 
 // Relations for Drizzle relational queries
 export * from "./relations";

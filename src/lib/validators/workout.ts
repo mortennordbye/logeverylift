@@ -32,7 +32,9 @@ import {
   PROGRESSION_REGRESSES,
   PROGRESSION_SCOPES,
 } from "@/lib/utils/progression";
-import { programStepFieldsSchema } from "@/lib/utils/workout-steps";
+import type { ResultSource } from "@/db/schema/workout-sets";
+import { NUDGE_CAP_W, EXTEND_MAX_S } from "@/lib/utils/ride-timeline";
+import { RIDE_TESTS, programStepFieldsSchema } from "@/lib/utils/workout-steps";
 import { z } from "zod";
 
 export const WORKOUT_FEELINGS = ["Tired", "OK", "Good", "Awesome"] as const;
@@ -77,6 +79,12 @@ export const createWorkoutSessionSchema = z.object({
  * - 7: Moderate effort
  * - 5-6: Easy, many reps left
  */
+/** The sources a client may send for a result field; the others are the server's (`RESULT_SOURCES`). */
+export const CLIENT_RESULT_SOURCES = ["typed", "clock"] as const satisfies readonly ResultSource[];
+
+/** The result fields of a set whose source is kept (`workout_sets.sources`). */
+export const RESULT_FIELDS = ["durationSeconds", "distanceMeters", "avgPower", "avgHr", "maxHr", "avgCadence", "avgSpeed", "climbM", "measuredValue"] as const;
+
 export const logWorkoutSetSchema = z.object({
   sessionId: z.number().int().positive("Session ID must be a positive integer"),
   exerciseId: z
@@ -101,7 +109,7 @@ export const logWorkoutSetSchema = z.object({
     .min(0, "Weight cannot be negative")
     .max(1000, "Weight must be under 1000kg"),
   durationSeconds: z.number().int().min(0).optional(),
-  distanceMeters: z.number().int().min(0).optional(),
+  distanceMeters: z.number().int().min(0).nullable().optional(),
   inclinePercent: z.number().int().min(0).max(30).optional(),
   heartRateZone: z.number().int().min(1).max(5).optional(),
   // Reps In Reserve — the primary effort input (0 = to failure, 5 = 5+ left).
@@ -118,6 +126,8 @@ export const logWorkoutSetSchema = z.object({
     .int()
     .min(1, "RPE must be at least 1")
     .max(10, "RPE must be at most 10")
+    // Null: the ride results table took the effort away (a ride write keeps the stored RPE when it sends none).
+    .nullable()
     .optional(),
   restTimeSeconds: z
     .number()
@@ -134,6 +144,26 @@ export const logWorkoutSetSchema = z.object({
   // Hit the target and it felt easy — an explicit request to progress next
   // session even if the consensus gate hasn't been met.
   wasEasy: z.boolean().default(false),
+  // A step ride mode saves when it ends (docs/plans/bike-ride-logger.md, 4.5).
+  // Without a status, a step is done when completed, as before.
+  stepStatus: z.enum(["done", "partial", "skipped"]).optional(),
+  targetOffsetW: z.number().int().min(-NUDGE_CAP_W).max(NUDGE_CAP_W).optional(),
+  extendedSeconds: z.number().int().min(0).max(EXTEND_MAX_S).optional(),
+  // Ride results a rider types after the ride (docs/plans/bike-ride-logger.md,
+  // 4.1 and 4.5). Each is written only when sent; null clears it.
+  avgPower: z.number().int().min(0).max(2500).nullable().optional(),
+  avgHr: z.number().int().min(30).max(250).nullable().optional(),
+  maxHr: z.number().int().min(30).max(250).nullable().optional(),
+  avgCadence: z.number().int().min(0).max(250).nullable().optional(),
+  // m/s
+  avgSpeed: z.number().min(0).max(40).nullable().optional(),
+  climbM: z.number().int().min(0).max(20000).nullable().optional(),
+  // Only what the app itself knows: "garmin" and "assistant" are set on the
+  // server (the Garmin fill, the assistant's step results), never by a client.
+  sources: z.partialRecord(z.enum(RESULT_FIELDS), z.enum(CLIENT_RESULT_SOURCES)).optional(),
+  // The workout list's ring logs a whole exercise: it never writes over a row
+  // that carries a step status or sources (a ride's step, a typed result).
+  bulk: z.boolean().optional(),
 });
 
 /** A correction to a set in a finished session, made from history. */
@@ -169,6 +199,8 @@ export const unlogWorkoutSetSchema = z.object({
   // Same optionality and same purpose as on logWorkoutSetSchema: without it,
   // un-logging set 1 of the second slot deletes set 1 of the first.
   programSetId: z.number().int().positive().optional(),
+  // As on logWorkoutSetSchema: a bulk un-log leaves a row with a step status or sources.
+  bulk: z.boolean().optional(),
 });
 
 /**
@@ -615,6 +647,7 @@ const importProgramEntrySchema = z.object({
             }),
           ),
           poolM: z.number().min(10).max(100).optional().catch(undefined),
+          rideTest: z.enum(RIDE_TESTS).optional().catch(undefined),
         }),
       )
       .max(50),

@@ -466,6 +466,7 @@ export async function cycleWeekSessions(ex: Executor, cycleId: number): Promise<
           stepKind: programSets.stepKind,
           blockId: programSets.blockId,
           targets: programSets.targets,
+          ramp: programSets.ramp,
         })
         .from(programs)
         .innerJoin(programExercises, eq(programExercises.programId, programs.id))
@@ -481,7 +482,7 @@ export async function cycleWeekSessions(ex: Executor, cycleId: number): Promise<
       hard: isHardSession(
         sets
           .filter((x) => x.programId === s.programId)
-          .map((x) => ({ discipline: x.discipline, sessionRole: x.sessionRole === "work" ? "work" : null, targetHeartRateZone: x.targetHeartRateZone, stepKind: x.stepKind, blockId: x.blockId, targets: x.targets })),
+          .map((x) => ({ discipline: x.discipline, sessionRole: x.sessionRole === "work" ? "work" : null, targetHeartRateZone: x.targetHeartRateZone, stepKind: x.stepKind, blockId: x.blockId, targets: x.targets, ramp: x.ramp })),
       ),
     }));
 }
@@ -499,6 +500,7 @@ export async function hardPrograms(ex: Executor, programIds: number[], threshold
           stepKind: programSets.stepKind,
           blockId: programSets.blockId,
           targets: programSets.targets,
+          ramp: programSets.ramp,
         })
         .from(programs)
         .innerJoin(programExercises, eq(programExercises.programId, programs.id))
@@ -512,7 +514,7 @@ export async function hardPrograms(ex: Executor, programIds: number[], threshold
       isHardSession(
         sets
           .filter((x) => x.programId === id)
-          .map((x) => ({ discipline: x.discipline, sessionRole: x.sessionRole === "work" ? "work" : null, targetHeartRateZone: x.targetHeartRateZone, stepKind: x.stepKind, blockId: x.blockId, targets: x.targets })),
+          .map((x) => ({ discipline: x.discipline, sessionRole: x.sessionRole === "work" ? "work" : null, targetHeartRateZone: x.targetHeartRateZone, stepKind: x.stepKind, blockId: x.blockId, targets: x.targets, ramp: x.ramp })),
         thresholds,
       ),
     ]),
@@ -626,6 +628,7 @@ async function placeRows(ex: Executor, userId: string, rows: PlaceRow[], fixedSh
           stepKind: programSets.stepKind,
           blockId: programSets.blockId,
           targets: programSets.targets,
+          ramp: programSets.ramp,
           endsOnLap: programSets.endsOnLap,
           durationSeconds: programSets.durationSeconds,
           distanceMeters: programSets.distanceMeters,
@@ -677,7 +680,7 @@ async function placeRows(ex: Executor, userId: string, rows: PlaceRow[], fixedSh
       label: r.label ?? mine[0]?.name ?? "Session",
       sport,
       hard: isHardSession(
-        mine.map((s) => ({ discipline: s.discipline, sessionRole: s.sessionRole === "work" ? "work" : null, targetHeartRateZone: s.targetHeartRateZone, stepKind: s.stepKind, blockId: s.blockId, targets: s.targets })),
+        mine.map((s) => ({ discipline: s.discipline, sessionRole: s.sessionRole === "work" ? "work" : null, targetHeartRateZone: s.targetHeartRateZone, stepKind: s.stepKind, blockId: s.blockId, targets: s.targets, ramp: s.ramp })),
         thresholds,
       ),
       // A distance-only run or swim gets its time from the threshold speed (programSteps),

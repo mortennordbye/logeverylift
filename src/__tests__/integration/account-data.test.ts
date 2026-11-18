@@ -6,6 +6,7 @@ import {
   oauthAccessTokens,
   oauthClients,
   oauthRefreshTokens,
+  pushSubscriptions,
   sessions,
   users,
   workoutSets,
@@ -84,8 +85,11 @@ describe("collectUserData", () => {
       scopes: ["openid"], expiresAt: now, createdAt: now,
     });
 
+    await db.insert(pushSubscriptions).values({ userId: meId, endpoint: "https://push.example/device-1", p256dh: "p256dh-secret", auth: "auth-secret" });
+
     const data = await collectUserData(meId);
     expect(data.user.weightKg).toBe(81);
+    expect(data.push_subscriptions.map((p) => p.endpoint)).toEqual(["https://push.example/device-1"]);
     expect(data.oauth_client.map((c) => c.name)).toEqual(["Claude"]);
     expect(data.oauth_access_token.map((t) => t.id)).toEqual(["at-1"]);
     expect(data.oauth_refresh_token.map((t) => t.id)).toEqual(["rt-1"]);
@@ -96,7 +100,7 @@ describe("collectUserData", () => {
     const json = JSON.stringify(data);
     expect(json).not.toContain("hash-secret");
     expect(json).not.toContain("token-secret");
-    for (const secret of ["client-secret", "refresh-secret", "replay-secret", "access-secret"]) {
+    for (const secret of ["client-secret", "refresh-secret", "replay-secret", "access-secret", "p256dh-secret", "auth-secret"]) {
       expect(json).not.toContain(secret);
     }
     expect(json).not.toContain(otherId);

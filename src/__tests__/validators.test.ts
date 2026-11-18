@@ -71,6 +71,15 @@ describe("logWorkoutSetSchema", () => {
     expect(logWorkoutSetSchema.safeParse(valid).success).toBe(true);
   });
 
+  // Garmin and the assistant are set only on the server (the Garmin fill, the
+  // MCP step results); a client may not mark its own numbers as theirs.
+  it("takes only typed and clock as a field's source from the app", () => {
+    const step = { ...valid, programSetId: 4, durationSeconds: 600 };
+    expect(logWorkoutSetSchema.safeParse({ ...step, sources: { durationSeconds: "clock", avgPower: "typed" } }).success).toBe(true);
+    expect(logWorkoutSetSchema.safeParse({ ...step, sources: { avgPower: "garmin" } }).success).toBe(false);
+    expect(logWorkoutSetSchema.safeParse({ ...step, sources: { avgPower: "assistant" } }).success).toBe(false);
+  });
+
   it("rejects a non-positive programSetId", () => {
     expect(logWorkoutSetSchema.safeParse({ ...valid, programSetId: 0 }).success).toBe(false);
     expect(logWorkoutSetSchema.safeParse({ ...valid, programSetId: -1 }).success).toBe(false);

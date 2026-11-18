@@ -177,8 +177,8 @@ describe("MCP tool registration", () => {
     expect(hints(registerComplianceTools)).toEqual({ get_compliance: true });
   });
 
-  it("registers the training load and step result tools: two reads, one write", () => {
-    expect(hints(registerEnduranceAppTools)).toEqual({ get_training_load: true, get_step_results: true, log_step_results: false });
+  it("registers the training load, step result and ride tools: three reads, one write", () => {
+    expect(hints(registerEnduranceAppTools)).toEqual({ get_training_load: true, get_step_results: true, get_ride: true, log_step_results: false });
   });
 
   it("registers the nutrition and race plan tools: two reads, four writes", () => {

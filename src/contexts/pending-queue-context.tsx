@@ -304,13 +304,17 @@ export function useWorkoutSetWriter() {
 
   const logWithRetry = async (
     payload: LogPayload,
+    // A screen that already says the write waits on the phone (ride mode) asks for no offline toast.
+    opts: { quietOffline?: boolean } = {},
   ): ReturnType<typeof logWorkoutSet> => {
     if (typeof navigator !== "undefined" && navigator.onLine === false) {
       enqueue({ kind: "logWorkoutSet", payload });
-      showToast({
-        message: "Offline — saved locally, will sync when online",
-        durationMs: 4000,
-      });
+      if (!opts.quietOffline) {
+        showToast({
+          message: "Offline. Saved on this phone, it sends when you are online.",
+          durationMs: 4000,
+        });
+      }
       return { success: true, data: { set: null as never, newPRs: [] } };
     }
     // A reload for the new bundle is under way: a request sent now carries a

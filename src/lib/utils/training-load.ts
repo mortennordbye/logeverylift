@@ -23,7 +23,8 @@ import { computePmc, type DayLoad, type PmcDay } from "@/lib/garmin/analytics/pm
 import type { Sport } from "@/lib/garmin/analytics/sport";
 
 export type EnduranceSport = "swim" | "bike" | "run";
-export type LoadMethod = "run_pace" | "swim_css" | "srpe" | "none";
+/** bike_power: a ride's step averages with an FTP (docs/plans/bike-ride-logger.md, 4.6), set by appSessionLoads. */
+export type LoadMethod = "run_pace" | "swim_css" | "bike_power" | "srpe" | "none";
 
 /** One hour at RPE 7.5 is about 100, as for strength (load.ts). Inference. */
 export const SRPE_FACTOR = 0.22;
@@ -164,14 +165,28 @@ export function stepIntensity(sport: EnduranceSport, t: PlannedTarget | undefine
 }
 
 /**
+ * Planned IF of a ride from its steps' intensities, as NP is made: the
+ * time-weighted fourth-power mean (docs/plans/bike-ride-logger.md, 4.6).
+ */
+export function plannedPowerIf(steps: { seconds: number; intensity: number }[]): number | null {
+  const total = steps.reduce((a, s) => a + s.seconds, 0);
+  if (!(total > 0)) return null;
+  return (steps.reduce((a, s) => a + s.seconds * s.intensity ** 4, 0) / total) ** 0.25;
+}
+
+/**
  * Estimated load of a planned workout, from steps already expanded and timed
  * (C4's estimate gives the seconds). `partial` is true when a step had no time
- * or used a default IF.
+ * or used a default IF. A ride whose timed steps all have a power target is
+ * counted as a whole, with the planned IF from plannedPowerIf (hours x IF^2 x
+ * 100, docs/plans/bike-ride-logger.md 4.6); `intensityFactor` is then set.
  */
-export function plannedLoad(sport: EnduranceSport, steps: PlannedStep[], anchors: LoadAnchors): { load: number; partial: boolean } {
+export function plannedLoad(sport: EnduranceSport, steps: PlannedStep[], anchors: LoadAnchors): { load: number; partial: boolean; intensityFactor?: number } {
   const exponent = sport === "swim" ? 3 : 2;
   let load = 0;
   let partial = false;
+  const timed: { seconds: number; intensity: number }[] = [];
+  let allPower = sport === "bike";
   for (const s of steps) {
     if (s.seconds === null) {
       partial = true;
@@ -180,11 +195,18 @@ export function plannedLoad(sport: EnduranceSport, steps: PlannedStep[], anchors
     let intensity = stepIntensity(sport, s.target, anchors);
     if (intensity === null) {
       intensity = DEFAULT_IF[s.type];
-      if (s.type !== "rest") partial = true;
+      if (s.type !== "rest") {
+        partial = true;
+        allPower = false;
+      }
     }
+    timed.push({ seconds: s.seconds, intensity });
     load += (s.seconds / 3600) * intensity ** exponent * 100;
   }
-  return { load, partial };
+  const intensityFactor = allPower && timed.some((t) => t.intensity > 0) ? plannedPowerIf(timed) : null;
+  if (intensityFactor === null) return { load, partial };
+  const hours = timed.reduce((a, t) => a + t.seconds, 0) / 3600;
+  return { load: hours * intensityFactor ** 2 * 100, partial, intensityFactor };
 }
 
 // ── Garmin pairing and the series (endurance-app.md 6.4) ─────────────────────

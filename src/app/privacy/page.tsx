@@ -26,6 +26,10 @@ export default function PrivacyPage() {
           scrypt hash.
         </li>
         <li>
+          <strong>Step alerts, if you turn them on:</strong> your device&apos;s push address and the keys that encrypt
+          alerts for it, and the alerts of a bike ride in progress until they are sent.
+        </li>
+        <li>
           <strong>Profile, if you fill it in:</strong> gender, year of birth, height, body weight, training goals and
           experience level, and your body weight history.
         </li>
@@ -39,14 +43,20 @@ export default function PrivacyPage() {
         </li>
         <li>
           <strong>Structured sessions and planned versus done, if endurance features are on:</strong> the steps of
-          your swim, bike and run programs (repeats, targets as a share of your thresholds, cadence, stroke and
+          your swim, bike and run programs (repeats, targets as a share of your thresholds, ramps, cadence, stroke and
           equipment), and for each dated session its priority, whether it is part of a brick, whether you did it or
           missed it, an optional reason for a miss in your own words, and the Garmin activity you or your assistant
           picked for it. A session you change for one day only gets its own copy of the program. From this the app works
           out how much of each session you did and how many weeks you followed your plan. Each change is kept as a
           version you can restore. After a session, the result of each step is kept with your logged sets (its status,
           time, distance, extra time, an average you type in, effort, a note, and a copy of the step as planned with the
-          thresholds used), from the guided player or typed in by you or your assistant. From your logged sessions and thresholds
+          thresholds used), from the guided player or typed in by you or your assistant. For a bike ride the app also keeps
+          whether you rode indoors or outdoors, whether you ended before the last step, and per step your average power,
+          maximum heart rate, average cadence, average speed, climbing, any change you made to the target, and where each
+          number came from. In ride mode it keeps the ride&apos;s plan as it was at the start and each tap you make (start,
+          pause, skip, an extra minute, a target change, lap, end) with its time. If Garmin is on for your account, a Garmin
+          bike ride that overlaps your ride fills the step numbers you left empty, and the app keeps what was there before
+          so Undo can restore it, and whether you undid it. From your logged sessions and thresholds
           the app also works out a training load and your fitness, fatigue and form; these are calculated when shown,
           not stored.
         </li>
@@ -172,6 +182,14 @@ export default function PrivacyPage() {
           gyms&apos; business addresses, nothing about you.
         </li>
         <li>
+          <strong>Your device&apos;s push service</strong> (Apple, Google, Mozilla or Microsoft, in the USA), only if you
+          turn on step alerts for bike rides. During a ride our server sends each alert, such as the next step&apos;s
+          target and time, to the push service your browser uses, which passes it to your device. The text is
+          encrypted for your device. The push service sees your device&apos;s push address, when each alert is sent and
+          its size, how long it may wait (60 seconds) and that it is urgent, and the operator&apos;s contact address.
+          It does not see which ride the alert is about.
+        </li>
+        <li>
           <strong>Google Drive</strong> stores an off-site copy of the backups. The backups are encrypted before they
           leave the server, and Google does not have the key.
         </li>
@@ -217,7 +235,7 @@ export default function PrivacyPage() {
       <p>
         <strong>AI assistants you connect yourself</strong> (MCP) get the access you choose when you connect them:
         read only, or read and change. They can read your profile, body weight, time zone, display units, how your home screen is arranged, whether endurance features are
-        on, programs (with their structured steps), cycles and their dated sessions with planned versus done, step results and training load, seasons and their races, coach memory, thresholds, the athlete profile with injuries and sick periods, fuel logs, fuel products, sweat tests and race plans, and workout history: sets, weights, heart rate zones, effort, how you felt, your readiness and the
+        on, programs (with their structured steps), cycles and their dated sessions with planned versus done, step results, your bike rides from ride mode, and training load, seasons and their races, coach memory, thresholds, the athlete profile with injuries and sick periods, fuel logs, fuel products, sweat tests and race plans, and workout history: sets, weights, heart rate zones, effort, how you felt, your readiness and the
         notes you write on workouts, sets and exercises. If Garmin is on for your account, they can also read data from it. With read and change
         access they can also change your profile, body weight, time zone, display units, programs and their steps, cycles, dated sessions, seasons and races, see and restore earlier
         versions of your programs, cycles and seasons, write coach memory, thresholds, the athlete profile, injuries and sick periods, log fuel, sweat tests and fuel products, change race plans, create custom exercises, log a workout you did and its step results, mark a planned day
@@ -254,6 +272,10 @@ export default function PrivacyPage() {
           Fuel logs, fuel products, sweat tests and race plans: until you delete them or your account. Fuel logs on
           Garmin sessions also go when you delete your Garmin data.
         </li>
+        <li>
+          Step alerts: each alert is deleted when it is sent. A device you turned them on for is kept until you sign out
+          on it, its push service says it has gone, or you delete your account.
+        </li>
         <li>Login sessions, with IP address and user agent: 30 days after last use.</li>
         <li>Server logs: 7 days.</li>
         <li>Request traces (how long each request and database query took, without their contents): 24 hours.</li>
@@ -263,7 +285,8 @@ export default function PrivacyPage() {
       <p>
         The app sets one login cookie and one short-lived cache of it, both needed to keep you signed in. It also keeps
         your active workout, rest timers, a guided session in progress until its results are saved, unsynced changes and display settings in your browser&apos;s local storage,
-        and caches pages so the app works offline. All of this is needed for the app to work, so we don&apos;t ask
+        and caches pages so the app works offline. If you turn on step alerts, your browser also keeps a push
+        subscription and a small service worker that shows the alerts. All of this is needed for the app to work, so we don&apos;t ask
         for cookie consent. Signing out clears it, apart from your display settings. There are no third-party cookies.
       </p>
 

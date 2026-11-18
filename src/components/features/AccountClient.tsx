@@ -4,6 +4,7 @@ import { authClient } from "@/lib/auth-client";
 import { exportMyData } from "@/lib/actions/account";
 import { GROUPS, SECTIONS, type AccountData, type Row } from "@/components/features/account/sections";
 import { BottomSheet } from "@/components/ui/BottomSheet";
+import { forgetStepAlerts } from "@/lib/push-client";
 import { clearLocalUserData, unsyncedChangeCount } from "@/lib/utils/local-data";
 import { callAction } from "@/lib/utils/stale-bundle";
 import { ChevronRight, Download, LogOut, Trash2 } from "lucide-react";
@@ -135,6 +136,8 @@ export function AccountClient({ data, page }: AccountClientProps) {
       setSignOutWarning(unsynced);
       return;
     }
+    // A shared phone must not get this user's step alerts.
+    await forgetStepAlerts();
     await authClient.signOut();
     await clearLocalUserData();
     window.location.href = "/login";
