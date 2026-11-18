@@ -167,6 +167,22 @@ describe("RideMode", () => {
     expect(screen.queryByTestId("ride-toast")).toBeNull();
   });
 
+  it("the undo toast takes the Next card's place below the controls, so a second +5 W tap never lands on Undo", async () => {
+    await open(700);
+    const up = screen.getByRole("button", { name: "Target up 5 W" });
+    fireEvent.click(up);
+    await advance(0);
+    const toast = screen.getByTestId("ride-toast");
+    // Below the ±5 W row in the page, not between it and the target.
+    expect(up.compareDocumentPosition(toast) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByTestId("ride-next")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Target up 5 W" }));
+    await advance(0);
+    expect(text("ride-target-value")).toBe("145-156");
+    await advance(5_000);
+    expect(screen.getByTestId("ride-next")).toBeTruthy();
+  });
+
   it("+1 min adds a minute with an undo", async () => {
     await open(700);
     expect(text("ride-clock")).toBe("13:20");

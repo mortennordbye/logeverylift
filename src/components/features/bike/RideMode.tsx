@@ -96,7 +96,7 @@ function HoldToSkip({ step, onSkip, className = "" }: { step: number; onSkip: ()
         className="absolute inset-y-0 left-0 bg-foreground/15"
         style={{ width: holding ? "100%" : "0%", transition: holding ? `width ${HOLD_TO_SKIP_MS}ms linear` : "none" }}
       />
-      <span className="relative block leading-tight">Hold to skip</span>
+      <span className="relative block whitespace-nowrap leading-tight text-sm min-[360px]:text-base">Hold to skip</span>
       <span className="relative block text-xs font-normal text-muted-foreground">step {step}</span>
     </button>
   );
@@ -144,7 +144,7 @@ function TargetCard({ s, compact = false }: { s: RideScreen; compact?: boolean }
 function NextCard({ s }: { s: RideScreen }) {
   return (
     <div
-      className={`flex items-center justify-between gap-3 rounded-2xl px-4 min-h-12 text-base ${s.lastMinute ? "bg-brand/25" : "bg-muted"}`}
+      className={`flex items-center justify-between gap-3 rounded-2xl px-4 min-h-12 text-sm min-[360px]:text-base ${s.lastMinute ? "bg-brand/25" : "bg-muted"}`}
       data-testid="ride-next"
       data-last-minute={s.lastMinute ? "true" : undefined}
     >
@@ -450,9 +450,9 @@ export function RideMode({
       <div className="flex justify-center">{clock}</div>
       {s.lapHint && <p className="-mt-2 text-center text-sm text-muted-foreground">{s.lapHint}</p>}
       <TargetCard s={s} />
-      {toastRow}
       {(s.power || s.canExtend) && <div className="grid auto-cols-fr grid-flow-col gap-2">{nudges(true)}</div>}
-      <NextCard s={s} />
+      {/* The toast takes the Next card's place: the controls above never move, so a second tap on +5 W is never an Undo. */}
+      {toastRow || <NextCard s={s} />}
       {soundHint}
       <div className="mt-auto grid auto-cols-fr grid-flow-col gap-2 pt-2">
         <HoldToSkip step={s.stepNumber} onSkip={skip} />
