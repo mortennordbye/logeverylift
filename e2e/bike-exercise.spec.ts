@@ -75,7 +75,7 @@ test("an endurance user's bike exercise shows the ride, switches mode, starts th
 
   await page.getByRole("button", { name: "Change to Outdoor" }).click();
   await expect(page.getByTestId("ride-profile")).toHaveCount(0);
-  await expect(page.getByTestId("ride-step-target")).toHaveText(["HR under 139", "HR 139-152", "Effort 2", "HR 139-152", "HR 139-152"]);
+  await expect(page.getByTestId("ride-step-target")).toHaveText(["HR under 139", "HR 139-152", "Effort 2 · easy spin", "HR 139-152", "HR 139-152"]);
 
   // The workout layout opens the session in the background; Start ride needs it.
   const db = testDb();
