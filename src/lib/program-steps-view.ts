@@ -18,7 +18,10 @@ import { toDateStr } from "@/lib/utils/cycle-position";
 import { formatSessionLength, loadText } from "@/lib/utils/format";
 import { workoutPlannedLoad } from "@/lib/utils/step-results";
 import { stepOfRow, type StepRow } from "@/lib/utils/program-steps";
-import { describeWorkout, estimateWorkout, resolveStepTarget, resolveTarget } from "@/lib/utils/workout-steps";
+import { describeWorkout, estimateWorkout, resolveStepTarget, resolveTarget, type Workout } from "@/lib/utils/workout-steps";
+import { plannedRideNumbers, rideLengthText } from "@/lib/utils/bike-ride-view";
+import { buildRidePlan } from "@/lib/utils/ride-timeline";
+import { flattenWorkout } from "@/lib/utils/workout-player";
 import { and, asc, eq, isNotNull, sql } from "drizzle-orm";
 
 export type ProgramGuided = { totals: string; href: string | null };
@@ -30,19 +33,34 @@ export async function programStepsView(userId: string, programId: number): Promi
   const [anchors, { units }, today] = await Promise.all([thresholdValues(userId), getUserSettings(userId), userToday(userId)]);
   const summaries = new Map(all.map((p) => [p.programExerciseId, describeWorkout(p.workout, units)]));
 
-  const est = all.map((p) => estimateWorkout(p.workout, anchors));
-  const seconds = est.reduce((a, e) => a + e.durationSeconds, 0);
-  const meters = est.reduce((a, e) => a + e.distanceMeters, 0);
-  const loads = all.map((p) => workoutPlannedLoad(p.workout, anchors));
-  const load = { load: loads.reduce((a, l) => a + l.load, 0), partial: loads.some((l) => l.partial) };
+  // A ride counts as the bike screen counts it (one source, plannedRideNumbers):
+  // the recovery a repeat drops after its last round is not ridden, and the
+  // load is the ride's as a whole (docs/plans/bike-ride-logger.md, 4.6).
+  const ride = (w: Workout) => plannedRideNumbers(buildRidePlan(w, flattenWorkout(w).map(() => 0), anchors, "indoor"));
+  const rides = all.map((p) => (p.sport === "bike" ? ride(p.workout) : null));
   const sport = all[0].sport;
-  const totals = [
-    seconds > 0 ? `${est.every((e) => e.durationComplete) ? "" : "at least "}${formatSessionLength(seconds)}` : null,
-    meters > 0 ? `${est.every((e) => e.distanceComplete) ? "" : "at least "}${distanceLabel(meters, sport, units)}` : null,
-    load.load > 0 ? loadText(load) : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  let totals: string;
+  if (all.length === 1 && rides[0]) {
+    const n = rides[0];
+    totals = [rideLengthText(n), n.load.load > 0 ? loadText(n.load) : null].filter(Boolean).join(" · ");
+  } else {
+    const est = all.map((p, i) => {
+      const e = estimateWorkout(p.workout, anchors);
+      const r = rides[i];
+      return r ? { ...e, durationSeconds: r.seconds, durationComplete: !r.open } : e;
+    });
+    const seconds = est.reduce((a, e) => a + e.durationSeconds, 0);
+    const meters = est.reduce((a, e) => a + e.distanceMeters, 0);
+    const loads = all.map((p, i) => rides[i]?.load ?? workoutPlannedLoad(p.workout, anchors));
+    const load = { load: loads.reduce((a, l) => a + l.load, 0), partial: loads.some((l) => l.partial) };
+    totals = [
+      seconds > 0 ? `${est.every((e) => e.durationComplete) ? "" : "at least "}${formatSessionLength(seconds)}` : null,
+      meters > 0 ? `${est.every((e) => e.distanceComplete) ? "" : "at least "}${distanceLabel(meters, sport, units)}` : null,
+      load.load > 0 ? loadText(load) : null,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+  }
 
   // Not once it is done: a completed workout from the app is linked to it.
   const notDone = sql`NOT EXISTS (SELECT 1 FROM workout_sessions ws WHERE ws.planned_session_id = ${plannedSessions.id} AND ws.is_completed AND ws.source IN ('app', 'assistant'))`;

@@ -5,11 +5,14 @@
  * limits.
  */
 import { db } from "@/db";
-import { athleteThresholds, planRevisions, programSets, trainingCycleSlots, trainingCycles } from "@/db/schema";
+import { athleteThresholds, planRevisions, programExercises, programSets, trainingCycleSlots, trainingCycles } from "@/db/schema";
 import { registerProgramTools } from "@/lib/mcp/tools/programs";
 import { syncPeriodizedTargets } from "@/lib/periodization-sync";
 import { startDueScheduledCycle } from "@/lib/plan-revisions";
 import { programStepsView, stepLabels } from "@/lib/program-steps-view";
+import { bikeExerciseView } from "@/lib/bike-exercise-view";
+import { rideLengthText } from "@/lib/utils/bike-ride-view";
+import { loadText } from "@/lib/utils/format";
 import { and, asc, desc, eq, isNull } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createExercise, createStepProgram, createUser } from "./factories";
@@ -99,7 +102,37 @@ describe("the workout screen", () => {
     const view = await programStepsView(me, program.id);
     expect(view?.summaries.values().next().value).toBe("10 min warm-up ramp 50 to 70% FTP · 20 min Z3 power · 15 min ramp 95 to 105% FTP · 5 min easy free");
     // 10 min at 0.60, 20 min at Z3's 0.82, 15 min at 1.00, and the free 5 min at the easy default.
-    expect(view?.guided.totals).toBe("50:00 · load at least 56");
+    // The same numbers as the bike screen (one source, plannedRideNumbers).
+    const sets = await liveSets((await db.select().from(programExercises).where(eq(programExercises.programId, program.id)))[0].id);
+    const bikeView = await bikeExerciseView(me, sets[0].programExerciseId, "Bike", sets as never);
+    const n = bikeView!.indoor.numbers;
+    expect(view?.guided.totals).toBe([rideLengthText(n), n.load.load > 0 ? loadText(n.load) : null].filter(Boolean).join(" · "));
+  });
+
+  it("a repeat's dropped last recovery is not in the planned time, as on the bike screen", async () => {
+    const tempo = {
+      v: 2,
+      sport: "bike",
+      name: "Tempo",
+      steps: [
+        { type: "warmup", end: { type: "time", seconds: 900 }, target: { metric: "power", anchor: "ftp", low: 55, high: 75 } },
+        {
+          type: "repeat",
+          count: 2,
+          steps: [
+            { type: "work", end: { type: "time", seconds: 900 }, target: { metric: "power", anchor: "ftp", low: 75, high: 81 } },
+            { type: "recovery", end: { type: "time", seconds: 300 }, target: { metric: "power", anchor: "ftp", zone: 1 } },
+          ],
+        },
+        { type: "cooldown", end: { type: "time", seconds: 900 }, target: { metric: "power", anchor: "ftp", low: 56, high: 75 } },
+      ],
+    };
+    const { program, slots } = await createStepProgram(me, bike, tempo);
+    const view = await programStepsView(me, program.id);
+    const sets = await liveSets(slots[0].programExerciseId);
+    const n = (await bikeExerciseView(me, slots[0].programExerciseId, "Bike", sets as never))!.indoor.numbers;
+    expect(n.seconds).toBe(65 * 60);
+    expect(view?.guided.totals).toBe(`65 min · ${loadText(n.load)}`);
   });
 });
 

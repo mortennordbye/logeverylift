@@ -230,6 +230,18 @@ describe("review fixes", () => {
     expect((await row(s.sessionId, s.ridden[1])).durationSeconds).toBe(60);
   });
 
+  it("by hand: once every ridden step is logged, the dropped last recovery is logged as not done, and the exercise reads as done", async () => {
+    const s = await setup();
+    const typed = (id: number, n: number) => ({ ...base(s.sessionId, id, n), sources: { durationSeconds: "typed" } });
+    for (const [i, id] of s.ridden.slice(0, 4).entries()) ok(await logWorkoutSet(typed(id, i + 1)));
+    // Not all steps yet: the dropped step waits.
+    expect(await row(s.sessionId, s.setIds[4])).toBeUndefined();
+    ok(await logWorkoutSet(typed(s.ridden[4], 6)));
+    const dropped = await row(s.sessionId, s.setIds[4]);
+    expect([dropped.stepStatus, dropped.isCompleted]).toEqual(["not_done", false]);
+    expect(ok(await getActiveSessionCompletedProgramSetIds(s.sessionId)).sort()).toEqual([...s.setIds].sort());
+  });
+
   it("a finished ride writes its dropped last recovery as not done, and every set reads as handled", async () => {
     const s = await setup();
     const v = ok(await startRide({ sessionId: s.sessionId, programExerciseId: s.programExerciseId, mode: "indoor", clientId: "start-1" }));

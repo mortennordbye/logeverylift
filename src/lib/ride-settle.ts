@@ -5,12 +5,14 @@
  */
 
 import { db } from "@/db";
-import { programExercises, programSets, rideEvents, rides, workoutSessions, workoutSets } from "@/db/schema";
+import { exercises, programExercises, programSets, rideEvents, rides, workoutSessions, workoutSets } from "@/db/schema";
 import { liveProgramSets } from "@/lib/plan-live";
 import { plannedStepSnapshot } from "@/lib/program-steps-db";
 import { scheduleRidePushes } from "@/lib/push";
 import { rideStepSnapshot } from "@/lib/ride-plan-db";
-import { rideTimeline, type RideEventInput, type RidePlan } from "@/lib/utils/ride-timeline";
+import { buildWorkout, type StepRow } from "@/lib/utils/program-steps";
+import { buildRidePlan, rideTimeline, type RideEventInput, type RidePlan } from "@/lib/utils/ride-timeline";
+import { parseWorkout } from "@/lib/utils/workout-steps";
 import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
 
 type Ride = typeof rides.$inferSelect;
@@ -156,14 +158,25 @@ async function logDroppedSteps(ex: Executor, ride: Ride, plan: RidePlan) {
         ? and(eq(programSets.programExerciseId, ride.programExerciseId), inArray(programSets.id, [...dropped, -1]))
         : and(eq(programSets.programExerciseId, ride.programExerciseId), isNotNull(programSets.stepKind), liveProgramSets),
     );
-  for (const set of sets.filter((x) => !inPlan.has(x.id))) {
-    const plannedStep = (await rideStepSnapshot(ex, ride.userId, ride.sessionId, set.id)) ?? (await plannedStepSnapshot(ex, set.id, ride.userId));
+  await logNotDone(ex, ride.userId, ride.sessionId, ride.programExerciseId, sets.filter((x) => !inPlan.has(x.id)));
+}
+
+/** Log these step sets as not done on the session; a row already there stays. */
+async function logNotDone(
+  ex: Executor,
+  userId: string,
+  sessionId: number,
+  programExerciseId: number,
+  sets: { id: number; setNumber: number; exerciseId: number }[],
+) {
+  for (const set of sets) {
+    const plannedStep = (await rideStepSnapshot(ex, userId, sessionId, set.id)) ?? (await plannedStepSnapshot(ex, set.id, userId));
     await ex
       .insert(workoutSets)
       .values({
-        sessionId: ride.sessionId,
+        sessionId,
         exerciseId: set.exerciseId,
-        programExerciseId: ride.programExerciseId,
+        programExerciseId,
         programSetId: set.id,
         setNumber: set.setNumber,
         actualReps: 0,
@@ -175,6 +188,42 @@ async function logDroppedSteps(ex: Executor, ride: Ride, plan: RidePlan) {
       })
       .onConflictDoNothing({ target: [workoutSets.sessionId, workoutSets.programSetId] });
   }
+}
+
+/**
+ * A bike exercise logged by hand (no ride on the session): once every step
+ * the ride would run has a row, the steps a repeat drops after its last round
+ * (4.4) are logged as not done, as `logDroppedSteps` does when a ride ends, so
+ * the workout reads the exercise as done. Clients never send not done.
+ */
+export async function logDroppedStepsByHand(userId: string, sessionId: number, programExerciseId: number): Promise<void> {
+  const [ride] = await db
+    .select({ id: rides.id })
+    .from(rides)
+    .where(and(eq(rides.userId, userId), eq(rides.sessionId, sessionId), eq(rides.programExerciseId, programExerciseId)))
+    .limit(1);
+  if (ride) return;
+  const rows = await db
+    .select({ set: programSets, exerciseId: programExercises.exerciseId, discipline: exercises.discipline })
+    .from(programSets)
+    .innerJoin(programExercises, eq(programExercises.id, programSets.programExerciseId))
+    .innerJoin(exercises, eq(exercises.id, programExercises.exerciseId))
+    .where(and(eq(programSets.programExerciseId, programExerciseId), isNotNull(programSets.stepKind), liveProgramSets))
+    .orderBy(asc(programSets.setNumber), asc(programSets.id));
+  if (!rows.length || rows[0].discipline !== "bike") return;
+  const built = buildWorkout(rows.map((r) => r.set) as StepRow[], { sport: "bike", name: "" });
+  const tree = "workout" in built ? parseWorkout(built.workout) : null;
+  if (!tree?.ok) return;
+  const plan = buildRidePlan(tree.workout, rows.map((r) => r.set.id), {}, "indoor");
+  if (!plan.dropped?.length) return;
+  const logged = await db
+    .select({ id: workoutSets.programSetId })
+    .from(workoutSets)
+    .where(and(eq(workoutSets.sessionId, sessionId), inArray(workoutSets.programSetId, plan.steps.map((s) => s.programSetId)), isNotNull(workoutSets.stepStatus)));
+  if (new Set(logged.map((l) => l.id)).size < plan.steps.length) return;
+  const dropped = new Set(plan.dropped.map((d) => d.programSetId));
+  const sets = rows.filter((r) => dropped.has(r.set.id)).map((r) => ({ id: r.set.id, setNumber: r.set.setNumber, exerciseId: r.exerciseId }));
+  await logNotDone(db, userId, sessionId, programExerciseId, sets);
 }
 
 /**

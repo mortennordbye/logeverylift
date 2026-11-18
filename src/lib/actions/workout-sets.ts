@@ -24,6 +24,7 @@
  * ```
  */
 
+import { logDroppedStepsByHand } from "@/lib/ride-settle";
 import { db } from "@/db";
 import { liveProgramExercises, liveProgramSets, livePrograms } from "@/lib/plan-live";
 import { exercisePrs, exercises, programExercises, programSets, programs, users, workoutReactions, workoutSessions, workoutSets } from "@/db/schema";
@@ -606,6 +607,16 @@ export async function logWorkoutSet(
     // /programs/[id]/workout (and its exercise subtree, covered by the layout
     // segment). Without this the router cache served up-to-30s-stale insight
     // and suggestions after logging a set.
+    // A ride logged by hand: once every step it would ride is in, the steps a
+    // repeat drops are logged as not done (docs/plans/bike-ride-logger.md, 4.4).
+    if (rideWrite && setValues.programExerciseId != null) {
+      try {
+        await logDroppedStepsByHand(auth.user.id, sessionId, setValues.programExerciseId);
+      } catch {
+        console.error("[logWorkoutSet] dropped_steps_failed", { sessionId });
+      }
+    }
+
     if (session.programId != null) {
       revalidatePath(`/programs/${session.programId}/workout`, "layout");
     }
