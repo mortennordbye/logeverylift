@@ -7,6 +7,7 @@ import { deleteGarminData } from "./delete-data";
 import { garminToday } from "./today";
 import { metricsDue, runGarminMetricsStep } from "./metrics-job";
 import { syncFromGarmin } from "./sync-from-garmin";
+import { fillRidesFromGarmin } from "@/lib/ride-garmin";
 import {
   RunLog,
   fatalTag,
@@ -173,6 +174,12 @@ export async function runGarminWorkerTick(now = new Date()): Promise<TickResult>
         await runGarminMetricsStep(userId, now);
       } catch (e) {
         console.error("[runGarminWorkerTick] metrics failed", { userId }, e instanceof Error ? e.message : "unknown");
+      }
+      // Rides the stored bike activities match get their steps filled (docs/plans/bike-ride-logger.md, 4.8).
+      try {
+        await fillRidesFromGarmin(userId);
+      } catch (e) {
+        console.error("[runGarminWorkerTick] ride fill failed", { userId }, e instanceof Error ? e.message : "unknown");
       }
       try {
         await syncFromGarmin(userId);

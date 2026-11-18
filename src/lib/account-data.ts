@@ -54,6 +54,7 @@ import {
   racePlans,
   pushSubscriptions,
   rideEvents,
+  rideGarminFills,
   ridePushes,
   rides,
 } from "@/db/schema";
@@ -125,6 +126,8 @@ export async function collectUserData(userId: string) {
     // Bike rides in ride mode and what the rider did in them (docs/plans/bike-ride-logger.md, 4.3).
     rides: rideRows,
     ride_events: rideIds.length ? await db.select().from(rideEvents).where(inArray(rideEvents.rideId, rideIds)) : [],
+    // Garmin fills of ride steps (4.8): what each filled field held before, and whether the rider undid it.
+    ride_garmin_fills: await db.select().from(rideGarminFills).where(eq(rideGarminFills.userId, userId)),
     // Step alerts (4.7): the devices that turned them on, without the keys that
     // encrypt their pushes, and the alerts of a running ride not yet sent.
     push_subscriptions: await db

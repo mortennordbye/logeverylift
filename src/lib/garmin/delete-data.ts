@@ -15,6 +15,7 @@ import {
   fuelLogs,
   garminFuelLogs,
   garminSyncRuns,
+  rideGarminFills,
 } from "@/db/schema";
 import { and, eq, isNotNull } from "drizzle-orm";
 
@@ -31,4 +32,6 @@ export async function deleteGarminData(tx: Tx | typeof db, userId: string) {
   await tx.delete(garminFuelLogs).where(eq(garminFuelLogs.userId, userId));
   // Fuel logs on Garmin activities go with them; logs on app sessions stay.
   await tx.delete(fuelLogs).where(and(eq(fuelLogs.userId, userId), isNotNull(fuelLogs.garminActivityId)));
+  // A ride's link to its Garmin activity and what Undo would restore go too; the numbers already in its steps stay.
+  await tx.delete(rideGarminFills).where(eq(rideGarminFills.userId, userId));
 }

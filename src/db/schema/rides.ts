@@ -9,7 +9,7 @@
  */
 
 import { sql } from "drizzle-orm";
-import { index, integer, jsonb, pgTable, serial, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { bigint, boolean, index, integer, jsonb, pgTable, serial, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { programExercises } from "./programs";
 import { users } from "./users";
 import { workoutSessions } from "./workout-sessions";
@@ -79,4 +79,28 @@ export const rideEvents = pgTable(
     uniqueIndex("uniq_ride_events_seq").on(t.rideId, t.seq),
     uniqueIndex("uniq_ride_events_client").on(t.rideId, t.clientId),
   ],
+);
+
+/**
+ * A Garmin activity's fill of a ride's steps (docs/plans/bike-ride-logger.md,
+ * 4.8): what each filled field held before, so Undo restores it. Undo keeps
+ * the row with `declined` true, and a later sync never fills that pair again.
+ * `previous` is a RideFillPrevious (src/lib/ride-garmin.ts).
+ */
+export const rideGarminFills = pgTable(
+  "ride_garmin_fills",
+  {
+    id: serial("id").primaryKey(),
+    userId: text("user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    rideId: integer("ride_id")
+      .references(() => rides.id, { onDelete: "cascade" })
+      .notNull(),
+    garminActivityId: bigint("garmin_activity_id", { mode: "number" }).notNull(),
+    previous: jsonb("previous").notNull(),
+    declined: boolean("declined").default(false).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("uniq_ride_garmin_fills_pair").on(t.rideId, t.garminActivityId), index("idx_ride_garmin_fills_user").on(t.userId)],
 );

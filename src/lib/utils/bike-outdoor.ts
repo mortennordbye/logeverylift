@@ -47,6 +47,13 @@ export function powerLowZone(step: Pick<WorkoutStep, "target" | "ramp">, ftp: nu
 /** Friel bike heart rate zones in % LTHR, for zones 2 to 4, and the top of zone 1. */
 const HR_RANGE: Record<number, [number, number]> = { 2: [81, 89], 3: [90, 93], 4: [94, 99] };
 const HR_CAP_PCT = 81;
+
+/** Friel bike heart rate zone (1-5) of a percent of bike LTHR: zone 2 from 81, 3 from 90, 4 from 94, 5 from 100. */
+export function bikeHrZone(pctLthr: number): number {
+  let z = 1;
+  for (const from of [81, 90, 94, 100]) if (pctLthr >= from) z++;
+  return z;
+}
 /** Effort per power zone, when heart rate cannot be the target. */
 const EFFORT: Record<number, number> = { 1: 2, 2: 4, 3: 6, 4: 7, 5: 8, 6: 9, 7: 10 };
 
