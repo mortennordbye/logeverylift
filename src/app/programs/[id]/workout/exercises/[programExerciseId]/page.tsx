@@ -14,7 +14,7 @@ import { syncActiveCyclePeriodization } from "@/lib/actions/training-cycles";
 import { getProgressiveSuggestions } from "@/lib/actions/workout-sets";
 import { stepLabels } from "@/lib/program-steps-view";
 import type { StepRow } from "@/lib/utils/program-steps";
-import { resultSteps, rideSummary } from "@/lib/utils/ride-results";
+import { offersSaveTheRide, resultSteps, rideSummary } from "@/lib/utils/ride-results";
 import { pushPublicKey } from "@/lib/push";
 import { getUserSettings } from "@/lib/user-settings";
 import { requireSession } from "@/lib/utils/session";
@@ -95,7 +95,8 @@ export default async function WorkoutExerciseSetsPage({ params, searchParams }: 
     const after = bike?.doneRide ? await rideAfterView(user.id, peId) : null;
     if (after) {
       // Later and Done leave for home or the workout; a workout the ride could not finish yet goes back to the summary's Save the ride.
-      const leave = onlyExercise && after.sessionOpen ? `/programs/${programId}/workout/exercises/${peId}` : doneHref;
+      const saveTheRide = offersSaveTheRide(after, onlyExercise);
+      const leave = saveTheRide ? `/programs/${programId}/workout/exercises/${peId}` : doneHref;
       if (results === "1") {
         return (
           <RideResults
@@ -123,7 +124,7 @@ export default async function WorkoutExerciseSetsPage({ params, searchParams }: 
           timeZone={timeZone}
           ftpTest={after.ftpTest}
           doneHref={doneHref}
-          saveTheRide={onlyExercise && after.sessionOpen}
+          saveTheRide={saveTheRide}
         />
       );
     }

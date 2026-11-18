@@ -138,6 +138,8 @@ export type RideAfterData = {
   sessionId: number;
   /** The workout is still open: a one-exercise program's "Save the ride" finishes it in ride mode. */
   sessionOpen: boolean;
+  /** A step the timeline ended has no row on the server yet (the app was closed when the ride ended). */
+  unsaved: boolean;
   status: "finished" | "ended_early";
   plan: RidePlan;
   /** Per program set: the logged step, else what the ride's timeline says of it. */
@@ -193,11 +195,13 @@ async function stepLogs(userId: string, sessionId: number, programSetIds: number
 export async function rideStepLogs(
   userId: string,
   view: Pick<RideView, "plan" | "serverNow"> & { events: RideEventInput[]; ride: Pick<RideView["ride"], "sessionId" | "heartbeatAt"> },
-): Promise<{ logs: Record<number, StepLog>; timeline: ReturnType<typeof rideTimeline> }> {
+): Promise<{ logs: Record<number, StepLog>; timeline: ReturnType<typeof rideTimeline>; unsaved: boolean }> {
   const logs = await stepLogs(userId, view.ride.sessionId, view.plan.steps.map((s) => s.programSetId));
   const timeline = rideTimeline(view.plan, view.events, view.serverNow, { heartbeatAt: view.ride.heartbeatAt });
+  let unsaved = false;
   for (const t of timeline.steps) {
     if (logs[t.programSetId]) continue;
+    unsaved = true;
     logs[t.programSetId] = {
       status: t.status,
       durationSeconds: t.activeSeconds,
@@ -214,7 +218,7 @@ export async function rideStepLogs(
       sources: null,
     };
   }
-  return { logs, timeline };
+  return { logs, timeline, unsaved };
 }
 
 const MODE_LINE: Record<RideMode, string> = { indoor: "Indoor trainer", outdoor: "Outdoor" };
@@ -231,7 +235,7 @@ export async function rideAfterView(userId: string, programExerciseId: number): 
   if (!r.success || !r.data) return null;
   const view = r.data;
   const status = view.ride.status as RideAfterData["status"];
-  const [{ logs, timeline }, garmin, fill, { timeZone }, thresholds] = await Promise.all([
+  const [{ logs, timeline, unsaved }, garmin, fill, { timeZone }, thresholds] = await Promise.all([
     rideStepLogs(userId, view),
     garminAllowedFor(userId),
     rideGarminView(userId, view.ride.id),
@@ -246,6 +250,7 @@ export async function rideAfterView(userId: string, programExerciseId: number): 
     rideId: view.ride.id,
     sessionId: view.ride.sessionId,
     sessionOpen: recent.sessionOpen,
+    unsaved,
     status,
     plan: view.plan,
     logs,

@@ -338,3 +338,13 @@ export function rideSummary(
     noLoad: riddenLogs.length > 0 && numbers.load === null,
   };
 }
+
+/**
+ * The summary offers "Save the ride" (ride mode saves the last steps) while
+ * the workout is open: in a one-exercise program to finish the workout, and
+ * in any program while a ridden step has no row yet (the app was closed when
+ * the ride ended). A program with more exercises stays open after it.
+ */
+export function offersSaveTheRide(after: { sessionOpen: boolean; unsaved: boolean }, onlyExercise: boolean): boolean {
+  return after.sessionOpen && (onlyExercise || after.unsaved);
+}
