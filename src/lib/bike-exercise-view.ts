@@ -17,7 +17,7 @@ import { bikeStepRows, defaultRideMode, plannedRideNumbers, rideChart, type Bike
 import { toDateStr } from "@/lib/utils/cycle-position";
 import { buildWorkout, type StepRow } from "@/lib/utils/program-steps";
 import type { StepLog } from "@/lib/utils/ride-results";
-import { buildRidePlan, rideTimeline, type RidePlan } from "@/lib/utils/ride-timeline";
+import { buildRidePlan, rideTimeline, type RideEventInput, type RidePlan } from "@/lib/utils/ride-timeline";
 import { parseWorkout } from "@/lib/utils/workout-steps";
 import { and, desc, eq, gt, inArray, sql } from "drizzle-orm";
 
@@ -178,25 +178,16 @@ async function stepLogs(userId: string, sessionId: number, programSetIds: number
   return out;
 }
 
-const MODE_LINE: Record<RideMode, string> = { indoor: "Indoor trainer", outdoor: "Outdoor" };
-
 /**
- * The user's ride of this program exercise that ended in the last 12 hours,
- * with its logged steps: the results table and the summary read it. A step
- * whose save has not reached the server yet shows what the timeline says.
+ * The logged steps of a ride, by program set, with its timeline. A step the
+ * timeline ended whose save has not reached the server yet shows what the
+ * timeline says of it, so a reader never waits on the phone's queue.
  */
-export async function rideAfterView(userId: string, programExerciseId: number): Promise<RideAfterData | null> {
-  const recent = await recentRide(userId, programExerciseId);
-  if (!recent || (recent.status !== "finished" && recent.status !== "ended_early")) return null;
-  const r = await getRide({ rideId: recent.id });
-  if (!r.success || !r.data) return null;
-  const view = r.data;
-  const status = view.ride.status as RideAfterData["status"];
-  const [logs, garmin, { timeZone }] = await Promise.all([
-    stepLogs(userId, view.ride.sessionId, view.plan.steps.map((s) => s.programSetId)),
-    garminAllowedFor(userId),
-    getUserSettings(userId),
-  ]);
+export async function rideStepLogs(
+  userId: string,
+  view: Pick<RideView, "plan" | "serverNow"> & { events: RideEventInput[]; ride: Pick<RideView["ride"], "sessionId" | "heartbeatAt"> },
+): Promise<{ logs: Record<number, StepLog>; timeline: ReturnType<typeof rideTimeline> }> {
+  const logs = await stepLogs(userId, view.ride.sessionId, view.plan.steps.map((s) => s.programSetId));
   const timeline = rideTimeline(view.plan, view.events, view.serverNow, { heartbeatAt: view.ride.heartbeatAt });
   for (const t of timeline.steps) {
     if (logs[t.programSetId]) continue;
@@ -216,6 +207,24 @@ export async function rideAfterView(userId: string, programExerciseId: number): 
       sources: null,
     };
   }
+  return { logs, timeline };
+}
+
+const MODE_LINE: Record<RideMode, string> = { indoor: "Indoor trainer", outdoor: "Outdoor" };
+
+/**
+ * The user's ride of this program exercise that ended in the last 12 hours,
+ * with its logged steps: the results table and the summary read it. A step
+ * whose save has not reached the server yet shows what the timeline says.
+ */
+export async function rideAfterView(userId: string, programExerciseId: number): Promise<RideAfterData | null> {
+  const recent = await recentRide(userId, programExerciseId);
+  if (!recent || (recent.status !== "finished" && recent.status !== "ended_early")) return null;
+  const r = await getRide({ rideId: recent.id });
+  if (!r.success || !r.data) return null;
+  const view = r.data;
+  const status = view.ride.status as RideAfterData["status"];
+  const [{ logs, timeline }, garmin, { timeZone }] = await Promise.all([rideStepLogs(userId, view), garminAllowedFor(userId), getUserSettings(userId)]);
   const endedAt = view.ride.endedAt ?? timeline.endedAt;
   const at = endedAt
     ? new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", ...(timeZone && { timeZone }) }).format(new Date(endedAt))

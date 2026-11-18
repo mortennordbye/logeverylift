@@ -4,10 +4,12 @@
  * Pure: the server module and the screens share it.
  */
 
+import type { ResultSource } from "@/db/schema/workout-sets";
 import { complianceBand, complianceRatio, type ComplianceBand } from "@/lib/utils/session-compliance";
 import { flattenWorkout, type PlayStep, type PlayerState } from "@/lib/utils/workout-player";
 import { plannedLoad, type LoadAnchors, type PlannedStep } from "@/lib/utils/training-load";
 import { DEFAULT_UNITS, type Units } from "@/lib/utils/units";
+import { RESULT_FIELDS } from "@/lib/validators/workout";
 import {
   describeWorkout,
   estimateWorkout,
@@ -31,6 +33,14 @@ export const stepResultSchema = z.strictObject({
   extendedSeconds: z.number().int().min(0).max(3600).optional(),
   /** One measured number in the target's metric unit: W, bpm, m/s or rpm. */
   value: z.number().min(0).max(5000).optional(),
+  // Ride results per step (docs/plans/bike-ride-logger.md, 4.1), the ranges of logWorkoutSet.
+  avgPower: z.number().int().min(0).max(2500).optional(),
+  avgHr: z.number().int().min(30).max(250).optional(),
+  maxHr: z.number().int().min(30).max(250).optional(),
+  avgCadence: z.number().int().min(0).max(250).optional(),
+  /** m/s */
+  avgSpeed: z.number().min(0).max(40).optional(),
+  climbM: z.number().int().min(0).max(20000).optional(),
   rpe: z.number().int().min(1).max(10).optional(),
   notes: z.string().trim().min(1).max(STEP_NOTE_MAX).optional(),
 });
@@ -134,4 +144,81 @@ export function resultTotals(rows: PlannedRow[], results: StepResult[]): { activ
     }
   }
   return { activeSeconds: active, movingSeconds: moving, distanceMeters: anyDistance ? distance : null };
+}
+
+// ── Assistant writes (docs/plans/bike-ride-logger.md, step 5) ───────────────
+
+/** Sources an assistant write never replaces: what the rider typed and what Garmin measured. */
+export const ASSISTANT_KEEPS: readonly ResultSource[] = ["typed", "garmin"];
+
+type SourcedField = (typeof RESULT_FIELDS)[number];
+type StepStatus = StepResult["status"];
+
+/** A field an assistant write left as it was, and why: the athlete typed it, Garmin filled it, or it was logged already (effort, notes, a done step). */
+export type KeptField = { field: string; by: "typed" | "garmin" | "logged" };
+
+/** The stored row of a logged step, as far as an assistant write reads it. */
+export type StoredStep = Partial<Record<SourcedField, number | null>> & {
+  rpe: number | null;
+  notes: string | null;
+  stepStatus: StepStatus | null;
+  isCompleted: boolean;
+  sources: Partial<Record<string, ResultSource>> | null;
+};
+
+/** What the assistant sends for one step, in column names. */
+export type SentStep = Partial<Record<SourcedField, number>> & { rpe?: number; notes?: string; stepStatus: StepStatus };
+
+/** One step's result as the assistant's columns: active time is durationSeconds, value is measuredValue. */
+export function sentStep(r: StepResult, sessionRpe: number | null | undefined): SentStep {
+  const done = r.status === "done" || r.status === "partial";
+  const rpe = r.rpe ?? (done ? (sessionRpe ?? undefined) : undefined);
+  const out: SentStep = { stepStatus: r.status };
+  if (r.activeSeconds !== undefined && r.activeSeconds > 0) out.durationSeconds = r.activeSeconds;
+  if (r.distanceMeters !== undefined && r.distanceMeters > 0) out.distanceMeters = Math.round(r.distanceMeters);
+  if (r.value !== undefined) out.measuredValue = r.value;
+  for (const f of ["avgPower", "avgHr", "maxHr", "avgCadence", "avgSpeed", "climbM"] as const) if (r[f] !== undefined) out[f] = r[f];
+  if (rpe !== undefined) out.rpe = rpe;
+  if (r.notes) out.notes = r.notes;
+  return out;
+}
+
+/**
+ * An assistant write over a logged step: the columns to set and the fields it
+ * kept. A result field is written, with source "assistant", unless the row
+ * holds another value that the rider typed or Garmin filled. Effort and notes
+ * are only filled when empty: the rider's own words stay. A step logged as
+ * done or partial stays so.
+ */
+export function assistantStepWrite(stored: StoredStep, sent: SentStep): { set: Record<string, unknown>; kept: KeptField[] } {
+  const set: Record<string, unknown> = {};
+  const kept: KeptField[] = [];
+  const sources: Partial<Record<string, ResultSource>> = { ...(stored.sources ?? {}) };
+  for (const f of RESULT_FIELDS) {
+    const v = sent[f];
+    if (v === undefined) continue;
+    const old = stored[f] ?? null;
+    const src = stored.sources?.[f];
+    if (old !== null && old !== v && src !== undefined && ASSISTANT_KEEPS.includes(src)) {
+      kept.push({ field: f, by: src as KeptField["by"] });
+      continue;
+    }
+    set[f] = v;
+    sources[f] = "assistant";
+  }
+  for (const f of ["rpe", "notes"] as const) {
+    const v = sent[f];
+    if (v === undefined) continue;
+    if (stored[f] != null && stored[f] !== v) kept.push({ field: f, by: "logged" });
+    else set[f] = v;
+  }
+  const done = (s: StepStatus | null) => s === "done" || s === "partial";
+  if (stored.isCompleted && !done(sent.stepStatus)) {
+    if (stored.stepStatus !== sent.stepStatus) kept.push({ field: "status", by: "logged" });
+  } else {
+    set.stepStatus = sent.stepStatus;
+    set.isCompleted = done(sent.stepStatus);
+  }
+  set.sources = sources;
+  return { set, kept };
 }

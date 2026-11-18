@@ -28,7 +28,20 @@ import { getUserSettings, userToday } from "@/lib/user-settings";
 import { toDateStr } from "@/lib/utils/cycle-position";
 import type { PlannedStepSnapshot } from "@/lib/utils/program-steps";
 import { programPlay, type ProgramPlay } from "@/lib/utils/program-steps";
-import { compareStep, plannedRows, resultTotals, stepResultsSchema, workoutPlannedLoad, type PlannedRow, type StepResult } from "@/lib/utils/step-results";
+import {
+  assistantStepWrite,
+  compareStep,
+  plannedRows,
+  resultTotals,
+  sentStep,
+  stepResultsSchema,
+  workoutPlannedLoad,
+  type KeptField,
+  type PlannedRow,
+  type SentStep,
+  type StepResult,
+} from "@/lib/utils/step-results";
+import { RESULT_FIELDS } from "@/lib/validators/workout";
 import { localDateStr } from "@/lib/utils/user-date";
 import type { ThresholdValues, WorkoutStep } from "@/lib/utils/workout-steps";
 import { rebuildPRsFrom } from "@/lib/workout-records";
@@ -91,8 +104,122 @@ function checkKeys(play: ProgramPlay[], input: unknown): StepResult[] {
 
 type StepSet = LoggedSet & { step: NonNullable<LoggedSet["step"]> };
 
+/** One play step to write: its set, its key, and what an assistant sent for it (null when it named the step not). */
+type StepEntry = { key: string; set: StepSet; sent: SentStep | null };
+
+/**
+ * The play steps of a program's structured exercises as logged sets, one per
+ * step row, with the results given by key; a step with none is not done.
+ * An assistant's sets carry source "assistant" on each result field it gives.
+ */
+async function stepEntries(
+  all: ProgramWorkout[],
+  anchors: ThresholdValues,
+  input: Pick<SaveStepResultsInput, "steps" | "sessionRpe">,
+  source: "player" | "manual" | "assistant",
+): Promise<{ plays: ProgramPlay[]; results: Map<string, StepResult>; entries: StepEntry[] }> {
+  const plays = programPlay(all, anchors);
+  const results = new Map(checkKeys(plays, input.steps).map((r) => [r.key, r]));
+  const rowsAll = await stepRows(all.map((p) => p.programExerciseId));
+  const entries = plays.flatMap(({ pw, play }) => {
+    const rows = rowsAll.filter((r) => r.programExerciseId === pw.programExerciseId);
+    if (rows.length !== play.length) throw new PlanStateError("The program changed while saving; open the session again");
+    return play.map((p, i): StepEntry => {
+      const given = results.get(p.key);
+      const r: StepResult = given ?? { key: p.key, status: "not_done" };
+      const row = rows[i];
+      const snapshot: PlannedStepSnapshot = { v: 2, sport: pw.sport, step: p.step as WorkoutStep, blockId: row.blockId, blockRound: row.blockRound, thresholds: anchors };
+      const done = r.status === "done" || r.status === "partial";
+      const rpe = r.rpe ?? input.sessionRpe ?? null;
+      const sent = sentStep(r, input.sessionRpe);
+      const sources = Object.fromEntries(RESULT_FIELDS.filter((f) => sent[f] !== undefined).map((f) => [f, "assistant" as const]));
+      return {
+        key: p.key,
+        sent: given ? sent : null,
+        set: {
+          exerciseId: row.exerciseId,
+          setNumber: row.setNumber,
+          ...(r.activeSeconds !== undefined && r.activeSeconds > 0 && { durationSeconds: r.activeSeconds }),
+          ...(r.distanceMeters !== undefined && r.distanceMeters > 0 && { distanceMeters: Math.round(r.distanceMeters) }),
+          // The session RPE goes on each step without its own, so the
+          // time-weighted RPE of the load stays the session's.
+          ...(rpe != null && done && { rpe }),
+          ...(r.notes && { notes: r.notes }),
+          step: {
+            programExerciseId: pw.programExerciseId,
+            programSetId: row.id,
+            isCompleted: done,
+            stepStatus: r.status,
+            extendedSeconds: r.extendedSeconds ?? null,
+            measuredValue: r.value ?? null,
+            avgHr: r.avgHr ?? null,
+            avgPower: r.avgPower ?? null,
+            maxHr: r.maxHr ?? null,
+            avgCadence: r.avgCadence ?? null,
+            avgSpeed: r.avgSpeed ?? null,
+            climbM: r.climbM ?? null,
+            ...(source === "assistant" && Object.keys(sources).length > 0 && { sources }),
+            plannedStep: snapshot,
+          },
+        },
+      };
+    });
+  });
+  return { plays, results, entries };
+}
+
+/**
+ * An assistant's results into a session that exists (docs/plans/bike-ride-logger.md,
+ * step 5). A step with no row gets one. A step the assistant named is
+ * written field by field (`assistantStepWrite`): typed and Garmin values stay,
+ * and the step keeps the plan it was logged with. A step it did not name stays
+ * as it is. Returns the fields kept per step.
+ */
+async function upsertAssistantSets(tx: Tx, sessionId: number, entries: StepEntry[]): Promise<{ key: string; fields: KeptField[] }[]> {
+  const ids = entries.map((e) => e.set.step.programSetId).filter((id): id is number => id != null);
+  const stored = ids.length
+    ? await tx.select().from(workoutSets).where(and(eq(workoutSets.sessionId, sessionId), inArray(workoutSets.programSetId, ids))).for("update")
+    : [];
+  const byProgramSet = new Map(stored.map((r) => [r.programSetId, r]));
+  const kept: { key: string; fields: KeptField[] }[] = [];
+  for (const { key, set: s, sent } of entries) {
+    const row = byProgramSet.get(s.step.programSetId ?? null);
+    if (!row) {
+      await upsertSets(tx, sessionId, [s], { insertOnly: true });
+      continue;
+    }
+    if (!sent) continue;
+    const write = assistantStepWrite(
+      {
+        durationSeconds: row.durationSeconds,
+        distanceMeters: row.distanceMeters,
+        avgPower: row.avgPower,
+        avgHr: row.avgHr,
+        maxHr: row.maxHr,
+        avgCadence: row.avgCadence,
+        avgSpeed: row.avgSpeed,
+        climbM: row.climbM,
+        measuredValue: row.measuredValue,
+        rpe: row.rpe,
+        notes: row.notes,
+        stepStatus: row.stepStatus,
+        isCompleted: row.isCompleted,
+        sources: row.sources ?? null,
+      },
+      sent,
+    );
+    if (write.kept.length) kept.push({ key, fields: write.kept });
+    // A row with no plan copy (logged before steps) takes this one.
+    await tx
+      .update(workoutSets)
+      .set({ ...write.set, ...(row.plannedStep == null && { plannedStep: s.step.plannedStep }), ...(row.programExerciseId == null && { programExerciseId: s.step.programExerciseId }) })
+      .where(eq(workoutSets.id, row.id));
+  }
+  return kept;
+}
+
 /** The steps into a session that exists, one row per program set (the log's own key). */
-async function upsertSets(tx: Tx, sessionId: number, sets: StepSet[]) {
+async function upsertSets(tx: Tx, sessionId: number, sets: StepSet[], opts: { insertOnly?: boolean } = {}) {
   for (const s of sets) {
     const values = {
       sessionId,
@@ -109,6 +236,10 @@ async function upsertSets(tx: Tx, sessionId: number, sets: StepSet[]) {
     };
     const { sessionId: _session, ...update } = values;
     void _session;
+    if (opts.insertOnly) {
+      await tx.insert(workoutSets).values(values).onConflictDoNothing({ target: [workoutSets.sessionId, workoutSets.programSetId] });
+      continue;
+    }
     // A step already logged as done (by hand, during the workout) stays done:
     // a run that skipped it never undoes it.
     await tx
@@ -130,41 +261,8 @@ export async function saveProgramStepResults(userId: string, input: SaveStepResu
   if (!found) throw new PlanStateError("That session has no structured steps");
   const { planned, all } = found;
   const anchors = await thresholdValues(userId);
-  const plays = programPlay(all, anchors);
-  const results = new Map(checkKeys(plays, input.steps).map((r) => [r.key, r]));
-  const rowsAll = await stepRows(all.map((p) => p.programExerciseId));
-
-  const sets: StepSet[] = plays.flatMap(({ pw, play }) => {
-    const rows = rowsAll.filter((r) => r.programExerciseId === pw.programExerciseId);
-    if (rows.length !== play.length) throw new PlanStateError("The program changed while saving; open the session again");
-    return play.map((p, i) => {
-      const r: StepResult = results.get(p.key) ?? { key: p.key, status: "not_done" };
-      const row = rows[i];
-      const snapshot: PlannedStepSnapshot = { v: 2, sport: pw.sport, step: p.step as WorkoutStep, blockId: row.blockId, blockRound: row.blockRound, thresholds: anchors };
-      const done = r.status === "done" || r.status === "partial";
-      const rpe = r.rpe ?? input.sessionRpe ?? null;
-      return {
-        exerciseId: row.exerciseId,
-        setNumber: row.setNumber,
-        ...(r.activeSeconds !== undefined && r.activeSeconds > 0 && { durationSeconds: r.activeSeconds }),
-        ...(r.distanceMeters !== undefined && r.distanceMeters > 0 && { distanceMeters: Math.round(r.distanceMeters) }),
-        // The session RPE goes on each step without its own, so the
-        // time-weighted RPE of the load stays the session's.
-        ...(rpe != null && done && { rpe }),
-        ...(r.notes && { notes: r.notes }),
-        step: {
-          programExerciseId: pw.programExerciseId,
-          programSetId: row.id,
-          isCompleted: done,
-          stepStatus: r.status,
-          extendedSeconds: r.extendedSeconds ?? null,
-          measuredValue: r.value ?? null,
-          avgHr: null,
-          plannedStep: snapshot,
-        },
-      };
-    });
-  });
+  const { plays, results, entries } = await stepEntries(all, anchors, input, source);
+  const sets = entries.map((e) => e.set);
   // The session distance the results form or the assistant gives, when no
   // step has its own, goes on the first step done, so the session keeps it.
   if (input.distanceMeters != null && input.distanceMeters > 0 && !sets.some((x) => x.distanceMeters)) {
@@ -180,15 +278,20 @@ export async function saveProgramStepResults(userId: string, input: SaveStepResu
     .from(workoutSessions)
     .where(and(eq(workoutSessions.userId, userId), eq(workoutSessions.plannedSessionId, planned.id), inArray(workoutSessions.source, ["app", "assistant"])))
     .limit(1);
+  let kept: { key: string; fields: KeptField[] }[] = [];
+  const write = async (tx: Tx, sessionId: number) => {
+    if (source === "assistant") kept = await upsertAssistantSets(tx, sessionId, entries);
+    else await upsertSets(tx, sessionId, sets);
+  };
   if (linked) {
     await db.transaction(async (tx) => {
-      await upsertSets(tx, linked.id, sets);
+      await write(tx, linked.id);
       // A later save (a hand edit of the results) may bring neither: the run's own details stay.
       const details = { ...(input.clientKey && { clientKey: input.clientKey }), ...(input.pausedSeconds !== undefined && { pausedSeconds: input.pausedSeconds }) };
       if (Object.keys(details).length) await tx.update(workoutSessions).set(details).where(eq(workoutSessions.id, linked.id));
       for (const exerciseId of [...new Set(sets.map((s) => s.exerciseId))].sort((a, b) => a - b)) await rebuildPRsFrom(tx, userId, exerciseId, linked.start);
     });
-    return { workoutSessionId: linked.id, resultId: linked.id, created: "attached" };
+    return { workoutSessionId: linked.id, resultId: linked.id, created: "attached", kept };
   }
 
   const activeSeconds = totals.activeSeconds > 0 ? totals.activeSeconds : (input.durationSeconds ?? 0);
@@ -215,7 +318,7 @@ export async function saveProgramStepResults(userId: string, input: SaveStepResu
     .limit(1);
   if (open) {
     await db.transaction(async (tx) => {
-      await upsertSets(tx, open.id, sets);
+      await write(tx, open.id);
       const end = input.finishedAt ?? new Date();
       await tx
         .update(workoutSessions)
@@ -254,7 +357,7 @@ export async function saveProgramStepResults(userId: string, input: SaveStepResu
         );
       for (const exerciseId of [...new Set(sets.map((x) => x.exerciseId))].sort((a, b) => a - b)) await rebuildPRsFrom(tx, userId, exerciseId, open.start);
     });
-    return { workoutSessionId: open.id, resultId: open.id, created: "attached" };
+    return { workoutSessionId: open.id, resultId: open.id, created: "attached", kept };
   }
 
   if (!(activeSeconds > 0)) throw new PlanStateError("No time recorded for this session");
@@ -290,6 +393,60 @@ export async function getProgramStepResults(userId: string, plannedSessionId: nu
     .where(and(eq(workoutSessions.userId, userId), eq(workoutSessions.plannedSessionId, plannedSessionId), inArray(workoutSessions.source, ["app", "assistant"])))
     .limit(1);
   if (!session) return null;
+  return stepResultsOf(userId, found.all, session, plannedSessionId);
+}
+
+/** A logged app or assistant session of the user, with its program's structured exercises; null when it has none. */
+async function sessionProgramWorkouts(userId: string, workoutSessionId: number) {
+  const [session] = await db
+    .select({ id: workoutSessions.id, date: workoutSessions.date, source: workoutSessions.source, clientKey: workoutSessions.clientKey, programId: workoutSessions.programId, start: workoutSessions.startTime })
+    .from(workoutSessions)
+    .where(and(eq(workoutSessions.id, workoutSessionId), eq(workoutSessions.userId, userId), inArray(workoutSessions.source, ["app", "assistant"])));
+  if (!session) return null;
+  const all = session.programId == null ? [] : ((await programWorkouts(db, [session.programId])).get(session.programId) ?? []);
+  return { session, all };
+}
+
+/**
+ * The results of a logged session with no planned session, such as a ride
+ * started from the program (docs/plans/bike-ride-logger.md, 4.5). Null when
+ * it runs no structured exercise or logged no step.
+ */
+export async function getSessionStepResults(userId: string, workoutSessionId: number): Promise<StepResultsView | null> {
+  const found = await sessionProgramWorkouts(userId, workoutSessionId);
+  if (!found?.all.length) return null;
+  return stepResultsOf(userId, found.all, found.session, null);
+}
+
+/**
+ * An assistant's step results into a logged session, by its id (step 5 of
+ * docs/plans/bike-ride-logger.md): the way to add results to a ride that has
+ * no planned session. Attaches only; the session stays as it is otherwise.
+ */
+export async function saveSessionStepResults(
+  userId: string,
+  workoutSessionId: number,
+  input: Pick<SaveStepResultsInput, "steps" | "sessionRpe">,
+): Promise<SaveStepResultsResult> {
+  const found = await sessionProgramWorkouts(userId, workoutSessionId);
+  if (!found) throw new PlanStateError("Workout session not found");
+  if (!found.all.length) throw new PlanStateError("That session has no structured steps");
+  const { entries } = await stepEntries(found.all, await thresholdValues(userId), input, "assistant");
+  const kept = await db.transaction(async (tx) => {
+    const k = await upsertAssistantSets(tx, found.session.id, entries);
+    for (const exerciseId of [...new Set(entries.map((e) => e.set.exerciseId))].sort((a, b) => a - b)) await rebuildPRsFrom(tx, userId, exerciseId, found.session.start);
+    return k;
+  });
+  return { workoutSessionId: found.session.id, resultId: found.session.id, created: "attached", kept };
+}
+
+async function stepResultsOf(
+  userId: string,
+  all: ProgramWorkout[],
+  session: { id: number; date: string; source: string; clientKey: string | null },
+  plannedSessionId: number | null,
+): Promise<StepResultsView | null> {
+  const found = { all };
   const logged = await db
     .select({ set: workoutSets })
     .from(workoutSets)
@@ -319,11 +476,17 @@ export async function getProgramStepResults(userId: string, plannedSessionId: nu
             ...(set.distanceMeters != null && { distanceMeters: set.distanceMeters }),
             ...(set.extendedSeconds != null && { extendedSeconds: set.extendedSeconds }),
             ...(set.measuredValue != null && { value: set.measuredValue }),
+            ...(set.avgPower != null && { avgPower: set.avgPower }),
+            ...(set.avgHr != null && { avgHr: set.avgHr }),
+            ...(set.maxHr != null && { maxHr: set.maxHr }),
+            ...(set.avgCadence != null && { avgCadence: set.avgCadence }),
+            ...(set.avgSpeed != null && { avgSpeed: set.avgSpeed }),
+            ...(set.climbM != null && { climbM: set.climbM }),
             ...(set.rpe != null && { rpe: set.rpe }),
             ...(set.notes && { notes: set.notes }),
           }
         : null;
-      return { ...p, result, compare: compareStep(p, result ?? undefined) };
+      return { ...p, result, sources: set.sources ?? null, compare: compareStep(p, result ?? undefined) };
     });
   });
   const rpes = logged.map((l) => l.set.rpe).filter((r): r is number => r != null);

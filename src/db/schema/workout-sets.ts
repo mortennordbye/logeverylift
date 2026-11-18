@@ -53,8 +53,12 @@ import { workoutSessions } from "./workout-sessions";
 /** How a logged endurance step went (docs/plans/one-program-model.md, 1.2). */
 export const STEP_STATUS_VALUES = ["done", "partial", "skipped", "not_done"] as const;
 
-/** Who wrote a result field (docs/plans/bike-ride-logger.md, 4.5). */
-export const RESULT_SOURCES = ["typed", "clock", "garmin"] as const;
+/**
+ * Who wrote a result field (docs/plans/bike-ride-logger.md, 4.5). "assistant"
+ * is an MCP log_step_results write (step 5): it fills empty, clock or
+ * assistant values and never replaces typed or Garmin ones.
+ */
+export const RESULT_SOURCES = ["typed", "clock", "garmin", "assistant"] as const;
 export type ResultSource = (typeof RESULT_SOURCES)[number];
 
 export const workoutSets = pgTable("workout_sets", {
