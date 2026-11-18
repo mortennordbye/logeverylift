@@ -393,7 +393,7 @@ function targetText(step: WorkoutStep, sport: Sport, thresholds: ThresholdValues
 
 function StepButton({ step, sport, units, thresholds, onOpen }: { step: WorkoutStep; sport: Sport; units: Units; thresholds: ThresholdValues; onOpen: () => void }) {
   const target = targetText(step, sport, thresholds, units);
-  const extras = [step.stroke && step.stroke !== "free" ? STROKE_WORD[step.stroke] : null, step.equipment?.map((e) => EQUIPMENT_WORD[e]).join(", "), step.note].filter(Boolean).join(" · ");
+  const extras = [step.cadence ? `${step.cadence.low}-${step.cadence.high} ${sport === "run" ? "spm" : "rpm"}` : null, step.stroke && step.stroke !== "free" ? STROKE_WORD[step.stroke] : null, step.equipment?.map((e) => EQUIPMENT_WORD[e]).join(", "), step.note].filter(Boolean).join(" · ");
   return (
     <button type="button" onClick={onOpen} className="w-full min-h-14 rounded-xl bg-muted px-3 py-2 text-left active:opacity-70" data-testid="step-row">
       <span className="block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{KIND_WORD[step.type]}</span>
