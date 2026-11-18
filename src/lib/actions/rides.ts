@@ -8,13 +8,11 @@
  */
 
 import { db } from "@/db";
-import { RIDE_MODES, exercises, programExercises, programSets, programs, rideEvents, rides, workoutSessions, workoutSets } from "@/db/schema";
+import { RIDE_MODES, exercises, programExercises, programSets, programs, rideEvents, rides, workoutSessions } from "@/db/schema";
 import { isUniqueViolation } from "@/lib/custom-exercises";
 import { enduranceEnabledFor } from "@/lib/endurance";
 import { liveProgramExercises, liveProgramSets, livePrograms } from "@/lib/plan-live";
-import { plannedStepSnapshot } from "@/lib/program-steps-db";
-import { rideStepSnapshot } from "@/lib/ride-plan-db";
-import { scheduleRidePushes } from "@/lib/push";
+import { LIVE, isLive, schedulePushes, settle, type RideView } from "@/lib/ride-settle";
 import { thresholdValues } from "@/lib/session-compliance";
 import { buildWorkout, type StepRow } from "@/lib/utils/program-steps";
 import {
@@ -24,8 +22,6 @@ import {
   buildRidePlan,
   eventTime,
   rideTimeline,
-  type RideEventInput,
-  type RidePlan,
 } from "@/lib/utils/ride-timeline";
 import { requireSession } from "@/lib/utils/session";
 import { parseWorkout } from "@/lib/utils/workout-steps";
@@ -33,133 +29,7 @@ import type { ActionResult } from "@/types/workout";
 import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
 import { z } from "zod";
 
-type Ride = typeof rides.$inferSelect;
-type Executor = Pick<typeof db, "select" | "update" | "insert">;
-
-/** A ride as the client reads it. Times are epoch ms; `serverNow` lets the client keep its clock offset. */
-export type RideView = {
-  ride: {
-    id: number;
-    sessionId: number;
-    programExerciseId: number | null;
-    mode: Ride["mode"];
-    status: Ride["status"];
-    seq: number;
-    startedAt: number;
-    endedAt: number | null;
-    /** The last heartbeat of a visible app, for the timeline's auto end. */
-    heartbeatAt: number | null;
-  };
-  plan: RidePlan;
-  events: (RideEventInput & { clientId: string })[];
-  serverNow: number;
-};
-
-const LIVE = ["running", "paused"] as const;
-const isLive = (status: Ride["status"]) => status === "running" || status === "paused";
-
-/**
- * The ride with its events, after storing what the timeline says now: a ride
- * whose last step ran out, or that ended on its own, is stored as ended.
- */
-async function settle(ex: Executor, ride: Ride, now: number): Promise<RideView> {
-  const rows = await ex.select().from(rideEvents).where(eq(rideEvents.rideId, ride.id)).orderBy(asc(rideEvents.seq));
-  const events = rows.map((e) => ({ seq: e.seq, kind: e.kind, value: e.value, at: e.at.getTime(), clientId: e.clientId }));
-  const plan = ride.plan as RidePlan;
-  const t = rideTimeline(plan, events, now, { heartbeatAt: ride.heartbeatAt?.getTime() ?? null });
-  let { status, endedAt } = ride;
-  if (t.status !== ride.status || (t.endedAt ?? null) !== (ride.endedAt?.getTime() ?? null)) {
-    status = t.status;
-    endedAt = t.endedAt !== null ? new Date(t.endedAt) : null;
-    // Only over the events read here: a newer event settles the ride itself.
-    const [stored] = await ex
-      .update(rides)
-      .set({ status, endedAt })
-      .where(and(eq(rides.id, ride.id), eq(rides.seq, ride.seq)))
-      .returning({ id: rides.id });
-    // The workout keeps whether its ride ended early (4.3): compliance does not
-    // count an ended-early key session as done. An unskip that makes the ride
-    // live again clears it.
-    if (stored) {
-      await ex
-        .update(workoutSessions)
-        .set({ endedEarly: status === "ended_early" })
-        .where(and(eq(workoutSessions.id, ride.sessionId), eq(workoutSessions.userId, ride.userId)));
-      if (status === "finished" || status === "ended_early") await logDroppedSteps(ex, ride, plan);
-    }
-  }
-  return {
-    ride: {
-      id: ride.id,
-      sessionId: ride.sessionId,
-      programExerciseId: ride.programExerciseId,
-      mode: ride.mode,
-      status,
-      seq: ride.seq,
-      startedAt: ride.startedAt.getTime(),
-      endedAt: endedAt?.getTime() ?? null,
-      heartbeatAt: ride.heartbeatAt?.getTime() ?? null,
-    },
-    plan,
-    events,
-    serverNow: now,
-  };
-}
-
-/**
- * The exercise's step sets the ride never runs (the recovery after a repeat's
- * last round, 4.4) are logged as not done when the ride ends, so the workout
- * reads the exercise as handled. A row already there stays.
- */
-async function logDroppedSteps(ex: Executor, ride: Ride, plan: RidePlan) {
-  if (ride.programExerciseId === null) return;
-  const inPlan = new Set(plan.steps.map((s) => s.programSetId));
-  // A plan frozen with its dropped steps logs only those, as planned at the
-  // start: a set the program gained during the ride is not this ride's (D9).
-  const dropped = plan.dropped ? new Set(plan.dropped.map((s) => s.programSetId)) : null;
-  const sets = await ex
-    .select({ id: programSets.id, setNumber: programSets.setNumber, exerciseId: programExercises.exerciseId })
-    // plan-read: includes deleted (the ride's exercise row for its exercise id, and its sets as frozen or the live ones)
-    .from(programSets)
-    .innerJoin(programExercises, eq(programExercises.id, programSets.programExerciseId))
-    .where(
-      dropped
-        ? and(eq(programSets.programExerciseId, ride.programExerciseId), inArray(programSets.id, [...dropped, -1]))
-        : and(eq(programSets.programExerciseId, ride.programExerciseId), isNotNull(programSets.stepKind), liveProgramSets),
-    );
-  for (const set of sets.filter((x) => !inPlan.has(x.id))) {
-    const plannedStep = (await rideStepSnapshot(ex, ride.userId, ride.sessionId, set.id)) ?? (await plannedStepSnapshot(ex, set.id, ride.userId));
-    await ex
-      .insert(workoutSets)
-      .values({
-        sessionId: ride.sessionId,
-        exerciseId: set.exerciseId,
-        programExerciseId: ride.programExerciseId,
-        programSetId: set.id,
-        setNumber: set.setNumber,
-        actualReps: 0,
-        weightKg: "0",
-        restTimeSeconds: 0,
-        isCompleted: false,
-        stepStatus: "not_done",
-        plannedStep,
-      })
-      .onConflictDoNothing({ target: [workoutSets.sessionId, workoutSets.programSetId] });
-  }
-}
-
-/**
- * Rewrite the ride's push alerts from its timeline (4.7). A failure is logged
- * and never fails the ride action: the alerts are a help, the ride is the data.
- */
-async function schedulePushes(ex: Pick<typeof db, "transaction">, userId: string, view: RideView) {
-  try {
-    // A savepoint inside the event's transaction, so a failure rolls back only the alerts.
-    await ex.transaction((sp) => scheduleRidePushes(sp, userId, view));
-  } catch {
-    console.error("[ridePush] schedule failed", { rideId: view.ride.id });
-  }
-}
+export type { RideView } from "@/lib/ride-settle";
 
 const clientIdSchema = z.string().min(1).max(64);
 
@@ -227,7 +97,9 @@ export async function startRide(data: unknown): Promise<ActionResult<RideView>> 
     const now = Date.now();
     const [active] = await db.select().from(rides).where(and(eq(rides.userId, userId), inArray(rides.status, LIVE)));
     if (active && isLive((await settle(db, active, now)).ride.status)) {
-      return { success: false, error: "A ride is already running" };
+      // The same start sent twice at once: the other one stored it after the read above.
+      const same = await startedWith(userId, clientId);
+      return same ? { success: true, data: same } : { success: false, error: "A ride is already running" };
     }
 
     const ride = await db.transaction(async (tx) => {
@@ -300,6 +172,8 @@ export async function sendRideEvent(data: unknown): Promise<ActionResult<RideVie
       if (replay) return { success: true, data: await settle(tx, ride, now) };
 
       const view = await settle(tx, ride, now);
+      // Its workout was finished: settle stored the end, and nothing makes it live again.
+      if (view.ride.seq !== ride.seq) return { success: false, error: "The ride has ended" };
       if (kind === "heartbeat") {
         if (!isLive(view.ride.status)) return { success: false, error: "The ride has ended" };
         await tx.update(rides).set({ heartbeatAt: new Date(now) }).where(eq(rides.id, rideId));

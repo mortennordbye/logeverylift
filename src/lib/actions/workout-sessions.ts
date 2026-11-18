@@ -12,6 +12,7 @@ import {
 import type { ActionResult, ExportedSessions, WorkoutSession } from "@/types/workout";
 import { and, asc, desc, eq, inArray, lt, or, sql } from "drizzle-orm";
 import { startablePlannedId } from "@/lib/planned-sessions";
+import { endRidesOfFinishedSession } from "@/lib/ride-settle";
 import { revalidatePath } from "next/cache";
 
 /**
@@ -201,6 +202,15 @@ export async function completeWorkoutSession(
 
     // Once per session: finishing it again must not undo a forget.
     if (!existing.isCompleted) await learnWeightStacks(sessionId, auth.user.id);
+
+    // A ride still live on this workout ends now (4.3): its done steps stay,
+    // its alerts go, and the next workout can ride. A failure here does not
+    // undo the finish: the next read of the ride ends it (settle).
+    try {
+      await endRidesOfFinishedSession(auth.user.id, sessionId);
+    } catch {
+      console.error("[completeWorkoutSession] ride_end_failed", { sessionId });
+    }
 
     // Session detail lives at /history/[sessionId]; `/workout` does not exist.
     revalidatePath(`/history/${sessionId}`);

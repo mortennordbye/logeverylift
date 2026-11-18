@@ -17,7 +17,7 @@
 
 import { db } from "@/db";
 import { programExercises, pushSubscriptions, ridePushes, rides } from "@/db/schema";
-import type { RideView } from "@/lib/actions/rides";
+import type { RideView } from "@/lib/ride-settle";
 import { env } from "@/lib/env";
 import { getUserSettings } from "@/lib/user-settings";
 import { ridePushSchedule, ridePushTag, ridePushUrl, type PushPayload } from "@/lib/utils/ride-pushes";
