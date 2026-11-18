@@ -11,12 +11,14 @@ import { BackLink } from "@/components/ui/BackLink";
 import { PlanSheetPanel } from "@/components/features/PlanSheetPanel";
 import { saveExerciseSteps } from "@/lib/actions/program-steps";
 import { formatSessionLength, loadText } from "@/lib/utils/format";
+import { TEST_NAME, ftpTestWorkout } from "@/lib/utils/ftp-tests";
 import { callAction } from "@/lib/utils/stale-bundle";
 import { workoutPlannedLoad } from "@/lib/utils/step-results";
 import type { Units } from "@/lib/utils/units";
 import {
   SWIM_EQUIPMENT,
   SWIM_STROKES,
+  RIDE_TESTS,
   estimateWorkout,
   parseWorkout,
   resolveStepTarget,
@@ -39,6 +41,11 @@ type At = { node: number; inner: number | null };
 
 const KIND_WORD: Record<Kind, string> = { warmup: "Warm-up", work: "Work", recovery: "Easy", cooldown: "Cool-down", rest: "Rest" };
 const KINDS: Kind[] = ["warmup", "work", "recovery", "cooldown", "rest"];
+/** The FTP tests in a line each (docs/plans/bike-ride-logger.md, 4.9). */
+const TEST_TEXT: Record<(typeof RIDE_TESTS)[number], string> = {
+  ramp: "10 min warm-up, then 1 min steps up by 20 W until you cannot hold them · FTP is 75% of your best minute",
+  "20min": "20 min warm-up with two hard efforts, 5 min easy, 20 min all-out, 10 min cool-down · FTP is 95% of the 20 min",
+};
 /** Pool lengths; open water has none. 25 yd is 22.86 m. */
 const POOLS: { label: string; meters: number | undefined }[] = [
   { label: "25 m pool", meters: 25 },
@@ -158,6 +165,7 @@ export function StepsEditor({
   const [workout, setWorkout] = useState<Workout>(initial);
   const [dirty, setDirty] = useState(unsaved);
   const [editing, setEditing] = useState<At | null>(null);
+  const [testSheet, setTestSheet] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const sport = workout.sport;
@@ -298,6 +306,11 @@ export function StepsEditor({
         <button type="button" onClick={addBlock} className="min-h-11 rounded-2xl border border-border px-3 text-sm font-medium active:opacity-70">
           Add repeat block
         </button>
+        {sport === "bike" && (
+          <button type="button" onClick={() => setTestSheet(true)} className="col-span-2 min-h-11 rounded-2xl border border-border px-3 text-sm font-medium active:opacity-70">
+            Insert FTP test
+          </button>
+        )}
       </div>
 
       <div className="mt-auto px-4 pt-4 pb-6 flex flex-col gap-2">
@@ -315,6 +328,25 @@ export function StepsEditor({
           {saving ? "Saving" : dirty ? "Save steps" : "Saved"}
         </button>
       </div>
+
+      <BottomSheet open={testSheet} onClose={() => setTestSheet(false)}>
+        <PlanSheetPanel label="Insert FTP test" title="Insert FTP test" sub={<p className="text-sm text-muted-foreground">The test takes the place of these steps. Nothing changes until you save.</p>} testId="ftp-test-sheet">
+          {RIDE_TESTS.map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => {
+                change(ftpTestWorkout(t, workout.name));
+                setTestSheet(false);
+              }}
+              className="min-h-12 rounded-2xl bg-widget-2 px-4 py-2.5 text-left active:opacity-70"
+            >
+              <span className="block text-base font-semibold">{TEST_NAME[t]}</span>
+              <span className="block text-xs text-muted-foreground">{TEST_TEXT[t]}</span>
+            </button>
+          ))}
+        </PlanSheetPanel>
+      </BottomSheet>
 
       <BottomSheet open={editingStep != null} onClose={() => setEditing(null)}>
         {editing && editingStep && (

@@ -99,7 +99,15 @@ both modes ride the same steps.
 - **Cadence:** `cadence` on the step, as for any bike step.
 - **FTP test rides:** `"test": "ramp"` (warm-up, then 1 min steps up to failure, ending on a lap)
   or `"test": "20min"` (warm-up, 20 min all-out, cool-down) on the tree. It marks the ride as a
-  test for the app; write its steps as usual.
+  test for the app; write its steps as usual. Or send `ftpTest: "ramp"` or `ftpTest: "20min"` to
+  `edit_program_exercise` in place of `sets` or `workout`: the app writes its own template
+  (ramp: 10 min warm-up, then 1 min steps from 100 W up by 20 W to 500 W; 20 min: 20 min warm-up
+  with two 1 min hard efforts, 5 min easy, 20 min all-out, 10 min cool-down). In a ramp test, Lap
+  or End ride on a 1 min step ends the ride as finished. Outdoors a test ride is ridden by effort,
+  never by a heart rate cap or range. After the ride, `get_ride` gives `ftpTest`: ramp FTP is 75%
+  of the best 1 min power, 20 min FTP is 95% of the all-out step's average power (from the Garmin
+  stream when it filled the ride, else the step averages; a ramp step with no number counts its
+  target). The rider saves it on the summary, or you add it with `manage_thresholds`.
 - **A running ride is frozen:** a ride keeps the plan it started with. A program edit applies
   from the next ride, never to one in progress.
 

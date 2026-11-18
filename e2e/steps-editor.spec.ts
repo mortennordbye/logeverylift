@@ -98,3 +98,32 @@ test("plain run sets turn into steps and keep their set ids", async ({ page }, t
     ["work", 1000, 60],
   ]);
 });
+
+test("Insert FTP test writes the 20 min test on a bike exercise", async ({ page }, testInfo) => {
+  const { programId, peId } = await setup(testInfo.parallelIndex);
+  const db = testDb();
+  const [bike] = await db.select({ id: exercises.id }).from(exercises).where(and(eq(exercises.discipline, "bike"), isNull(exercises.userId))).orderBy(asc(exercises.id)).limit(1);
+  await db.update(programExercises).set({ exerciseId: bike.id }).where(eq(programExercises.id, peId));
+  await page.goto(`/programs/${programId}/exercises/${peId}`);
+  const editor = page.getByTestId("steps-editor");
+  await expect(editor).toBeVisible();
+
+  await editor.getByRole("button", { name: "Insert FTP test" }).click();
+  const sheet = page.getByTestId("ftp-test-sheet");
+  await sheet.getByRole("button", { name: /^20 min test/ }).click();
+  await expect(editor.getByTestId("steps-totals")).toContainText("55:00");
+  await editor.getByRole("button", { name: "Save steps" }).click();
+  await expect(editor.getByRole("button", { name: "Saved" })).toBeVisible();
+
+  expect((await rows(peId)).map((r) => [r.stepKind, r.durationSeconds])).toEqual([
+    ["warmup", 780],
+    ["work", 60],
+    ["recovery", 300],
+    ["work", 60],
+    ["recovery", 300],
+    ["work", 1200],
+    ["cooldown", 600],
+  ]);
+  const [pe] = await db.select({ rideTest: programExercises.rideTest }).from(programExercises).where(eq(programExercises.id, peId));
+  expect(pe.rideTest).toBe("20min");
+});
