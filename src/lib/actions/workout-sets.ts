@@ -69,6 +69,7 @@ import type {
     WorkoutStats,
 } from "@/types/workout";
 import { plannedStepSnapshot } from "@/lib/program-steps-db";
+import { WORKOUT_LIMITS } from "@/lib/utils/workout-steps";
 import { and, asc, desc, eq, gte, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -270,7 +271,9 @@ export async function getActiveSessionCompletedProgramSetIds(
         and(
           eq(workoutSets.sessionId, sessionId),
           eq(workoutSessions.userId, auth.user.id),
-          eq(workoutSets.isCompleted, true),
+          // A step with any status is handled: a ride's skipped step and its
+          // dropped last recovery (not done) leave nothing to do.
+          or(eq(workoutSets.isCompleted, true), isNotNull(workoutSets.stepStatus)),
           isNotNull(workoutSets.programSetId),
         ),
       );
@@ -340,6 +343,7 @@ export async function logWorkoutSet(
       avgCadence,
       avgSpeed,
       climbM,
+      bulk,
     } = validation.data;
 
     // RIR is the primary effort input; derive RPE from it so all downstream
@@ -380,6 +384,11 @@ export async function logWorkoutSet(
     const slot = resolved.slot;
     // An endurance step keeps its plan with the log (docs/plans/one-program-model.md, 1.2).
     const plannedStep = slot?.stepKind != null && slot.programSetId != null ? await plannedStepSnapshot(db, slot.programSetId, auth.user.id) : null;
+
+    // A step is at most 12 hours, as the step model allows (a typo in a typed time).
+    if (plannedStep && durationSeconds != null && durationSeconds > WORKOUT_LIMITS.seconds.max) {
+      return { success: false, error: "A step is at most 12 hours", fieldErrors: { durationSeconds: ["A step is at most 12 hours"] } };
+    }
 
     // Timed exercises must record a duration. Without this guard, a quick-tap
     // completion (no override, program had no planned duration) silently logs
@@ -469,6 +478,14 @@ export async function logWorkoutSet(
     // per-exercise lock (lockRecords).
     const { set, newPRs } = await db.transaction(async (tx) => {
       await lockRecords(tx, auth.user.id, exerciseId);
+      // A bulk log (the workout list's ring) leaves a ride's step or typed results as they are.
+      if (bulk && setValues.programSetId != null) {
+        const [kept] = await tx
+          .select()
+          .from(workoutSets)
+          .where(and(eq(workoutSets.sessionId, sessionId), eq(workoutSets.programSetId, setValues.programSetId), or(isNotNull(workoutSets.stepStatus), isNotNull(workoutSets.sources))));
+        if (kept) return { set: kept, newPRs: [] };
+      }
       const conflict =
         setValues.programSetId != null
           ? { target: [workoutSets.sessionId, workoutSets.programSetId] }
@@ -502,7 +519,12 @@ export async function logWorkoutSet(
             isCompleted: setValues.isCompleted,
             isFailed: setValues.isFailed,
             wasEasy: setValues.wasEasy,
-            ...(plannedStep && { plannedStep, stepStatus: setValues.stepStatus }),
+            // A ride's write (results typed later) keeps the step as planned when it was ridden:
+            // an FTP changed since must not move its targets or its load.
+            ...(plannedStep && {
+              plannedStep: rideWrite ? sql`coalesce(${workoutSets.plannedStep}, ${JSON.stringify(plannedStep)}::jsonb)` : plannedStep,
+              stepStatus: setValues.stepStatus,
+            }),
             ...(setValues.targetOffsetW !== undefined && { targetOffsetW: setValues.targetOffsetW }),
             ...(setValues.extendedSeconds !== undefined && { extendedSeconds: setValues.extendedSeconds }),
             ...(addSources !== undefined && {
@@ -623,7 +645,7 @@ export async function unlogWorkoutSet(
       fieldErrors: validation.error.flatten().fieldErrors,
     };
   }
-  const { sessionId, exerciseId, setNumber, programSetId } = validation.data;
+  const { sessionId, exerciseId, setNumber, programSetId, bulk } = validation.data;
 
   try {
     const [session] = await db
@@ -652,10 +674,13 @@ export async function unlogWorkoutSet(
     await db.transaction(async (tx) => {
       await lockRecords(tx, auth.user.id, exerciseId);
       const [existing] = await tx
-        .select({ id: workoutSets.id, createdAt: workoutSets.createdAt })
+        .select({ id: workoutSets.id, createdAt: workoutSets.createdAt, stepStatus: workoutSets.stepStatus, sources: workoutSets.sources })
         .from(workoutSets)
         .where(and(eq(workoutSets.sessionId, sessionId), setRowKey(resolved.slot, exerciseId, setNumber)))
         .limit(1);
+
+      // A bulk un-log (the workout list's ring) leaves a ride's step or typed results.
+      if (existing && bulk && (existing.stepStatus != null || existing.sources != null)) return;
 
       // Already absent — the user un-logged a set that never reached the server
       // (offline queue, failed write). Nothing to do, and reporting success keeps

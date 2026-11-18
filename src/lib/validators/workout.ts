@@ -156,6 +156,9 @@ export const logWorkoutSetSchema = z.object({
   avgSpeed: z.number().min(0).max(40).nullable().optional(),
   climbM: z.number().int().min(0).max(20000).nullable().optional(),
   sources: z.partialRecord(z.enum(RESULT_FIELDS), z.enum(RESULT_SOURCES)).optional(),
+  // The workout list's ring logs a whole exercise: it never writes over a row
+  // that carries a step status or sources (a ride's step, a typed result).
+  bulk: z.boolean().optional(),
 });
 
 /** A correction to a set in a finished session, made from history. */
@@ -191,6 +194,8 @@ export const unlogWorkoutSetSchema = z.object({
   // Same optionality and same purpose as on logWorkoutSetSchema: without it,
   // un-logging set 1 of the second slot deletes set 1 of the first.
   programSetId: z.number().int().positive().optional(),
+  // As on logWorkoutSetSchema: a bulk un-log leaves a row with a step status or sources.
+  bulk: z.boolean().optional(),
 });
 
 /**

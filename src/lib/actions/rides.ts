@@ -8,10 +8,11 @@
  */
 
 import { db } from "@/db";
-import { RIDE_MODES, exercises, programExercises, programSets, programs, rideEvents, rides, workoutSessions } from "@/db/schema";
+import { RIDE_MODES, exercises, programExercises, programSets, programs, rideEvents, rides, workoutSessions, workoutSets } from "@/db/schema";
 import { isUniqueViolation } from "@/lib/custom-exercises";
 import { enduranceEnabledFor } from "@/lib/endurance";
 import { liveProgramExercises, liveProgramSets, livePrograms } from "@/lib/plan-live";
+import { plannedStepSnapshot } from "@/lib/program-steps-db";
 import { thresholdValues } from "@/lib/session-compliance";
 import { buildWorkout, type StepRow } from "@/lib/utils/program-steps";
 import {
@@ -31,7 +32,7 @@ import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
 import { z } from "zod";
 
 type Ride = typeof rides.$inferSelect;
-type Executor = Pick<typeof db, "select" | "update">;
+type Executor = Pick<typeof db, "select" | "update" | "insert">;
 
 /** A ride as the client reads it. Times are epoch ms; `serverNow` lets the client keep its clock offset. */
 export type RideView = {
@@ -82,6 +83,7 @@ async function settle(ex: Executor, ride: Ride, now: number): Promise<RideView> 
         .update(workoutSessions)
         .set({ endedEarly: status === "ended_early" })
         .where(and(eq(workoutSessions.id, ride.sessionId), eq(workoutSessions.userId, ride.userId)));
+      if (status === "finished" || status === "ended_early") await logDroppedSteps(ex, ride, plan);
     }
   }
   return {
@@ -100,6 +102,41 @@ async function settle(ex: Executor, ride: Ride, now: number): Promise<RideView> 
     events,
     serverNow: now,
   };
+}
+
+/**
+ * The exercise's step sets the ride never runs (the recovery after a repeat's
+ * last round, 4.4) are logged as not done when the ride ends, so the workout
+ * reads the exercise as handled. A row already there stays.
+ */
+async function logDroppedSteps(ex: Executor, ride: Ride, plan: RidePlan) {
+  if (ride.programExerciseId === null) return;
+  const inPlan = new Set(plan.steps.map((s) => s.programSetId));
+  const sets = await ex
+    .select({ id: programSets.id, setNumber: programSets.setNumber, exerciseId: programExercises.exerciseId })
+    // plan-read: includes deleted (the ride's exercise row, for its exercise id, and the live sets)
+    .from(programSets)
+    .innerJoin(programExercises, eq(programExercises.id, programSets.programExerciseId))
+    .where(and(eq(programSets.programExerciseId, ride.programExerciseId), isNotNull(programSets.stepKind), liveProgramSets));
+  for (const set of sets.filter((x) => !inPlan.has(x.id))) {
+    const plannedStep = await plannedStepSnapshot(ex, set.id, ride.userId);
+    await ex
+      .insert(workoutSets)
+      .values({
+        sessionId: ride.sessionId,
+        exerciseId: set.exerciseId,
+        programExerciseId: ride.programExerciseId,
+        programSetId: set.id,
+        setNumber: set.setNumber,
+        actualReps: 0,
+        weightKg: "0",
+        restTimeSeconds: 0,
+        isCompleted: false,
+        stepStatus: "not_done",
+        plannedStep,
+      })
+      .onConflictDoNothing({ target: [workoutSets.sessionId, workoutSets.programSetId] });
+  }
 }
 
 const clientIdSchema = z.string().min(1).max(64);

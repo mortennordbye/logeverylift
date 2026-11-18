@@ -6,10 +6,11 @@
  */
 import { db } from "@/db";
 import { athleteThresholds, workoutSessions, workoutSets } from "@/db/schema";
-import { logWorkoutSet } from "@/lib/actions/workout-sets";
+import { getRide, startRide } from "@/lib/actions/rides";
+import { getActiveSessionCompletedProgramSetIds, logWorkoutSet, unlogWorkoutSet } from "@/lib/actions/workout-sets";
 import { buildDailyMetrics, type ActivityInput } from "@/lib/garmin/analytics/daily";
 import { appSessionLoads } from "@/lib/training-load";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createExercise, createSession, createStepProgram, createUser } from "./factories";
 import { asUser } from "./setup";
@@ -48,7 +49,7 @@ async function setup() {
   const session = await createSession(me, program.id, { date: TODAY, startTime: T0 });
   // Program sets of the ridden steps: the 5th set is the dropped recovery.
   const setIds = slots[0].setIds;
-  return { programId: program.id, sessionId: session.id, ridden: [setIds[0], setIds[1], setIds[2], setIds[3], setIds[5]], setIds };
+  return { programId: program.id, programExerciseId: slots[0].programExerciseId, sessionId: session.id, ridden: [setIds[0], setIds[1], setIds[2], setIds[3], setIds[5]], setIds };
 }
 
 const base = (sessionId: number, programSetId: number, setNumber: number, seconds = 900) => ({
@@ -190,5 +191,60 @@ describe("the ride's load in appSessionLoads", () => {
     const [appOnly] = buildDailyMetrics({ start: TODAY, end: TODAY, activities: [], strengthSessions: [], appEndurance, days });
     expect(appOnly.entries).toHaveLength(1);
     expect(appOnly.entries[0]).toMatchObject({ source: "logeverylift", id: s.sessionId, method: "power" });
+  });
+});
+
+describe("review fixes", () => {
+  it("a step write over 12 hours is refused", async () => {
+    const s = await setup();
+    expect((await logWorkoutSet({ ...base(s.sessionId, s.ridden[0], 1, 12 * 3600 + 1), sources: { durationSeconds: "typed" } })).success).toBe(false);
+    expect((await logWorkoutSet({ ...base(s.sessionId, s.ridden[0], 1, 12 * 3600), sources: { durationSeconds: "typed" } })).success).toBe(true);
+  });
+
+  it("an edit after an FTP change keeps the step as planned, so the load stays", async () => {
+    const s = await setup();
+    const WATTS = [124, 141, 92, 131, 118];
+    const SECONDS = [900, 900, 300, 900, 900];
+    for (const [i, id] of s.ridden.entries()) ok(await logWorkoutSet({ ...base(s.sessionId, id, i + 1, SECONDS[i]), avgPower: WATTS[i], sources: { durationSeconds: "clock", avgPower: "typed" } }));
+    await db.update(workoutSessions).set({ isCompleted: true }).where(eq(workoutSessions.id, s.sessionId));
+    const before = (await appSessionLoads(me, TODAY, TODAY)).find((l) => l.id === s.sessionId)!.load;
+    // A retest the next day, then the rider adds an effort to the ride.
+    await db.update(athleteThresholds).set({ value: 250 }).where(and(eq(athleteThresholds.userId, me), eq(athleteThresholds.kind, "ftp")));
+    for (const [i, id] of s.ridden.entries()) ok(await logWorkoutSet({ ...base(s.sessionId, id, i + 1, SECONDS[i]), rpe: 6, sources: {} }));
+    const r = await row(s.sessionId, s.ridden[0]);
+    expect((r.plannedStep as { thresholds: { ftp: number } }).thresholds.ftp).toBe(180);
+    expect((await appSessionLoads(me, TODAY, TODAY)).find((l) => l.id === s.sessionId)!.load).toBeCloseTo(before!, 6);
+  });
+
+  it("a bulk log or un-log (the workout list's ring) never touches a ride's step rows", async () => {
+    const s = await setup();
+    const id = s.ridden[0];
+    ok(await logWorkoutSet({ ...base(s.sessionId, id, 1), avgPower: 124, sources: { durationSeconds: "clock", avgPower: "typed" } }));
+    const plain = { sessionId: s.sessionId, exerciseId: bike, setNumber: 1, programSetId: id, actualReps: 0, weightKg: 0, durationSeconds: 60, restTimeSeconds: 0, isCompleted: true, bulk: true };
+    ok(await logWorkoutSet(plain));
+    expect([(await row(s.sessionId, id)).durationSeconds, (await row(s.sessionId, id)).avgPower]).toEqual([900, 124]);
+    ok(await unlogWorkoutSet({ sessionId: s.sessionId, exerciseId: bike, setNumber: 1, programSetId: id, bulk: true }));
+    expect(await row(s.sessionId, id)).toBeDefined();
+    // A row with neither still logs in bulk.
+    ok(await logWorkoutSet({ ...plain, programSetId: s.ridden[1], setNumber: 2 }));
+    expect((await row(s.sessionId, s.ridden[1])).durationSeconds).toBe(60);
+  });
+
+  it("a finished ride writes its dropped last recovery as not done, and every set reads as handled", async () => {
+    const s = await setup();
+    const v = ok(await startRide({ sessionId: s.sessionId, programExerciseId: s.programExerciseId, mode: "indoor", clientId: "start-1" }));
+    vi.setSystemTime(new Date(T0.getTime() + 3900_000 + 5_000));
+    expect(ok(await getRide({ rideId: v.ride.id }))!.ride.status).toBe("finished");
+    const dropped = await row(s.sessionId, s.setIds[4]);
+    expect([dropped.stepStatus, dropped.isCompleted, dropped.durationSeconds]).toEqual(["not_done", false, null]);
+    // The ride's own step saves (ride mode) land as usual.
+    for (const [i, id] of s.ridden.entries()) ok(await logWorkoutSet(clockSave(s.sessionId, id, i + 1, [900, 900, 300, 900, 900][i])));
+    expect(ok(await getActiveSessionCompletedProgramSetIds(s.sessionId)).sort()).toEqual([...s.setIds].sort());
+    // A second read writes nothing more.
+    ok(await getRide({ rideId: v.ride.id }));
+    expect((await db.select().from(workoutSets).where(eq(workoutSets.sessionId, s.sessionId))).length).toBe(6);
+    // The load and summary see 5 ridden steps.
+    await db.update(workoutSessions).set({ isCompleted: true }).where(eq(workoutSessions.id, s.sessionId));
+    expect((await appSessionLoads(me, TODAY, TODAY)).find((l) => l.id === s.sessionId)!.durationS).toBe(3900);
   });
 });
