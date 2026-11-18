@@ -486,3 +486,5 @@ Without a bike LTHR, heart rate targets become effort targets (Z2 4, Z3 6, Z4 7)
 - Step 6 review, a push service that hangs: each send has a 10 s timeout, and one loop run that throws or times out is logged as `[ridePush] loop failed` and lets the next run go (`ridePushTick`), so one bad host never stops alerts for everyone.
 - Step 6 review, empty env values: an empty `VAPID_*` value counts as unset, so an ExternalSecret with an empty field leaves push off and the pod boots. One or two real values without the rest still refuse to boot.
 - Step 6 review, links in the service worker: a payload or notification link is used only when it starts with "/" and resolves to the app's own origin; "//host", "/\\host" and full URLs open the app's home.
+- Step 6 review, sign-out during a stale bundle: if removing the device row hits a stale bundle, the reload can race the move to /login. Left as is: the browser still unsubscribes, the next send gets 410 and the server deletes the row.
+- Step 6 review, an alert after a new event: the loop sends rows it already claimed, so an event in the same moment can still let one old alert out. Left as is: at most one stale alert.
