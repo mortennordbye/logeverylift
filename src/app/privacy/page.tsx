@@ -26,6 +26,10 @@ export default function PrivacyPage() {
           scrypt hash.
         </li>
         <li>
+          <strong>Step alerts, if you turn them on:</strong> your device&apos;s push address and the keys that encrypt
+          alerts for it, and the alerts of a bike ride in progress until they are sent.
+        </li>
+        <li>
           <strong>Profile, if you fill it in:</strong> gender, year of birth, height, body weight, training goals and
           experience level, and your body weight history.
         </li>
@@ -176,6 +180,12 @@ export default function PrivacyPage() {
           gyms&apos; business addresses, nothing about you.
         </li>
         <li>
+          <strong>Your phone&apos;s push service</strong> (Apple, Google or Mozilla, in the USA), only if you turn on
+          step alerts for bike rides. During a ride our server sends each alert, such as the next step&apos;s target and
+          time, to the push service your browser uses, which passes it to your phone. The text is encrypted for your
+          phone, so the push service sees only your device&apos;s push address and when each alert is sent.
+        </li>
+        <li>
           <strong>Google Drive</strong> stores an off-site copy of the backups. The backups are encrypted before they
           leave the server, and Google does not have the key.
         </li>
@@ -258,6 +268,10 @@ export default function PrivacyPage() {
           Fuel logs, fuel products, sweat tests and race plans: until you delete them or your account. Fuel logs on
           Garmin sessions also go when you delete your Garmin data.
         </li>
+        <li>
+          Step alerts: each alert is deleted when it is sent. A device you turned them on for is kept until you sign out
+          on it, its push service says it has gone, or you delete your account.
+        </li>
         <li>Login sessions, with IP address and user agent: 30 days after last use.</li>
         <li>Server logs: 7 days.</li>
         <li>Request traces (how long each request and database query took, without their contents): 24 hours.</li>
@@ -267,7 +281,8 @@ export default function PrivacyPage() {
       <p>
         The app sets one login cookie and one short-lived cache of it, both needed to keep you signed in. It also keeps
         your active workout, rest timers, a guided session in progress until its results are saved, unsynced changes and display settings in your browser&apos;s local storage,
-        and caches pages so the app works offline. All of this is needed for the app to work, so we don&apos;t ask
+        and caches pages so the app works offline. If you turn on step alerts, your browser also keeps a push
+        subscription and a small service worker that shows the alerts. All of this is needed for the app to work, so we don&apos;t ask
         for cookie consent. Signing out clears it, apart from your display settings. There are no third-party cookies.
       </p>
 
