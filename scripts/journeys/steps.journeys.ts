@@ -22,7 +22,7 @@ const set: JourneySet = {
     { id: 3, title: "Swim and brick", summary: "Tomorrow's swim in the pool view, and a ride and run in one program." },
     { id: 4, title: "Edit steps", summary: "Open a run in the program editor, change a step, add a repeat block, save." },
     { id: 5, title: "Plain sets to steps", summary: "A run made before steps: Edit as steps, check, save." },
-    { id: 6, title: "Lifter", summary: "A strength day, which must look as before." },
+    { id: 6, title: "Lifter", summary: "A strength day, which must look as before, with a set logged and un-logged." },
   ],
   flows: [
     {
@@ -168,6 +168,16 @@ const set: JourneySet = {
           await page.getByRole("link", { name: /^Bench Press/ }).first().click();
           await settle();
           await shot(6, 3, "sets", "A strength set list");
+        });
+        await step("J6 log set", async () => {
+          await page.getByRole("button", { name: "Log set 1", exact: true }).click();
+          await page.getByText(/REST\s*\d\d:\d\d/).first().waitFor();
+          await settle(800);
+          await shot(6, 6, "set-logged", "Set 1 logged: the rest countdown runs");
+          await page.getByRole("button", { name: "Un-log set 1", exact: true }).click();
+          await page.getByRole("button", { name: "Log set 1", exact: true }).waitFor();
+          await settle(500);
+          await shot(6, 7, "set-unlogged", "Set 1 un-logged again");
         });
         await step("J6 editor", async () => {
           await go("/programs");
