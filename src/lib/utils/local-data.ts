@@ -41,4 +41,10 @@ export async function clearLocalUserData() {
     const names = await caches.keys().catch(() => []);
     await Promise.all(names.map((name) => caches.delete(name)));
   }
+  // Step alerts of this device (public/push-sw.js): the browser drops the subscription.
+  if (typeof navigator !== "undefined" && navigator.serviceWorker) {
+    const reg = await navigator.serviceWorker.getRegistration("/push/").catch(() => undefined);
+    const sub = await reg?.pushManager.getSubscription().catch(() => null);
+    await sub?.unsubscribe().catch(() => false);
+  }
 }

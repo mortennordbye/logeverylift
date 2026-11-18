@@ -12,6 +12,7 @@
  */
 
 import { RideProfileChart, RideZoneBar } from "@/components/features/bike/RideProfileChart";
+import { StepAlertsRow, useStepAlerts } from "@/components/features/bike/StepAlerts";
 import { armRide, disarmRide } from "@/components/features/bike/useRide";
 import { BackLink } from "@/components/ui/BackLink";
 import { useWorkoutSession } from "@/contexts/workout-session-context";
@@ -32,15 +33,19 @@ export function BikeExercise({
   programExerciseId,
   exerciseName,
   data,
+  pushPublicKey,
 }: {
   programId: number;
   programExerciseId: number;
   exerciseName: string;
   data: BikeExerciseData;
+  /** The server's VAPID public key; null when push is off on the server. */
+  pushPublicKey: string | null;
 }) {
   const [mode, setMode] = useState<RideMode>(data.defaultMode);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const alerts = useStepAlerts(pushPublicKey);
   const session = useWorkoutSession();
   const router = useRouter();
   const pathname = usePathname();
@@ -157,6 +162,9 @@ export function BikeExercise({
             </li>
           ))}
         </ol>
+
+        {/* Before the start only, never during the ride (section 5, empty states). */}
+        {!data.liveRide && <StepAlertsRow state={alerts.state} busy={alerts.busy} error={alerts.error} onTurnOn={alerts.turnOn} />}
       </div>
 
       <div className="shrink-0 px-4 pt-2 pb-3 flex flex-col gap-1 border-t border-border bg-background">

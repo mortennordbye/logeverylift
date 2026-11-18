@@ -28,6 +28,8 @@ const PUBLIC_FILES = [
   "/favicon-32.png",
   // Link-preview image, fetched by Slack, iMessage and other crawlers
   "/og-image.png",
+  // The step alerts' service worker: the browser fetches it for updates on its own (public/push-sw.js)
+  "/push-sw.js",
 ];
 
 export function middleware(request: NextRequest) {

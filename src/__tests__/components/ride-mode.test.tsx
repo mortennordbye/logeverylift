@@ -36,6 +36,8 @@ const sendRideEvent = vi.fn();
 const getRide = vi.fn();
 vi.mock("@/lib/actions/rides", () => ({ sendRideEvent: (d: unknown) => sendRideEvent(d), getRide: (d: unknown) => getRide(d) }));
 const completeWorkoutSession = vi.fn();
+const detectStepAlerts = vi.fn();
+vi.mock("@/lib/push-client", () => ({ detectStepAlerts: (k: string | null) => detectStepAlerts(k), turnOnStepAlerts: vi.fn() }));
 vi.mock("@/lib/actions/workout-sessions", () => ({ completeWorkoutSession: (d: unknown) => completeWorkoutSession(d) }));
 
 const T0 = Date.UTC(2026, 10, 17, 17, 0, 0);
@@ -102,11 +104,11 @@ async function advance(ms: number) {
 }
 
 /** Ride mode opened by the Start ride tap, `seconds` into the ride. */
-async function open(seconds = 0, opts: { armed?: boolean; mode?: "indoor" | "outdoor" } = {}) {
+async function open(seconds = 0, opts: { armed?: boolean; mode?: "indoor" | "outdoor"; pushKey?: string } = {}) {
   vi.setSystemTime(T + seconds * 1000);
   serve(opts.mode);
   if (opts.armed !== false) armRide();
-  render(<RideMode exerciseId={3} initial={view()} setNumbers={{ 11: 1, 12: 2, 13: 3 }} onlyExercise sessionCompleted={false} units={{ distance: "km", swim: "m" }} />);
+  render(<RideMode exerciseId={3} initial={view()} setNumbers={{ 11: 1, 12: 2, 13: 3 }} onlyExercise sessionCompleted={false} units={{ distance: "km", swim: "m" }} pushPublicKey={opts.pushKey ?? null} />);
   await advance(0);
 }
 
@@ -118,6 +120,7 @@ beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(T0);
   localStorage.clear();
+  detectStepAlerts.mockReset().mockResolvedValue("off");
   for (const f of [unlogWithRetry, playCue, replace, refresh, logWithRetry, enqueue, clearActiveWorkout, sendRideEvent, getRide, completeWorkoutSession]) f.mockReset();
   playCue.mockReturnValue(true);
   requestWakeLock.mockReset().mockResolvedValue({ release: async () => undefined });
@@ -240,6 +243,8 @@ describe("RideMode", () => {
     expect(text("ride-kept")).toBe("Steps 1 and 2 are saved. Ending now keeps them.");
     await advance(120_000);
     expect(screen.getByText("Paused 2 min")).toBeTruthy();
+    // Push off on the server: no word about alerts.
+    expect(screen.queryByText(/alerts stopped/)).toBeNull();
     expect(text("ride-clock")).toBe("13:20");
 
     fireEvent.click(screen.getByRole("button", { name: "End ride" }));
@@ -251,6 +256,15 @@ describe("RideMode", () => {
     expect(replace).toHaveBeenCalledWith("/programs/1/workout/exercises/2?results=1");
     // The workout list reads the ridden steps as handled; step 3 was never reached.
     expect(addCompletedSet.mock.calls.map((c) => c[0]).sort()).toEqual([11, 12]);
+  });
+
+  it("paused with step alerts on: the line says the alerts stopped", async () => {
+    detectStepAlerts.mockResolvedValue("on");
+    await open(700, { pushKey: "key" });
+    fireEvent.click(screen.getByRole("button", { name: "Pause" }));
+    await advance(0);
+    expect(screen.getByText("Paused under 1 min · alerts stopped")).toBeTruthy();
+    expect(detectStepAlerts).toHaveBeenCalledWith("key");
   });
 
   it("outdoors: heart rate as the big number, the power meter below, and Lap", async () => {

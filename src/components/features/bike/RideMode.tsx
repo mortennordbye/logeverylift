@@ -10,6 +10,7 @@
  * only) and the ride's results table opens.
  */
 
+import { useStepAlerts } from "@/components/features/bike/StepAlerts";
 import { useRide, type RideTap } from "@/components/features/bike/useRide";
 import { usePendingQueue, useWorkoutSetWriter } from "@/contexts/pending-queue-context";
 import { useWorkoutSession } from "@/contexts/workout-session-context";
@@ -161,6 +162,7 @@ export function RideMode({
   onlyExercise,
   sessionCompleted,
   units,
+  pushPublicKey,
 }: {
   exerciseId: number;
   initial: RideView;
@@ -170,6 +172,8 @@ export function RideMode({
   onlyExercise: boolean;
   sessionCompleted: boolean;
   units: Units;
+  /** The server's VAPID public key; null when push is off on the server. */
+  pushPublicKey: string | null;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -177,6 +181,7 @@ export function RideMode({
   const { logWithRetry, unlogWithRetry } = useWorkoutSetWriter();
   const { enqueue } = usePendingQueue();
   const landscape = useLandscape();
+  const alerts = useStepAlerts(pushPublicKey);
 
   const saveStep = useCallback(
     (r: RideStepResult) => {
@@ -378,7 +383,11 @@ export function RideMode({
         {title}
         <div className="flex flex-col items-center gap-2">
           {clock}
-          <p className="text-base text-muted-foreground">{pausedText(pausedSince(events), serverNow)}</p>
+          <p className="text-base text-muted-foreground">
+            {pausedText(pausedSince(events), serverNow)}
+            {/* A pause rewrites the alerts away (4.7); said only where alerts are on. */}
+            {alerts.state === "on" && " · alerts stopped"}
+          </p>
         </div>
         <div className="flex flex-1 flex-col justify-center">
           <button type="button" onClick={actions.resume} className={`${BTN} min-h-16 bg-brand-fill text-white`}>

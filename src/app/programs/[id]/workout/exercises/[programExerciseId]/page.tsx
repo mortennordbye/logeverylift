@@ -15,6 +15,7 @@ import { getProgressiveSuggestions } from "@/lib/actions/workout-sets";
 import { stepLabels } from "@/lib/program-steps-view";
 import type { StepRow } from "@/lib/utils/program-steps";
 import { resultSteps, rideSummary } from "@/lib/utils/ride-results";
+import { pushPublicKey } from "@/lib/push";
 import { getUserSettings } from "@/lib/user-settings";
 import { requireSession } from "@/lib/utils/session";
 import { notFound } from "next/navigation";
@@ -65,6 +66,7 @@ export default async function WorkoutExerciseSetsPage({ params, searchParams }: 
           onlyExercise={onlyExercise}
           sessionCompleted={found.sessionCompleted}
           units={units}
+          pushPublicKey={pushPublicKey()}
         />
       );
     }
@@ -120,7 +122,7 @@ export default async function WorkoutExerciseSetsPage({ params, searchParams }: 
         />
       );
     }
-    if (bike) return <BikeExercise programId={programId} programExerciseId={peId} exerciseName={pe.exercise.name} data={bike} />;
+    if (bike) return <BikeExercise programId={programId} programExerciseId={peId} exerciseName={pe.exercise.name} data={bike} pushPublicKey={pushPublicKey()} />;
   }
 
   const suggestions = suggestionsResult.success ? suggestionsResult.data : {};

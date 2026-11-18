@@ -17,6 +17,9 @@ vi.mock("@/contexts/workout-session-context", () => ({ useWorkoutSession: () => 
 const startRide = vi.fn();
 vi.mock("@/lib/actions/rides", () => ({ startRide: (d: unknown) => startRide(d) }));
 vi.mock("@/lib/audio-cues", () => ({ playCue: () => true, unlockAudio: () => true }));
+const detectStepAlerts = vi.fn();
+const turnOnStepAlerts = vi.fn();
+vi.mock("@/lib/push-client", () => ({ detectStepAlerts: (k: string | null) => detectStepAlerts(k), turnOnStepAlerts: (k: string) => turnOnStepAlerts(k) }));
 const release = vi.fn();
 vi.mock("@/lib/wake-lock", () => ({ wakeLockSupported: () => true, requestWakeLock: async () => ({ release }) }));
 
@@ -47,11 +50,13 @@ beforeEach(() => {
   replace.mockReset();
   startRide.mockReset();
   release.mockReset().mockResolvedValue(undefined);
+  detectStepAlerts.mockReset().mockResolvedValue("off");
+  turnOnStepAlerts.mockReset();
 });
 
 describe("BikeExercise", () => {
   it("indoors: the summary line, the power chart, the numbers and watts on every step", () => {
-    render(<BikeExercise programId={1} programExerciseId={2} exerciseName="Bike" data={data({ ftp: 180, lthr_bike: 171 })} />);
+    render(<BikeExercise programId={1} programExerciseId={2} exerciseName="Bike" data={data({ ftp: 180, lthr_bike: 171 })} pushPublicKey={null} />);
     expect(screen.getByTestId("ride-summary").textContent).toBe("35 min · load about 29 · FTP 180 W");
     expect(screen.getByTestId("ride-mode").textContent).toBe("Indoor trainer");
     expect(screen.getByTestId("ride-profile")).toBeTruthy();
@@ -62,7 +67,7 @@ describe("BikeExercise", () => {
   });
 
   it("opens in the default mode and Change switches to the outdoor targets", () => {
-    render(<BikeExercise programId={1} programExerciseId={2} exerciseName="Bike" data={data({ ftp: 180, lthr_bike: 171 }, "outdoor")} />);
+    render(<BikeExercise programId={1} programExerciseId={2} exerciseName="Bike" data={data({ ftp: 180, lthr_bike: 171 }, "outdoor")} pushPublicKey={null} />);
     expect(screen.getByTestId("ride-mode").textContent).toBe("Outdoor");
     expect(screen.queryByTestId("ride-profile")).toBeNull();
     expect(screen.getByTestId("ride-summary").textContent).toContain("LTHR 171");
@@ -74,7 +79,7 @@ describe("BikeExercise", () => {
   });
 
   it("with no FTP: targets in % FTP, no kJ, and a way to set it", () => {
-    render(<BikeExercise programId={1} programExerciseId={2} exerciseName="Bike" data={data({})} />);
+    render(<BikeExercise programId={1} programExerciseId={2} exerciseName="Bike" data={data({})} pushPublicKey={null} />);
     expect(targets()).toEqual(["55 to 75% FTP", "75-81% FTP", "under 55% FTP"]);
     expect(screen.getByText("Set your FTP to see watts")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Set FTP" }).getAttribute("href")).toBe("/more/account/training-numbers");
@@ -83,13 +88,13 @@ describe("BikeExercise", () => {
   });
 
   it("outdoors with no bike LTHR: effort targets", () => {
-    render(<BikeExercise programId={1} programExerciseId={2} exerciseName="Bike" data={data({ ftp: 180 }, "outdoor")} />);
+    render(<BikeExercise programId={1} programExerciseId={2} exerciseName="Bike" data={data({ ftp: 180 }, "outdoor")} pushPublicKey={null} />);
     expect(targets()).toEqual(["Effort 2", "Effort 4", "Effort 2"]);
   });
 
   it("Start ride starts the ride in the chosen mode and opens ride mode; Log by hand opens the results table in the chosen mode", async () => {
     startRide.mockResolvedValue({ success: true, data: {} });
-    render(<BikeExercise programId={1} programExerciseId={2} exerciseName="Bike" data={data({ ftp: 180 })} />);
+    render(<BikeExercise programId={1} programExerciseId={2} exerciseName="Bike" data={data({ ftp: 180 })} pushPublicKey={null} />);
     expect(screen.getByRole("link", { name: "Log by hand" }).getAttribute("href")).toBe("/programs/1/workout/exercises/2?hand=1&mode=indoor");
     fireEvent.click(screen.getByRole("button", { name: "Change to Outdoor" }));
     expect(screen.getByRole("link", { name: "Log by hand" }).getAttribute("href")).toBe("/programs/1/workout/exercises/2?hand=1&mode=outdoor");
@@ -102,7 +107,7 @@ describe("BikeExercise", () => {
 
   it("shows the server's reason when the ride does not start", async () => {
     startRide.mockResolvedValue({ success: false, error: "A ride is already running" });
-    render(<BikeExercise programId={1} programExerciseId={2} exerciseName="Bike" data={data({ ftp: 180 })} />);
+    render(<BikeExercise programId={1} programExerciseId={2} exerciseName="Bike" data={data({ ftp: 180 })} pushPublicKey={null} />);
     fireEvent.click(screen.getByRole("button", { name: "Start ride" }));
     expect((await screen.findByRole("alert")).textContent).toBe("A ride is already running");
     expect(replace).not.toHaveBeenCalled();
@@ -111,7 +116,7 @@ describe("BikeExercise", () => {
   });
 
   it("with a ride running for this exercise: Ride running and Resume in place of Start ride", () => {
-    render(<BikeExercise programId={1} programExerciseId={2} exerciseName="Bike" data={data({ ftp: 180 }, "indoor", true)} />);
+    render(<BikeExercise programId={1} programExerciseId={2} exerciseName="Bike" data={data({ ftp: 180 }, "indoor", true)} pushPublicKey={null} />);
     expect(screen.getByText("Ride running")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Resume" }).getAttribute("href")).toBe("/programs/1/workout/exercises/2?ride=1");
     expect(screen.queryByRole("button", { name: "Start ride" })).toBeNull();
@@ -124,5 +129,47 @@ describe("BikeExercise", () => {
     for (let i = 1; i < 5; i++) expect(o[i]).toBeGreaterThan(o[i - 1]);
     expect(o[5]).toBe(o[4]);
     expect(o[6]).toBe(o[4]);
+  });
+
+  describe("step alerts (4.7)", () => {
+    it("push off on the server: Step alerts are off, with nothing to turn on", () => {
+      render(<BikeExercise programId={1} programExerciseId={2} exerciseName="Bike" data={data({ ftp: 180 })} pushPublicKey={null} />);
+      expect(screen.getByTestId("step-alerts").textContent).toBe("Step alerts are off");
+      expect(screen.queryByRole("button", { name: "Turn on" })).toBeNull();
+      expect(detectStepAlerts).not.toHaveBeenCalled();
+    });
+
+    it("off on this device: Turn on asks for alerts and the row goes once they are on", async () => {
+      turnOnStepAlerts.mockResolvedValue({ state: "on" });
+      render(<BikeExercise programId={1} programExerciseId={2} exerciseName="Bike" data={data({ ftp: 180 })} pushPublicKey="key" />);
+      fireEvent.click(await screen.findByRole("button", { name: "Turn on" }));
+      expect(turnOnStepAlerts).toHaveBeenCalledWith("key");
+      await waitFor(() => expect(screen.queryByTestId("step-alerts")).toBeNull());
+    });
+
+    it("an iPhone outside the home-screen app: points to adding it first", async () => {
+      detectStepAlerts.mockResolvedValue("home_screen");
+      render(<BikeExercise programId={1} programExerciseId={2} exerciseName="Bike" data={data({ ftp: 180 })} pushPublicKey="key" />);
+      const row = await screen.findByRole("link", { name: /Add the app to your home screen first/ });
+      expect(row.getAttribute("href")).toBe("/more/install");
+      expect(screen.queryByRole("button", { name: "Turn on" })).toBeNull();
+    });
+
+    it("blocked: says where they are blocked, with no Turn on", async () => {
+      detectStepAlerts.mockResolvedValue("blocked");
+      render(<BikeExercise programId={1} programExerciseId={2} exerciseName="Bike" data={data({ ftp: 180 })} pushPublicKey="key" />);
+      expect(await screen.findByText("Notifications are blocked in your phone's settings")).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Turn on" })).toBeNull();
+    });
+
+    it("on, or a ride running: no row", async () => {
+      detectStepAlerts.mockResolvedValue("on");
+      const { unmount } = render(<BikeExercise programId={1} programExerciseId={2} exerciseName="Bike" data={data({ ftp: 180 })} pushPublicKey="key" />);
+      await waitFor(() => expect(detectStepAlerts).toHaveBeenCalled());
+      expect(screen.queryByTestId("step-alerts")).toBeNull();
+      unmount();
+      render(<BikeExercise programId={1} programExerciseId={2} exerciseName="Bike" data={data({ ftp: 180 }, "indoor", true)} pushPublicKey={null} />);
+      expect(screen.queryByTestId("step-alerts")).toBeNull();
+    });
   });
 });
