@@ -27,7 +27,7 @@ const set: JourneySet = {
     ftp: { email: "steps-ftp@demo.local", password: PASSWORD, about: "FTP 180 W, the 20 min FTP test ridden 10 min ago with the all-out step typed at 196 W" },
   },
   journeys: [
-    { id: 1, title: "Indoor ride", summary: "Start the ride, change the target, add a minute, skip with undo, pause, reload, landscape, end early, type the results and see the summary." },
+    { id: 1, title: "Indoor ride", summary: "Start the ride, change the target, add a minute, skip with undo, pause, reload, landscape, end early, type the results and see the summary, ride again, and end it offline with Later." },
     { id: 2, title: "Outdoor ride with no thresholds", summary: "Change to Outdoor, start, the effort target and Lap, end, the outdoor results with more numbers, Later, and the plan-only summary." },
     { id: 3, title: "Log by hand", summary: "Log the ride by hand from the bike screen: times, watts, effort, and back to the workout." },
     { id: 4, title: "Filled from Garmin", summary: "The summary of a ride Garmin filled: NP, IF, the plan-against-done chart, zones, time on target, drift, then Undo with its question, and Fill from Garmin." },
@@ -177,7 +177,27 @@ const set: JourneySet = {
           await page.getByTestId("results-done").click();
           await page.getByTestId("ride-summary-screen").waitFor({ timeout: 15_000 });
           await settle(800);
-          await shot(1, 11, "summary", "The summary: Ended early, the ridden step only, load from effort marked est.");
+          await shot(1, 11, "summary", "The summary: Ended early, the ridden step only, load from effort marked est., and Ride again");
+        });
+        await step("J1 ride again", async () => {
+          await page.getByRole("button", { name: "Ride again" }).click();
+          await page.getByTestId("ride-screen").waitFor({ timeout: 15_000 });
+          await settle(1500);
+          await shot(1, 12, "ride-again", "Ride again: a new ride from step 1 on the same workout");
+        });
+        await step("J1 offline end", async () => {
+          await page.context().setOffline(true);
+          await page.getByRole("button", { name: "Pause" }).click();
+          await settle(300);
+          await page.getByRole("button", { name: "End ride" }).click();
+          await page.getByTestId("ride-done").waitFor();
+          await settle(500);
+          await shot(1, 13, "done-offline", "Ended while offline: Saved on this phone, and Later");
+          // Back online, the queued taps send and the ride goes on to its results table.
+          await page.context().setOffline(false);
+          await page.getByTestId("ride-results").waitFor({ timeout: 40_000 });
+          await settle(800);
+          await shot(1, 14, "online-results", "Back online: the taps sent, and the results table of the second ride");
         });
       },
     },
