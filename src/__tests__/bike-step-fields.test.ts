@@ -83,7 +83,7 @@ describe("the step schema", () => {
         "steps[1].free a free step has no target",
         "steps[1].target2 a second target needs a first one",
         "steps[2].outdoor.anchor pace with anchor css is not allowed on a bike",
-        "steps[3].target2 a second target needs a first one",
+        "steps[3].target2 a ramp takes no cap",
       ]),
     );
   });

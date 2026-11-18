@@ -244,7 +244,8 @@ function stepIssues(step: WorkoutStep, w: Workout, inRepeat: WorkoutRepeat | nul
   if (step.target) for (const i of targetIssues(step.target, w.sport)) out.push({ path: ["target", ...i.path], message: i.message });
   // A ramp takes no cap: program_sets.targets holds the target and its cap.
   if (step.target2) {
-    if (!step.target) out.push({ path: ["target2"], message: "a second target needs a first one" });
+    if (step.ramp && !step.target) out.push({ path: ["target2"], message: "a ramp takes no cap" });
+    else if (!step.target) out.push({ path: ["target2"], message: "a second target needs a first one" });
     else if (step.target2.metric === step.target.metric) out.push({ path: ["target2", "metric"], message: "the second target must use another metric" });
     for (const i of targetIssues(step.target2, w.sport)) out.push({ path: ["target2", ...i.path], message: i.message });
   }

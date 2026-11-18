@@ -41,7 +41,7 @@ import { reanchoredPeaks } from "@/lib/utils/periodization";
 import { REP_RANGE_MESSAGE, repRangeIsWellFormed } from "@/lib/validators/workout";
 import { StepRowsError, settleStepRows } from "@/lib/program-steps-db";
 import { workoutToRows } from "@/lib/utils/program-steps";
-import { parseWorkout, programStepFieldsSchema } from "@/lib/utils/workout-steps";
+import { parseWorkout, programStepFieldsSchema, type Workout } from "@/lib/utils/workout-steps";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { and, asc, eq, inArray, isNull, or } from "drizzle-orm";
 import { z } from "zod";
@@ -168,14 +168,54 @@ function setValues(programExerciseId: number, s: SetInput) {
   };
 }
 
+const NOT_TARGETS: Record<string, string> = {
+  gradient: "gradient is never a target: write the climb in the step's note (for example \"climb at 6%\")",
+  grade: "gradient is never a target: write the climb in the step's note (for example \"climb at 6%\")",
+  speed: "speed is a result, not a target: give power, heart rate or effort",
+};
+
+/**
+ * The mistakes a step tree makes most, said plainly before the schema check
+ * (docs/plans/bike-ride-logger.md, D12 and 4.1): a gradient or a speed as a
+ * target, and an outdoor target that tries to change how a step ends.
+ */
+function stepTreeHints(input: unknown): string[] {
+  const out: string[] = [];
+  const nodes = (input as { steps?: unknown })?.steps;
+  if (!Array.isArray(nodes)) return out;
+  const step = (s: unknown, path: string) => {
+    if (!s || typeof s !== "object") return;
+    const o = s as Record<string, unknown>;
+    for (const k of ["gradient", "grade", "climb"]) if (k in o) out.push(`${path}.${k}: ${NOT_TARGETS.gradient}`);
+    for (const f of ["target", "target2", "outdoor"]) {
+      const t = o[f] as Record<string, unknown> | undefined;
+      if (!t || typeof t !== "object") continue;
+      const hint = typeof t.metric === "string" ? NOT_TARGETS[t.metric] : undefined;
+      if (hint) out.push(`${path}.${f}: ${hint}`);
+      if (f === "outdoor" && "end" in t) out.push(`${path}.outdoor: an outdoor target changes only the target, never how the step ends; the step's end is the same indoors and outdoors`);
+    }
+  };
+  nodes.forEach((n, i) => {
+    if (n && typeof n === "object" && (n as { type?: unknown }).type === "repeat") {
+      const inner = (n as { steps?: unknown }).steps;
+      if (Array.isArray(inner)) inner.forEach((s, j) => step(s, `steps[${i}].steps[${j}]`));
+    } else step(n, `steps[${i}]`);
+  });
+  return out;
+}
+
 /**
  * A step tree (the shape of logeverylift://docs/workout-steps) as a set list,
- * for the `workout` argument. Null with the reasons when it fails the schema.
+ * for the `workout` argument, with the tree's FTP test (stored on the slot).
+ * The reasons when it fails the schema.
  */
-function setsFromWorkout(input: unknown): { sets: SetInput[] } | { error: string } {
+function setsFromWorkout(input: unknown): { sets: SetInput[]; test: Workout["test"] | null } | { error: string } {
+  const hints = stepTreeHints(input);
+  if (hints.length) return { error: `workout: ${hints.slice(0, 5).join("; ")}` };
   const parsed = parseWorkout(input);
   if (!parsed.ok) return { error: `workout: ${parsed.errors.slice(0, 5).map((e) => `${e.path} ${e.message}`).join("; ")}` };
   return {
+    test: parsed.workout.test ?? null,
     sets: workoutToRows(parsed.workout).map((r) => ({
       ...r,
       targets: (r.targets as SetInput["targets"]) ?? null,
@@ -230,7 +270,7 @@ export function registerProgramTools(server: McpServer, userId: string, clientId
     "get_program",
     {
       description:
-        "Get one program with its ordered exercise slots and planned sets, and its version. Pass the version as expectedVersion when you change it.",
+        "Get one program with its ordered exercise slots and planned sets, and its version. Pass the version as expectedVersion when you change it. A step set holds its step fields as written (stepKind, targets, cadence, note, and on a bike ramp, free and outdoorTarget); a bike slot holds rideTest, the FTP test of its ride or null.",
       inputSchema: { programId: z.number().int().positive() },
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
@@ -340,6 +380,7 @@ export function registerProgramTools(server: McpServer, userId: string, clientId
         "Field owners: target reps and weight belong to the progression engine; an edit is a one-off until the next logged session (change the progression settings to change the trend). On a set with a peak anchor, distance or duration is this week's value and the peak is re-derived from it. targetHeartRateZone and restTimeSeconds on a 'work' set with a peak anchor belong to the weekly sync: a different value is refused, and an omitted one keeps the sync's value; send sessionRole: null on that set to take them over. To make a whole week lighter or harder, use manage_training_cycle operation='set_volume', not set edits.",
         "operation='update': requires programExerciseId; any provided slot fields are updated. A new exerciseId must be a built-in exercise or one of the user's own. If sets[] is provided it becomes the slot's full set list: an entry with id updates that set, an entry without id updates the set at the same setNumber, other entries are added, and stored sets that no entry names are removed. Set ids never change, so logged workouts keep their link. A set without sessionRole keeps the role it had.",
         "Endurance steps (swim, bike or run exercises only): a set with stepKind (warmup, work, recovery, cooldown, rest) is one step of a structured session. It ends on exactly one of durationSeconds, distanceMeters or endsOnLap: true. Optional targets (1-2 entries, the shape of a step target in logeverylift://docs/workout-steps; the second caps the first), cadenceLow and cadenceHigh, and for swims stroke, equipment, sendOffSeconds and poolLengthM on the slot; note is a short cue. A repeat block is one set per round: the sets of block 1 round 1, then block 1 round 2, and so on, each with blockId and blockRound, every round the same. Instead of sets[] you can send workout: a step tree with repeats, and it becomes the set list. Either every set of a slot is a step or none is. For a user with endurance features on, a bike slot always holds steps: plain bike sets are stored as steps (each set one step, its targetHeartRateZone a zone target on LTHR, its rest a rest step after it). The whole slot is checked after the write and a broken one is refused with the set numbers.",
+        "Bike steps also take (in sets and in the tree): ramp {anchor ftp or absolute, from, to} in place of the target (no cap with a ramp), free: true for a spin with no target, and an outdoor target (outdoorTarget on a set, outdoor in the tree) that changes only the target on an outdoor ride, never the end; without one the app derives it. A climb, a gradient or terrain is a note on the step (note), never a target, and speed is a result, never a target. A bike tree may carry test: 'ramp' or '20min' for an FTP test ride; it is stored on the slot (get_program shows it as rideTest), a tree without test clears it, and sets[] leaves it. Ramp, free, outdoor and test on a run or swim are refused. A ride that is running keeps the plan it started with: a program edit applies from the next ride.",
         "operation='remove': requires programExerciseId.",
         `Every operation requires reason and expectedVersion (the program's version). The result has the program's new version. ${REVISION_RULES}`,
         `On add and update: ${LIMITS_TEXT}`,
@@ -414,10 +455,13 @@ export function registerProgramTools(server: McpServer, userId: string, clientId
       // week of the active (or scheduled) cycle that holds it.
       const scopeFor = (programId: number): Promise<LimitScope> => programLimitScope(db, userId, programId);
       if (args.workout !== undefined && args.sets !== undefined) return fail("send sets or workout, not both");
+      // A step tree also sets the slot's FTP test: its `test`, or none.
+      let rideTest: { rideTest: Workout["test"] | null } | null = null;
       if (args.workout !== undefined) {
         const fromTree = setsFromWorkout(args.workout);
         if ("error" in fromTree) return fail(fromTree.error);
         args = { ...args, sets: fromTree.sets };
+        rideTest = { rideTest: fromTree.test };
       }
       try {
         if (args.operation === "add") {
@@ -490,6 +534,7 @@ export function registerProgramTools(server: McpServer, userId: string, clientId
                   progressionRequiredHits: args.progressionRequiredHits ?? null,
                   progressionApplyToPlan: args.progressionApplyToPlan ?? false,
                   poolLengthM: args.poolLengthM ?? null,
+                  ...rideTest,
                 })
                 .returning();
               if (args.sets && args.sets.length > 0) {
@@ -576,6 +621,7 @@ export function registerProgramTools(server: McpServer, userId: string, clientId
           if (args.progressionApplyToPlan !== undefined)
             peUpdates.progressionApplyToPlan = args.progressionApplyToPlan;
           if (args.poolLengthM !== undefined) peUpdates.poolLengthM = args.poolLengthM;
+          if (rideTest) peUpdates.rideTest = rideTest.rideTest;
           // E-13, as in setProgramExerciseProgression: an agent changing how
           // sessions are judged restarts the window just as the sheet does.
           if (current && judgingRuleChanged(current, peUpdates)) {
