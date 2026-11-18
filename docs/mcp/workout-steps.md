@@ -1,6 +1,6 @@
 # Workout step syntax
 
-Version: 2026-11-16
+Version: 2026-11-18
 
 This document is served to connected AI assistants as an MCP resource
 (`logeverylift://docs/workout-steps`). It describes the steps of a structured endurance session
@@ -25,11 +25,12 @@ A step tree is one JSON object:
 
 | Key | Required | Meaning |
 |---|---|---|
-| `v` | yes | Always `1` |
+| `v` | yes | `1` or `2` (2 since the bike fields below; both read the same) |
 | `sport` | yes | `swim`, `bike` or `run` |
 | `name` | yes | 1-80 characters. Not stored: the program has its own name |
 | `description` | no | At most 1,000 characters. Not stored: use the exercise's `notes` |
 | `poolLengthM` | swim only | Pool length in meters, 10-100 (25 yd is 22.86). Leave it out for open water. Send it as `poolLengthM` on the `edit_program_exercise` call too: the exercise keeps it |
+| `test` | bike only | `ramp` or `20min`: the ride is an FTP test (see Bikes). Stored on the exercise; a tree without it clears it |
 | `steps` | yes | 1-100 nodes, in order |
 
 A node is a **step** or a **repeat**.
@@ -46,7 +47,10 @@ A **step**:
 | `sendOffSeconds` | no | Swim only: leave every N seconds (20-600). Only on a `work` step inside a repeat with no `rest` step, because the send-off includes the rest |
 | `stroke` | no | Swim only: `free`, `back`, `breast`, `fly`, `im`, `choice`, `kick`, `pull`, `drill` |
 | `equipment` | no | Swim only, a list: `pull_buoy`, `paddles`, `fins`, `kickboard`, `snorkel` |
-| `note` | no | At most 140 characters |
+| `note` | no | At most 140 characters. A climb, a gradient or the terrain goes here, never in a target |
+| `ramp` | bike only | `{ "anchor": "ftp" or "absolute", "from": n, "to": n }`: power that moves evenly from `from` to `to` over the step, in % FTP (30-200) or watts (20-2000). In place of `target`; a ramp takes no `target2` |
+| `free` | bike only | `true`: a free spin with no target. No `target`, `target2` or `ramp` with it |
+| `outdoor` | bike only | A target in the shape of Targets, used on an outdoor ride in place of `target`. See Bikes |
 | `id` | no | Letters, digits, `-` or `_`, at most 24. Not stored: the app numbers the steps `s1`, `s2`, ... in order (a repeat takes one number, its steps the next ones). Step results use these keys, plus `#n` for round n of a repeat |
 
 A **repeat**: `{ "type": "repeat", "count": 2-50, "steps": [1-10 steps] }`. A repeat holds steps
@@ -78,6 +82,91 @@ can: a new threshold then updates every future session.
 Zones, from the research reference: Coggan power Z1 under 55% FTP, Z2 55-74, Z3 75-89, Z4 90-104,
 Z5 105-120. Friel run heart rate Z1 under 85% LTHR, Z2 85-89, Z3 90-94, Z4 95-99, Z5 100 and
 up; bike Z1 under 81, Z2 81-89, Z3 90-93, Z4 94-99, Z5 100 and up.
+
+## Bikes
+
+A ride has two modes, Indoor (trainer) and Outdoor, chosen when the athlete starts it. Write the
+indoor target as `target` (power in % FTP, a power zone, or a `ramp`). The app makes the outdoor
+target from the power zone of the indoor target's low end: heart rate on longer steps, effort on
+short hard ones and easy spins. To set your own, add `outdoor` to the step. A step with no
+`outdoor` is never refused. An outdoor target changes only the target, never how the step ends:
+both modes ride the same steps.
+
+- **Ramp:** a warm-up, cool-down or build that rises (or falls) evenly. `ramp` replaces `target`.
+- **Free spin:** `"free": true`, with no target, for a spin where only the time counts.
+- **Climbs:** write the climb in `note` ("Climb at 6-8%, seated"). Gradient is never a target,
+  and speed is never a target either: it is a result.
+- **Cadence:** `cadence` on the step, as for any bike step.
+- **FTP test rides:** `"test": "ramp"` (warm-up, then 1 min steps up to failure, ending on a lap)
+  or `"test": "20min"` (warm-up, 20 min all-out, cool-down) on the tree. It marks the ride as a
+  test for the app; write its steps as usual.
+- **A running ride is frozen:** a ride keeps the plan it started with. A program edit applies
+  from the next ride, never to one in progress.
+
+A 65 minute ride, the shape the ride logger was designed with. With FTP 180 W the warm-up ramps
+from 99 to 135 W and the work steps are 135-144 W. Outdoors the work steps ride at heart rate
+83-89% of bike LTHR, as written; the other steps get the derived outdoor target. In a repeat, the
+recovery after the last round is not ridden.
+
+```json
+{ "v": 2, "sport": "bike", "name": "Tempo 2 x 15",
+  "steps": [
+    { "type": "warmup", "end": { "type": "time", "seconds": 900 },
+      "ramp": { "anchor": "ftp", "from": 55, "to": 75 } },
+    { "type": "repeat", "count": 2, "steps": [
+      { "type": "work", "end": { "type": "time", "seconds": 900 },
+        "target": { "metric": "power", "anchor": "ftp", "low": 75, "high": 80 },
+        "cadence": { "low": 85, "high": 95 },
+        "outdoor": { "metric": "hr", "anchor": "lthr", "low": 83, "high": 89 },
+        "note": "Talk in short sentences" },
+      { "type": "recovery", "end": { "type": "time", "seconds": 300 },
+        "target": { "metric": "power", "anchor": "ftp", "zone": 1 } } ] },
+    { "type": "work", "end": { "type": "time", "seconds": 900 },
+      "target": { "metric": "power", "anchor": "ftp", "zone": 2 } },
+    { "type": "cooldown", "end": { "type": "lap" }, "free": true }
+  ] }
+```
+
+Hill repeats outdoors: the climb is in the note, the target is power with an effort outdoors.
+
+```json
+{ "v": 2, "sport": "bike", "name": "5 x 4 min climbs",
+  "steps": [
+    { "type": "warmup", "end": { "type": "time", "seconds": 1200 },
+      "ramp": { "anchor": "ftp", "from": 50, "to": 70 } },
+    { "type": "repeat", "count": 5, "steps": [
+      { "type": "work", "end": { "type": "time", "seconds": 240 },
+        "target": { "metric": "power", "anchor": "ftp", "low": 105, "high": 115 },
+        "outdoor": { "metric": "rpe", "anchor": "absolute", "low": 8, "high": 8 },
+        "note": "Climb at 6-8%, seated" },
+      { "type": "recovery", "end": { "type": "time", "seconds": 240 }, "free": true,
+        "note": "Roll back down" } ] },
+    { "type": "cooldown", "end": { "type": "time", "seconds": 600 },
+      "target": { "metric": "power", "anchor": "ftp", "zone": 1 } }
+  ] }
+```
+
+A 20 minute FTP test.
+
+```json
+{ "v": 2, "sport": "bike", "name": "20 min FTP test", "test": "20min",
+  "steps": [
+    { "type": "warmup", "end": { "type": "time", "seconds": 1200 },
+      "target": { "metric": "power", "anchor": "ftp", "zone": 2 },
+      "note": "Two 1 min hard efforts in the last 10 min" },
+    { "type": "recovery", "end": { "type": "time", "seconds": 300 }, "free": true },
+    { "type": "work", "end": { "type": "time", "seconds": 1200 },
+      "target": { "metric": "rpe", "anchor": "absolute", "low": 10, "high": 10 },
+      "note": "All out, even pacing" },
+    { "type": "cooldown", "end": { "type": "time", "seconds": 600 }, "free": true }
+  ] }
+```
+
+Results of a ride: `get_ride` reads the ride (plan, mode, status, each step planned against done
+and the ride's numbers). `log_step_results` writes per step `avgPower`, `avgHr`, `maxHr`,
+`avgCadence`, `avgSpeed` (m/s) and `climbM` besides time, distance and RPE. Your values are
+marked as written by the assistant; a value the athlete typed or Garmin filled is never replaced,
+and the result lists it under `kept`.
 
 ## Swims
 
@@ -162,7 +251,9 @@ In `sets[]`, a set with `stepKind` (`warmup`, `work`, `recovery`, `cooldown`, `r
 step. It ends on exactly one of `durationSeconds`, `distanceMeters` or `endsOnLap: true`. A
 target goes in `targets`, a list of one or two entries in the target shape above. Cadence is
 `cadenceLow` and `cadenceHigh`; a swim step takes `stroke`, `equipment` and `sendOffSeconds`;
-`note` is the step's cue. A repeat is one set per round: the sets of round 1, then round 2, and
+`note` is the step's cue. A bike step takes `ramp` (no `targets` with it), `free: true` and
+`outdoorTarget` (the tree's `outdoor`). The FTP test is only in the tree: a set list leaves the
+exercise's test as it is, and `get_program` shows it as `rideTest` on the exercise. A repeat is one set per round: the sets of round 1, then round 2, and
 so on, each with the same `blockId` and its `blockRound`, every round the same. Either every set
 of an exercise is a step or none is. The `workout` argument writes exactly this list for you.
 
@@ -208,4 +299,25 @@ A distance that is not a whole number of lengths, and a send-off next to a rest 
   "steps": [ { "type": "repeat", "count": 4, "steps": [
     { "type": "work", "end": { "type": "distance", "meters": 110 }, "sendOffSeconds": 120 },
     { "type": "rest", "end": { "type": "time", "seconds": 20 } } ] } ] }
+```
+
+A ramp with a cap, a gradient as a target, and a free spin on a run. Write a ramp alone, put the
+climb in the note, and use `free` only on a bike.
+
+```json wrong
+{ "v": 2, "sport": "bike", "name": "Ramp with a cap",
+  "steps": [ { "type": "warmup", "end": { "type": "time", "seconds": 600 },
+    "ramp": { "anchor": "ftp", "from": 50, "to": 70 },
+    "target2": { "metric": "hr", "anchor": "lthr", "low": 70, "high": 80 } } ] }
+```
+
+```json wrong
+{ "v": 2, "sport": "bike", "name": "Gradient target",
+  "steps": [ { "type": "work", "end": { "type": "time", "seconds": 600 },
+    "target": { "metric": "gradient", "anchor": "absolute", "low": 6, "high": 8 } } ] }
+```
+
+```json wrong
+{ "v": 2, "sport": "run", "name": "Free run",
+  "steps": [ { "type": "work", "end": { "type": "time", "seconds": 600 }, "free": true } ] }
 ```
