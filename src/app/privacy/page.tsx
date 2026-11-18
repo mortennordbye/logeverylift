@@ -54,7 +54,9 @@ export default function PrivacyPage() {
           whether you rode indoors or outdoors, whether you ended before the last step, and per step your average power,
           maximum heart rate, average cadence, average speed, climbing, any change you made to the target, and where each
           number came from. In ride mode it keeps the ride&apos;s plan as it was at the start and each tap you make (start,
-          pause, skip, an extra minute, a target change, lap, end) with its time. From your logged sessions and thresholds
+          pause, skip, an extra minute, a target change, lap, end) with its time. If Garmin is on for your account, a Garmin
+          bike ride that overlaps your ride fills the step numbers you left empty, and the app keeps what was there before
+          so Undo can restore it, and whether you undid it. From your logged sessions and thresholds
           the app also works out a training load and your fitness, fatigue and form; these are calculated when shown,
           not stored.
         </li>
