@@ -89,6 +89,8 @@ describe("RideSummary with a Garmin stream", () => {
     expect(chart.textContent).toContain("Power");
     expect(chart.textContent).toContain("Heart rate");
     expect(chart.textContent).toContain("Target");
+    // Screen readers read the chart's name: no colon in app text.
+    expect(chart.querySelector("svg[role=img]")?.getAttribute("aria-label")).toBe("Done against plan, power line over the target bands, heart rate dashed");
     expect(screen.getByTestId("summary-zones")).toBeTruthy();
     // Heart rate rises 20 bpm over the work step at the same watts: not steady.
     expect(screen.getByTestId("summary-drift").textContent).toMatch(/^Heart rate drift \d+\.\d%$/);

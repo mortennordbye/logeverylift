@@ -108,7 +108,7 @@ export function RideZoneBar({ zones, label, testId }: { zones: { zone: number; m
  */
 export function RideDoneChart({ chart }: { chart: DoneChart }) {
   const { left, right, base, width, height } = CHART;
-  const label = `Done against plan${chart.power ? ": power line over the target bands" : ""}${chart.hr ? ", heart rate dashed" : ""}`;
+  const label = `Done against plan${chart.power ? ", power line over the target bands" : ""}${chart.hr ? ", heart rate dashed" : ""}`;
   return (
     <div data-testid="summary-chart">
       <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={label} className="block w-full h-auto">

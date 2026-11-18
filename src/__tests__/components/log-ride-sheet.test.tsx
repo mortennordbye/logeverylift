@@ -41,4 +41,16 @@ describe("LogRunModal for a ride", () => {
     sheet("run");
     expect(distanceInput().value).toBe("5");
   });
+
+  it("the button text has a middle dot, no em dash, for every discipline", () => {
+    sheet("bike");
+    fireEvent.change(distanceInput(), { target: { value: "20" } });
+    expect(screen.getByRole("button", { name: /^Log Ride · 20 km/ })).toBeTruthy();
+  });
+
+  it("a run's button text has a middle dot too", () => {
+    sheet("run");
+    const button = screen.getByRole("button", { name: /^Log Run · 5 km/ });
+    expect(button.textContent).not.toContain("—");
+  });
 });

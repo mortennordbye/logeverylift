@@ -325,8 +325,8 @@ export function LogRunModal({
             {distanceMeters <= 0 && cfg.defaultDistanceM == null
               ? cfg.logVerb
               : pace
-                ? `${cfg.logVerb} — ${formatEnduranceDistance(cfg.inputUnit, distanceMeters, units)} at ${pace}`
-                : `${cfg.logVerb} — ${formatEnduranceDistance(cfg.inputUnit, distanceMeters, units)}`}
+                ? `${cfg.logVerb} · ${formatEnduranceDistance(cfg.inputUnit, distanceMeters, units)} at ${pace}`
+                : `${cfg.logVerb} · ${formatEnduranceDistance(cfg.inputUnit, distanceMeters, units)}`}
           </button>
         </div>
       </div>
