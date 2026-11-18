@@ -200,11 +200,22 @@ export type StreamNumbers = {
   drift: RideDrift | null;
   /** Percent of each step's seconds inside its target, by program set: power indoors, heart rate outdoors. */
   onTarget: Record<number, number | null>;
-  /** The best rolling 60 s mean power (an FTP ramp test, 4.9); null without a minute of power. */
+  /** The best rolling 60 s mean power inside the work steps' windows (an FTP ramp test, 4.9); null without a minute of it. */
   best60sPower: number | null;
   /** Each step's window average power, by program set (an FTP 20 min test, 4.9). */
   stepPower: Record<number, number | null>;
 };
+
+/** The best 60 s of power over the samples of the work steps' windows only, so a sprint in a warm-up does not count. */
+function workBest60s(streams: RideStreams, windows: StepWindow[], byId: Map<number, PlanStepLike>): number | null {
+  const keep = new Set(windows.filter((w) => byId.get(w.programSetId)?.step.type === "work").flatMap((w) => indices(streams.t, w)));
+  if (!keep.size) return null;
+  const idx = [...keep].sort((a, b) => a - b);
+  return bestRollingPower(
+    idx.map((i) => streams.t[i]),
+    idx.map((i) => streams.power![i]),
+  );
+}
 
 /**
  * The best mean power over `seconds` in a row: the samples are held for their
@@ -344,7 +355,7 @@ export function rideStreamNumbers(
     hrZoneMinutes: hrZoneSeconds.map((z) => Math.round(z / 60)),
     drift,
     onTarget,
-    best60sPower: hasPower ? bestRollingPower(t, power!) : null,
+    best60sPower: hasPower ? workBest60s(streams, windows, byId) : null,
     stepPower,
   };
 }

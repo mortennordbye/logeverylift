@@ -58,6 +58,8 @@ export function bikeHrZone(pctLthr: number): number {
 const EFFORT: Record<number, number> = { 1: 2, 2: 4, 3: 6, 4: 7, 5: 8, 6: 9, 7: 10 };
 
 const effort = (n: number): ResolvedTarget => ({ low: n, high: n, unit: "RPE", text: `Effort ${n}`, missing: null });
+/** An effort (1-10) as an outdoor target: "Effort 7". */
+export const effortTarget = effort;
 
 function hrRange(lthr: number, [lo, hi]: [number, number]): ResolvedTarget {
   const low = Math.round((lthr * lo) / 100);

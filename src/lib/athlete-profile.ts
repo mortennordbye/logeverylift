@@ -381,12 +381,46 @@ async function assertNotFuture(userId: string, measuredOn: string) {
   if (measuredOn > toDateStr(await userToday(userId))) throw new PlanStateError("The date is after today");
 }
 
-export async function addThreshold(ctx: PlanWriteContext, input: ThresholdInput) {
+/** A live row of this kind, source, protocol, date and value (a field test already saved). */
+async function sameThresholdRow(tx: Pick<typeof db, "select">, userId: string, row: { kind: ThresholdKind; source: ThresholdSource; protocol: ThresholdProtocol | null; measuredOn: string; value: number }) {
+  const rows = await tx
+    .select()
+    .from(athleteThresholds)
+    .where(
+      and(
+        eq(athleteThresholds.userId, userId),
+        eq(athleteThresholds.kind, row.kind),
+        eq(athleteThresholds.source, row.source),
+        row.protocol === null ? isNull(athleteThresholds.protocol) : eq(athleteThresholds.protocol, row.protocol),
+        eq(athleteThresholds.measuredOn, row.measuredOn),
+        isNull(athleteThresholds.deletedAt),
+      ),
+    );
+  return rows.find((r) => sameThresholdValue(row.kind, r.value, row.value)) ?? null;
+}
+
+/** Whether a field test's result is stored: a live test row of this protocol, date and value. */
+export async function testThresholdSaved(userId: string, row: { kind: ThresholdKind; protocol: ThresholdProtocol; measuredOn: string; value: number }): Promise<boolean> {
+  return (await sameThresholdRow(db, userId, { ...row, source: "test" })) !== null;
+}
+
+/**
+ * Add one threshold row. With `once`, a live row of the same kind, source,
+ * protocol, date and value is kept and nothing is added (`added` false): the
+ * check runs under the threshold lock, so two saves at once add one row.
+ */
+export async function addThreshold(ctx: PlanWriteContext, input: ThresholdInput, opts: { once?: boolean } = {}) {
   const value = resolveThresholdValue(input);
   if (input.source === "test" && !input.protocol) throw new PlanStateError("A field test needs its protocol");
   const measuredOn = input.measuredOn ?? toDateStr(await userToday(ctx.userId));
   await assertNotFuture(ctx.userId, measuredOn);
   const { result, versions } = await planWrite(ctx, async (w) => {
+    // The Garmin sync and changeThreshold read and write a kind under this lock.
+    await w.tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`athlete_threshold:${ctx.userId}`}))`);
+    if (opts.once) {
+      const same = await sameThresholdRow(w.tx, ctx.userId, { kind: input.kind, source: input.source, protocol: input.protocol ?? null, measuredOn, value });
+      if (same) return { ...same, added: false };
+    }
     await assertAthleteRoom(w.tx, ctx.userId, "threshold", input.kind);
     const [row] = await w.tx
       .insert(athleteThresholds)
@@ -403,9 +437,10 @@ export async function addThreshold(ctx: PlanWriteContext, input: ThresholdInput)
       })
       .returning();
     w.create({ type: "threshold", id: row.id });
-    return row;
+    return { ...row, added: true };
   });
-  return { threshold: result, version: versions.get(versionKey({ type: "threshold", id: result.id })) ?? 1 };
+  const { added, ...threshold } = result;
+  return { threshold, added, version: versions.get(versionKey({ type: "threshold", id: threshold.id })) ?? threshold.version };
 }
 
 /**

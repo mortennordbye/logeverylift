@@ -16,7 +16,7 @@ import { thresholdValues } from "@/lib/session-compliance";
 import { getUserSettings, userToday } from "@/lib/user-settings";
 import { bikeStepRows, defaultRideMode, plannedRideNumbers, rideChart, type BikeStepRow, type RideChart, type RideNumbers } from "@/lib/utils/bike-ride-view";
 import { toDateStr } from "@/lib/utils/cycle-position";
-import { ftpTestView, type FtpTestView } from "@/lib/utils/ftp-tests";
+import { rideFtpTest, type RideFtpTest } from "@/lib/ride-ftp";
 import { buildWorkout, type StepRow } from "@/lib/utils/program-steps";
 import type { StepLog } from "@/lib/utils/ride-results";
 import { buildRidePlan, rideTimeline, type RideEventInput, type RidePlan } from "@/lib/utils/ride-timeline";
@@ -149,7 +149,7 @@ export type RideAfterData = {
   /** The ride's Garmin fill, matches and stream numbers (4.8). */
   garmin: RideGarminView;
   /** An FTP test ride: the FTP it gives and whether it is saved (4.9); null on other rides. */
-  ftpTest: FtpTestView | null;
+  ftpTest: RideFtpTest | null;
 };
 
 /** The logged steps of a session for these program sets. */
@@ -252,7 +252,7 @@ export async function rideAfterView(userId: string, programExerciseId: number): 
     doneLine: [`${status === "ended_early" ? "Ended early" : "Done"}${at ? ` ${at}` : ""}`, MODE_LINE[view.plan.mode], ...(fill.state === "filled" ? ["from Garmin"] : [])].join(" · "),
     garminWaiting: garmin && fill.state === "none" && !fill.declined && !Object.values(logs).some((l) => Object.values(l.sources ?? {}).includes("garmin")),
     garmin: fill,
-    ftpTest: ftpTestView(view.plan, logs, fill.stream?.numbers ?? null, thresholds.ftp ?? null),
+    ftpTest: await rideFtpTest(userId, { plan: view.plan, startedAt: view.ride.startedAt, timeZone }, logs, fill.stream?.numbers ?? null, thresholds.ftp ?? null),
   };
 }
 

@@ -129,7 +129,9 @@ export function RideSummary({
 
         {rideId !== undefined && ftpTest?.result && (
           <div className="flex items-center justify-between gap-2 rounded-xl bg-muted pl-4 pr-2 min-h-12 text-sm" data-testid="summary-ftp">
-            <span className="font-semibold tabular-nums">New FTP {ftpTest.result.ftp} W</span>
+            <span className="font-semibold tabular-nums">
+              New FTP {ftpTest.result.ftp} W{ftpTest.result.estimated && <small className="ml-1 text-xs font-normal text-muted-foreground">est.</small>}
+            </span>
             {ftpTest.saved ? (
               <span className="min-h-11 px-3 inline-flex items-center text-muted-foreground">Saved</span>
             ) : (

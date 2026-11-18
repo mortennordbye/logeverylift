@@ -66,6 +66,11 @@ export function ftpTestWorkout(test: RideTest, name: string = TEST_NAME[test]): 
   };
 }
 
+/** Outdoors with no FTP, the ramp's 1 min steps rise in effort from 5 to 10 (step `i` of `n`). */
+export function rampEffort(i: number, n: number): number {
+  return n <= 1 ? 10 : Math.round(5 + (5 * i) / (n - 1));
+}
+
 /** In a ramp test, a work step is one of the 1 min steps: Lap or End ride on it ends the test. */
 export function isRampTestStep(test: RideTest | undefined, step: Pick<RidePlanStep, "step">): boolean {
   return test === "ramp" && step.step.type === "work";
@@ -88,13 +93,18 @@ export type FtpTestResult = {
   /** "garmin": the stream; "typed": a step average (typed or filled); "target": the ramp step's planned watts. */
   basis: "garmin" | "typed" | "target";
   ftp: number;
+  /** From planned watts only (basis "target"): shown as an estimate. */
+  estimated: boolean;
 };
 
 /**
  * The FTP a ridden test gives, or null: not a test, no power to read, or an
  * FTP out of the threshold range. A ramp counts only 1 min steps ridden to
  * their end (done); a partial last step is the one the rider could not hold.
- * A 20 min test needs its all-out step done.
+ * When every 1 min step ran out on the clock (no Lap, no End ride), the test
+ * never reached failure, so the planned watts give no FTP; numbers from the
+ * stream or the results table still do. An FTP from planned watts is an
+ * estimate. A 20 min test needs its all-out step done.
  */
 export function ftpTestResult(
   plan: Pick<RidePlan, "steps"> & { test?: RideTest },
@@ -114,8 +124,10 @@ export function ftpTestResult(
       // The highest done step: its planned watts are the highest.
       const top = done.reduce<RidePlanStep | null>((a, s) => (a === null || (s.power?.from ?? 0) >= (a.power?.from ?? 0) ? s : a), null);
       const typed = top ? logs[top.programSetId].avgPower : null;
+      const ramp = plan.steps.filter((s) => isRampTestStep(test, s));
+      const toFailure = ramp.some((s) => logs[s.programSetId]?.status !== "done");
       if (typed != null && typed > 0) power = typed;
-      else if (top?.power?.from != null) {
+      else if (top?.power?.from != null && toFailure) {
         power = top.power.from;
         basis = "target";
       }
@@ -135,18 +147,18 @@ export function ftpTestResult(
   const watts = Math.round(power);
   const ftp = Math.round(watts * (test === "ramp" ? RAMP_FTP_FACTOR : FTP_FACTOR));
   if (thresholdRangeError("ftp", ftp)) return null;
-  return { test, power: watts, basis, ftp };
+  return { test, power: watts, basis, ftp, estimated: basis === "target" };
 }
 
 export type FtpTestView = {
   test: RideTest;
   result: FtpTestResult | null;
   currentFtp: number | null;
-  /** The current FTP is the one this test gives: Save is done. */
+  /** A live test row of this protocol, date and value is stored (`ftpTestSaved`): Save is done. Set by the server. */
   saved: boolean;
 };
 
-/** What the summary and get_ride show of a test ride; null when the ride is no test. */
+/** What the summary and get_ride show of a test ride; null when the ride is no test. `saved` is false until the server checks the rows. */
 export function ftpTestView(
   plan: Pick<RidePlan, "steps"> & { test?: RideTest },
   logs: Record<number, Pick<StepLog, "status" | "avgPower">>,
@@ -156,7 +168,7 @@ export function ftpTestView(
   if (!plan.test) return null;
   const result = ftpTestResult(plan, logs, stream);
   const current = currentFtp != null ? Math.round(currentFtp) : null;
-  return { test: plan.test, result, currentFtp: current, saved: result !== null && current === result.ftp };
+  return { test: plan.test, result, currentFtp: current, saved: false };
 }
 
 /** The threshold field test a test ride saves as: its protocol and the input it takes. */

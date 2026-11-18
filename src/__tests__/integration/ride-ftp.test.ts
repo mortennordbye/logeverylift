@@ -166,12 +166,40 @@ describe("a test ride", () => {
     ok(await logWorkoutSet(save(r.sessionId, r.sets[4], 20, "partial")));
 
     const ride = (await mcpTools(registerEnduranceAppTools, me)("get_ride", { workoutSessionId: r.sessionId })).data.ride;
-    expect(ride.ftpTest).toMatchObject({ test: "ramp", power: 140, powerBasis: "target", proposedFtp: 105, protocol: "ftp_ramp" });
+    expect(ride.ftpTest).toMatchObject({ test: "ramp", power: 140, powerBasis: "target", estimate: true, proposedFtp: 105, protocol: "ftp_ramp" });
 
     // Typed watts on the highest done step win over its target.
     await db.update(workoutSets).set({ avgPower: 248, sources: { durationSeconds: "clock", avgPower: "typed" } }).where(and(eq(workoutSets.sessionId, r.sessionId), eq(workoutSets.programSetId, r.sets[3].id)));
     expect(ok(await saveRideFtp({ rideId: r.rideId }))).toEqual({ ftp: 186 });
     expect((await ftpRows()).find((x) => x.source === "test")).toMatchObject({ value: 186, protocol: "ftp_ramp", testData: { best1MinPower: 248 } });
+  });
+
+  it("a current FTP that happens to match is not saved; Save adds the test row", async () => {
+    await db.insert(athleteThresholds).values({ userId: me, kind: "ftp", value: 186, measuredOn: "2026-11-10", source: "manual" });
+    const r = await finished20();
+    const call = mcpTools(registerEnduranceAppTools, me);
+    expect((await call("get_ride", { workoutSessionId: r.sessionId })).data.ride.ftpTest).toMatchObject({ proposedFtp: 186, currentFtp: 186, saved: false });
+    ok(await saveRideFtp({ rideId: r.rideId }));
+    expect((await ftpRows()).filter((x) => x.source === "test")).toHaveLength(1);
+    expect((await call("get_ride", { workoutSessionId: r.sessionId })).data.ride.ftpTest).toMatchObject({ saved: true });
+  });
+
+  it("a newer FTP after the save keeps the test saved, and Save adds nothing", async () => {
+    const r = await finished20();
+    ok(await saveRideFtp({ rideId: r.rideId }));
+    vi.setSystemTime(new Date(T0.getTime() + 2 * 24 * 60 * MIN));
+    await db.insert(athleteThresholds).values({ userId: me, kind: "ftp", value: 200, measuredOn: "2026-11-20", source: "manual" });
+    const ride = (await mcpTools(registerEnduranceAppTools, me)("get_ride", { workoutSessionId: r.sessionId })).data.ride;
+    expect(ride.ftpTest).toMatchObject({ proposedFtp: 186, currentFtp: 200, saved: true });
+    ok(await saveRideFtp({ rideId: r.rideId }));
+    expect((await ftpRows()).filter((x) => x.source === "test")).toHaveLength(1);
+  });
+
+  it("two saves at once add one row", async () => {
+    const r = await finished20();
+    const both = await Promise.all([saveRideFtp({ rideId: r.rideId }), saveRideFtp({ rideId: r.rideId })]);
+    expect(both.every((x) => x.success)).toBe(true);
+    expect((await ftpRows()).filter((x) => x.source === "test")).toHaveLength(1);
   });
 
   it("refuses a ride that is not the caller's, a running ride, a ride with no result, and endurance off", async () => {

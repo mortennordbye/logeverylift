@@ -32,12 +32,12 @@ export async function saveRideFtp(data: unknown): Promise<ActionResult<{ ftp: nu
     if (report.status !== "finished" && report.status !== "ended_early") return { success: false, error: "The ride is still running" };
     const t = report.ftpTest;
     if (!t || t.proposedFtp === null || !t.protocol || !t.testData) return { success: false, error: "This ride gives no FTP" };
-    if (!t.saved) {
-      await addThreshold(
-        { userId, writer: "user" },
-        { kind: "ftp", value: t.proposedFtp, source: "test", protocol: t.protocol, testData: t.testData, measuredOn: t.measuredOn },
-      );
-    }
+    // Under the threshold lock: a stored row of this test, date and value is kept, so two saves add one row.
+    await addThreshold(
+      { userId, writer: "user" },
+      { kind: "ftp", value: t.proposedFtp, source: "test", protocol: t.protocol, testData: t.testData, measuredOn: t.measuredOn },
+      { once: true },
+    );
     revalidatePath("/programs", "layout");
     revalidatePath("/more/account", "layout");
     return { success: true, data: { ftp: t.proposedFtp } };

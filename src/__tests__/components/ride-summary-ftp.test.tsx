@@ -69,8 +69,38 @@ describe("RideSummary of an FTP test", () => {
     await waitFor(() => expect(refresh).toHaveBeenCalled());
   });
 
-  it("says Saved, with no button, once the current FTP is the test's", () => {
-    show(186);
+  it("an FTP from the ramp's planned watts is marked est. and can still be saved", async () => {
+    render(
+      <RideSummary
+        programId={1}
+        exerciseName="FTP test"
+        doneLine="Done"
+        summary={rideSummary(plan, logs)}
+        doneHref="/"
+        saveTheRide={false}
+        rideId={7}
+        ftpTest={{ test: "ramp", result: { test: "ramp", power: 260, basis: "target", ftp: 195, estimated: true }, currentFtp: 180, saved: false }}
+      />,
+    );
+    const row = screen.getByTestId("summary-ftp");
+    expect(row.textContent).toBe("New FTP 195 West.Save");
+    fireEvent.click(within(row).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(saveRideFtp).toHaveBeenCalledWith({ rideId: 7 }));
+  });
+
+  it("says Saved, with no button, once the test row is stored", () => {
+    render(
+      <RideSummary
+        programId={1}
+        exerciseName="FTP test"
+        doneLine="Done"
+        summary={rideSummary(plan, logs)}
+        doneHref="/"
+        saveTheRide={false}
+        rideId={7}
+        ftpTest={{ ...ftpTestView(plan, logs, null, 186)!, saved: true }}
+      />,
+    );
     const row = screen.getByTestId("summary-ftp");
     expect(row.textContent).toBe("New FTP 186 WSaved");
     expect(within(row).queryByRole("button")).toBeNull();

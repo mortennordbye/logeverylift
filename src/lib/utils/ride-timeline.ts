@@ -11,7 +11,8 @@
  */
 
 import type { RideEventKind, RideMode, RideStatus } from "@/db/schema/rides";
-import { outdoorTarget } from "@/lib/utils/bike-outdoor";
+import { effortTarget, outdoorTarget } from "@/lib/utils/bike-outdoor";
+import { rampEffort } from "@/lib/utils/ftp-tests";
 import { flattenWorkout } from "@/lib/utils/workout-player";
 import {
   estimateWorkout,
@@ -151,6 +152,13 @@ export function buildRidePlan(workout: Workout, setIds: number[], thresholds: Th
       power: stepWatts(s, thresholds),
     });
   });
+  // Outdoors with no FTP the ramp's 1 min steps have no zone: they rise in effort instead (4.9).
+  if (workout.test === "ramp") {
+    const ramp = steps.filter((p) => p.step.type === "work");
+    ramp.forEach((p, i) => {
+      if (!p.outdoor) p.outdoor = effortTarget(rampEffort(i, ramp.length));
+    });
+  }
   return { v: 1, mode, name: workout.name, ...(workout.test && { test: workout.test }), thresholds, steps, dropped };
 }
 
@@ -241,7 +249,7 @@ const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(mi
  *   The step it ends is partial (left out with no time ridden).
  * - In a ramp test (4.9) the rider rides the 1 min steps until they cannot
  *   hold the watts: `lap` or `end` on one of them finishes the ride, and that
- *   step is partial.
+ *   step is partial. Before any 1 min step is done, it ends the ride early.
  * - An extend taken back after the step's time is up ends the step then.
  * - The ride ends on its own 2 hours after the latest of its planned end
  *   (start, plus each step's time or estimate and the extensions, plus the
@@ -318,6 +326,8 @@ export function rideTimeline(plan: { steps: TimelineStep[]; test?: RideTest }, e
   };
   const isLive = () => status === "running" || status === "paused";
   const rampStep = (s: TimelineStep) => plan.test === "ramp" && s.step?.type === "work";
+  /** A ramp test ended before any 1 min step was done ends early (no result). */
+  const rampDone = () => done.some((r) => r.status === "done" && rampStep(steps[r.index]));
   /** Let time run to `t`: close the time steps that ended, then the auto end. */
   const advance = (t: number) => {
     while (live && status === "running") {
@@ -371,7 +381,7 @@ export function rideTimeline(plan: { steps: TimelineStep[]; test?: RideTest }, e
       case "lap":
         if (rampStep(step)) {
           close(t, activeMs(l, t) >= 1000 ? "partial" : null);
-          status = "finished";
+          status = rampDone() ? "finished" : "ended_early";
           endedAt = t;
           break;
         }
@@ -386,7 +396,7 @@ export function rideTimeline(plan: { steps: TimelineStep[]; test?: RideTest }, e
         if (step.power) l.offsetW = clamp(l.offsetW + (e.value ?? 0), -NUDGE_CAP_W, NUDGE_CAP_W);
         break;
       case "end": {
-        const last = l.index === steps.length - 1 || rampStep(step);
+        const last = l.index === steps.length - 1 || (rampStep(step) && rampDone());
         close(t, activeMs(l, t) >= 1000 ? "partial" : null);
         status = last ? "finished" : "ended_early";
         endedAt = t;

@@ -3,10 +3,10 @@ import { allOutStep, ftpTestResult, ftpTestThreshold, ftpTestView, ftpTestWorkou
 import { workoutToRows } from "@/lib/utils/program-steps";
 import type { StepLog } from "@/lib/utils/ride-results";
 import { rideScreen } from "@/lib/utils/ride-screen";
-import { bestRollingPower } from "@/lib/utils/ride-stream";
+import { bestRollingPower, rideStreamNumbers } from "@/lib/utils/ride-stream";
 import { buildRidePlan, rideTimeline, type RideEventInput, type RidePlan } from "@/lib/utils/ride-timeline";
 import { valueFromTest } from "@/lib/utils/thresholds";
-import { estimateWorkout, parseWorkout, WORKOUT_LIMITS, type Workout, type WorkoutStep } from "@/lib/utils/workout-steps";
+import { estimateWorkout, parseWorkout, WORKOUT_LIMITS, type ThresholdValues, type WorkoutStep } from "@/lib/utils/workout-steps";
 import { describe, expect, it } from "vitest";
 
 /** FTP test rides (docs/plans/bike-ride-logger.md, 4.9, step 8). */
@@ -16,7 +16,7 @@ const at = (s: number) => T0 + s * 1000;
 let seq = 0;
 const ev = (kind: RideEventInput["kind"], s: number): RideEventInput => ({ seq: ++seq, kind, at: at(s) });
 
-function plan(test: "ramp" | "20min", thresholds = { ftp: 200, lthr_bike: 170 }, mode: "indoor" | "outdoor" = "indoor"): RidePlan {
+function plan(test: "ramp" | "20min", thresholds: ThresholdValues = { ftp: 200, lthr_bike: 170 }, mode: "indoor" | "outdoor" = "indoor"): RidePlan {
   const parsed = parseWorkout(ftpTestWorkout(test));
   if (!parsed.ok) throw new Error(JSON.stringify(parsed.errors));
   const ids = workoutToRows(parsed.workout).map((_, i) => i + 1);
@@ -63,17 +63,25 @@ describe("ramp test formula", () => {
 
   it("from the stream: 75% of the best rolling 60 s", () => {
     const logs = { 1: log(), [work(100)]: log(), [work(120)]: log() };
-    expect(ftpTestResult(p, logs, { best60sPower: 248.4, stepPower: {} })).toEqual({ test: "ramp", power: 248, basis: "garmin", ftp: 186 });
+    expect(ftpTestResult(p, logs, { best60sPower: 248.4, stepPower: {} })).toEqual({ test: "ramp", power: 248, basis: "garmin", ftp: 186, estimated: false });
   });
 
   it("typed: the highest done step's average power, a partial last step left out", () => {
     const logs = { 1: log(), [work(100)]: log({ avgPower: 101 }), [work(120)]: log({ avgPower: 248 }), [work(140)]: log({ status: "partial", avgPower: 300 }) };
-    expect(ftpTestResult(p, logs)).toEqual({ test: "ramp", power: 248, basis: "typed", ftp: 186 });
+    expect(ftpTestResult(p, logs)).toEqual({ test: "ramp", power: 248, basis: "typed", ftp: 186, estimated: false });
   });
 
-  it("no number on the highest done step: its target", () => {
+  it("no number on the highest done step: its target, as an estimate", () => {
     const logs = { 1: log(), [work(100)]: log(), [work(120)]: log(), [work(140)]: log(), [work(160)]: log({ status: "partial" }) };
-    expect(ftpTestResult(p, logs)).toEqual({ test: "ramp", power: 140, basis: "target", ftp: 105 });
+    expect(ftpTestResult(p, logs)).toEqual({ test: "ramp", power: 140, basis: "target", ftp: 105, estimated: true });
+  });
+
+  it("every 1 min step ran out on the clock (no Lap, no End): no proposal from the targets", () => {
+    const all = Object.fromEntries(p.steps.map((s) => [s.programSetId, log()]));
+    expect(ftpTestResult(p, all)).toBeNull();
+    // Numbers the rider typed or Garmin gave still count.
+    const typed = { ...all, [work(500)]: log({ avgPower: 480 }) };
+    expect(ftpTestResult(p, typed)).toMatchObject({ power: 480, basis: "typed", estimated: false });
   });
 
   it("no 1 min step done: no proposal, even with a stream", () => {
@@ -98,11 +106,12 @@ describe("20 min test formula", () => {
       power: 280,
       basis: "garmin",
       ftp: 266,
+      estimated: false,
     });
   });
 
   it("typed: 95% of the all-out step's average power", () => {
-    expect(ftpTestResult(p, { [allOut]: log({ avgPower: 196 }) })).toEqual({ test: "20min", power: 196, basis: "typed", ftp: 186 });
+    expect(ftpTestResult(p, { [allOut]: log({ avgPower: 196 }) })).toEqual({ test: "20min", power: 196, basis: "typed", ftp: 186, estimated: false });
   });
 
   it("the all-out step not done, or with no power: no proposal", () => {
@@ -117,18 +126,35 @@ describe("20 min test formula", () => {
     expect(ftpTestView(noTest, { [allOut]: log({ avgPower: 196 }) }, null, 180)).toBeNull();
   });
 
-  it("the view says saved when the current FTP is the one the test gives", () => {
+  it("the view is not saved by a current FTP that happens to match: only a stored test row says saved", () => {
     expect(ftpTestView(p, { [allOut]: log({ avgPower: 196 }) }, null, 180)).toMatchObject({ saved: false, currentFtp: 180, result: { ftp: 186 } });
-    expect(ftpTestView(p, { [allOut]: log({ avgPower: 196 }) }, null, 186)).toMatchObject({ saved: true });
+    expect(ftpTestView(p, { [allOut]: log({ avgPower: 196 }) }, null, 186)).toMatchObject({ saved: false });
   });
 
   it("the threshold field test agrees with the formula", () => {
     const r20 = ftpTestResult(p, { [allOut]: log({ avgPower: 196 }) })!;
     const t20 = ftpTestThreshold(r20);
     expect(valueFromTest("ftp", t20.protocol, t20.testData)).toEqual({ value: r20.ftp });
-    const rRamp = { test: "ramp" as const, power: 248, basis: "typed" as const, ftp: 186 };
+    const rRamp = { test: "ramp" as const, power: 248, basis: "typed" as const, ftp: 186, estimated: false };
     const tRamp = ftpTestThreshold(rRamp);
     expect(valueFromTest("ftp", tRamp.protocol, tRamp.testData)).toEqual({ value: 186 });
+  });
+});
+
+describe("the ramp's best minute from the stream", () => {
+  it("counts only the windows of the ridden 1 min steps: a sprint in the warm-up is left out", () => {
+    const p = plan("ramp");
+    const t = Array.from({ length: 780 }, (_, i) => i);
+    // A 60 s sprint at 600 W in the warm-up, then 100, 120 and 140 W steps.
+    const power = t.map((s) => (s >= 100 && s < 160 ? 600 : s < 600 ? 90 : s < 660 ? 100 : s < 720 ? 120 : 140));
+    const windows = [
+      { programSetId: p.steps[0].programSetId, from: 0, to: 600 },
+      { programSetId: p.steps[1].programSetId, from: 600, to: 660 },
+      { programSetId: p.steps[2].programSetId, from: 660, to: 720 },
+      { programSetId: p.steps[3].programSetId, from: 720, to: 780 },
+    ];
+    const n = rideStreamNumbers({ t, power }, p.steps, windows, { ftp: 200, lthr: null, mode: "indoor" });
+    expect(n.best60sPower).toBe(140);
   });
 });
 
@@ -149,6 +175,11 @@ describe("ramp test ride", () => {
     expect(t.status).toBe("finished");
     expect(t.steps.map((s) => s.status)).toEqual(["done", "done", "done", "done", "partial"]);
     expect(t.steps.at(-1)!.activeSeconds).toBe(20);
+  });
+
+  it("Lap or End ride before any 1 min step is done ends the test early", () => {
+    expect(rideTimeline(p, [ev("start", 0), ev("lap", 630)], at(700)).status).toBe("ended_early");
+    expect(rideTimeline(p, [ev("start", 0), ev("pause", 640), ev("end", 650)], at(700)).status).toBe("ended_early");
   });
 
   it("End ride on a 1 min step finishes the ride too; on the warm-up it ends early", () => {
@@ -191,6 +222,15 @@ describe("outdoor targets of a test ride (4.2 overridden)", () => {
     const step = { type: "work" as const, end: { type: "time" as const, seconds: 600 }, ramp: { anchor: "ftp" as const, from: 60, to: 130 } };
     expect(outdoorTarget(step, 600, { ftp: 200, lthr_bike: 170 }, undefined, "ramp")?.main.text).toBe("Effort 9");
     expect(outdoorTarget(step, 600, { ftp: 200, lthr_bike: 170 })?.main.text).toBe("HR under 138");
+  });
+
+  it("outdoors with no FTP the 1 min steps rise in effort, 5 up to 10", () => {
+    const ramp = plan("ramp", {}, "outdoor");
+    const efforts = ramp.steps.filter((s) => s.step.type === "work").map((s) => s.outdoor?.low);
+    expect(efforts[0]).toBe(5);
+    expect(efforts.at(-1)).toBe(10);
+    expect(efforts.every((e, i) => i === 0 || e! >= efforts[i - 1]!)).toBe(true);
+    expect(ramp.steps[1].outdoor?.text).toBe("Effort 5");
   });
 
   it("a written outdoor target still wins", () => {

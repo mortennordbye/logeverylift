@@ -17,7 +17,8 @@ import { rideStepLogs } from "@/lib/bike-exercise-view";
 import { rideGarminView } from "@/lib/ride-garmin";
 import { thresholdValues } from "@/lib/session-compliance";
 import { getUserSettings } from "@/lib/user-settings";
-import { ftpTestThreshold, ftpTestView } from "@/lib/utils/ftp-tests";
+import { rideFtpTest } from "@/lib/ride-ftp";
+import { ftpTestThreshold } from "@/lib/utils/ftp-tests";
 import { localDateStr } from "@/lib/utils/user-date";
 import { bikeStepRows, plannedRideNumbers } from "@/lib/utils/bike-ride-view";
 import { rideSummary } from "@/lib/utils/ride-results";
@@ -71,7 +72,7 @@ export async function rideReport(userId: string, by: { rideId?: number; workoutS
   const rows = bikeStepRows(plan, units);
   const n = summary.numbers;
   const live = timeline.status === "running" || timeline.status === "paused";
-  const test = live ? null : ftpTestView(plan, logs, stream?.numbers ?? null, thresholds.ftp ?? null);
+  const test = live ? null : await rideFtpTest(userId, { plan, startedAt: ride.startedAt, timeZone }, logs, stream?.numbers ?? null, thresholds.ftp ?? null);
 
   return {
     rideId: ride.id,
@@ -165,9 +166,10 @@ export async function rideReport(userId: string, by: { rideId?: number; workoutS
     ftpTest: plan.test
       ? {
           test: plan.test,
-          // "garmin": the stream; "typed": a step average; "target": the ramp step's planned watts.
+          // "garmin": the stream; "typed": a step average; "target": the ramp step's planned watts (an estimate).
           power: test?.result?.power ?? null,
           powerBasis: test?.result?.basis ?? null,
+          estimate: test?.result?.estimated ?? false,
           proposedFtp: test?.result?.ftp ?? null,
           currentFtp: test?.currentFtp ?? null,
           saved: test?.saved ?? false,
@@ -176,10 +178,10 @@ export async function rideReport(userId: string, by: { rideId?: number; workoutS
             ? "The test is still running."
             : test?.result
               ? test.saved
-                ? "The current FTP is the one this test gives."
+                ? "This test's FTP is stored as a test threshold."
                 : "The rider saves it with Save on the ride summary, or you add it with manage_thresholds (kind ftp, source test, its protocol and testData)."
               : plan.test === "ramp"
-                ? "No 1 min step was ridden to its end, so the test gives no FTP."
+                ? "No 1 min step was ridden to its end with a number, or every step ran out on the clock with no Lap or End ride and no watts, so the test gives no FTP."
                 : "The all-out step has no average power or was not ridden to its end, so the test gives no FTP.",
           ...(test?.result && { protocol: ftpTestThreshold(test.result).protocol, testData: ftpTestThreshold(test.result).testData }),
         }
