@@ -6,7 +6,7 @@
 
 import { db } from "@/db";
 import { exercises, programExercises, programSets, rideEvents, rides, workoutSessions, workoutSets } from "@/db/schema";
-import { liveProgramSets } from "@/lib/plan-live";
+import { liveProgramExercises, liveProgramSets } from "@/lib/plan-live";
 import { plannedStepSnapshot } from "@/lib/program-steps-db";
 import { scheduleRidePushes } from "@/lib/push";
 import { rideStepSnapshot } from "@/lib/ride-plan-db";
@@ -208,7 +208,7 @@ export async function logDroppedStepsByHand(userId: string, sessionId: number, p
     .from(programSets)
     .innerJoin(programExercises, eq(programExercises.id, programSets.programExerciseId))
     .innerJoin(exercises, eq(exercises.id, programExercises.exerciseId))
-    .where(and(eq(programSets.programExerciseId, programExerciseId), isNotNull(programSets.stepKind), liveProgramSets))
+    .where(and(eq(programSets.programExerciseId, programExerciseId), isNotNull(programSets.stepKind), liveProgramSets, liveProgramExercises))
     .orderBy(asc(programSets.setNumber), asc(programSets.id));
   if (!rows.length || rows[0].discipline !== "bike") return;
   const built = buildWorkout(rows.map((r) => r.set) as StepRow[], { sport: "bike", name: "" });
