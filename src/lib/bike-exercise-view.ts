@@ -11,6 +11,7 @@ import { db } from "@/db";
 import { rides, workoutSessions, workoutSets, type RideMode } from "@/db/schema";
 import { getRide, type RideView } from "@/lib/actions/rides";
 import { garminAllowedFor } from "@/lib/garmin/access";
+import { rideGarminView, type RideGarminView } from "@/lib/ride-garmin";
 import { thresholdValues } from "@/lib/session-compliance";
 import { getUserSettings, userToday } from "@/lib/user-settings";
 import { bikeStepRows, defaultRideMode, plannedRideNumbers, rideChart, type BikeStepRow, type RideChart, type RideNumbers } from "@/lib/utils/bike-ride-view";
@@ -141,8 +142,10 @@ export type RideAfterData = {
   logs: Record<number, StepLog>;
   /** "Done 17:12 · Indoor trainer", "Ended early 16:40 · Outdoor". */
   doneLine: string;
-  /** The user has Garmin and no step holds a Garmin value yet: "Waiting for your Garmin ride". */
+  /** The user has Garmin, no fill stands or was undone and no step holds a Garmin value yet: "Waiting for your Garmin ride". */
   garminWaiting: boolean;
+  /** The ride's Garmin fill, matches and stream numbers (4.8). */
+  garmin: RideGarminView;
 };
 
 /** The logged steps of a session for these program sets. */
@@ -224,7 +227,12 @@ export async function rideAfterView(userId: string, programExerciseId: number): 
   if (!r.success || !r.data) return null;
   const view = r.data;
   const status = view.ride.status as RideAfterData["status"];
-  const [{ logs, timeline }, garmin, { timeZone }] = await Promise.all([rideStepLogs(userId, view), garminAllowedFor(userId), getUserSettings(userId)]);
+  const [{ logs, timeline }, garmin, fill, { timeZone }] = await Promise.all([
+    rideStepLogs(userId, view),
+    garminAllowedFor(userId),
+    rideGarminView(userId, view.ride.id),
+    getUserSettings(userId),
+  ]);
   const endedAt = view.ride.endedAt ?? timeline.endedAt;
   const at = endedAt
     ? new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", ...(timeZone && { timeZone }) }).format(new Date(endedAt))
@@ -236,8 +244,9 @@ export async function rideAfterView(userId: string, programExerciseId: number): 
     status,
     plan: view.plan,
     logs,
-    doneLine: [`${status === "ended_early" ? "Ended early" : "Done"}${at ? ` ${at}` : ""}`, MODE_LINE[view.plan.mode]].join(" · "),
-    garminWaiting: garmin && !Object.values(logs).some((l) => Object.values(l.sources ?? {}).includes("garmin")),
+    doneLine: [`${status === "ended_early" ? "Ended early" : "Done"}${at ? ` ${at}` : ""}`, MODE_LINE[view.plan.mode], ...(fill.state === "filled" ? ["from Garmin"] : [])].join(" · "),
+    garminWaiting: garmin && fill.state === "none" && !fill.declined && !Object.values(logs).some((l) => Object.values(l.sources ?? {}).includes("garmin")),
+    garmin: fill,
   };
 }
 

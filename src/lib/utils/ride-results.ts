@@ -11,7 +11,8 @@
 import type { RideMode } from "@/db/schema/rides";
 import type { ResultSource } from "@/db/schema/workout-sets";
 import { bikeStepRows, wattsText } from "@/lib/utils/bike-ride-view";
-import { doneRideNumbers, type DoneRideNumbers } from "@/lib/utils/ride-numbers";
+import { doneRideNumbers, withStream, type DoneRideNumbers } from "@/lib/utils/ride-numbers";
+import type { DoneChart, RideDrift, StreamNumbers } from "@/lib/utils/ride-stream";
 import { rideClock } from "@/lib/utils/ride-screen";
 import type { RidePlan, RidePlanStep } from "@/lib/utils/ride-timeline";
 import { DEFAULT_UNITS, METERS_PER_MILE, type Units } from "@/lib/utils/units";
@@ -242,13 +243,20 @@ export function badField(f: ResultField, text: string | undefined, units: Units 
 // ── Summary ─────────────────────────────────────────────────────────────────
 
 export type SummaryTile = { label: string; value: string; est?: boolean };
-export type SummaryRow = { key: string; title: string; plan: string | null; done: string; under: boolean };
+/** onTarget: percent of the step's seconds inside its target, from a Garmin stream; null without one. */
+export type SummaryRow = { key: string; title: string; plan: string | null; done: string; under: boolean; onTarget: number | null };
 
 export type RideSummary = {
   numbers: DoneRideNumbers;
   tiles: SummaryTile[];
-  /** Minutes per power zone with time, from step averages. */
+  /** Minutes per power zone with time, from the stream or else step averages. */
   zones: { zone: number; m: number }[];
+  /** Minutes per heart rate zone with time, from a Garmin stream only. */
+  hrZones: { zone: number; m: number }[];
+  /** Heart rate drift from a Garmin stream; null when it does not apply. */
+  drift: RideDrift | null;
+  /** Plan against done, from a Garmin stream. */
+  chart: DoneChart | null;
   rows: SummaryRow[];
   effort: number | null;
   /** Nothing but times: "Plan only · no ride numbers". */
@@ -285,14 +293,21 @@ function doneText(s: RidePlanStep, log: StepLog | null, mode: RideMode): { done:
   return { done: "–", under: false };
 }
 
-export function rideSummary(plan: RidePlan, logs: Record<number, StepLog>, units: Units = DEFAULT_UNITS): RideSummary {
+/** The summary; `stream` is the Garmin activity that filled the ride, when there is one (4.6). */
+export function rideSummary(
+  plan: RidePlan,
+  logs: Record<number, StepLog>,
+  units: Units = DEFAULT_UNITS,
+  stream: { numbers: StreamNumbers; chart: DoneChart | null } | null = null,
+): RideSummary {
   const steps = resultSteps(plan, logs, units);
   const effort = rideEffort(steps);
   const riddenLogs = steps.map((s) => s.log).filter(ridden);
-  const numbers = doneRideNumbers(
+  const fromSteps = doneRideNumbers(
     riddenLogs.map((l) => ({ seconds: l.durationSeconds ?? 0, avgPower: l.avgPower })),
     { ftp: plan.thresholds.ftp ?? null, rpe: effort },
   );
+  const numbers = stream ? withStream(fromSteps, stream.numbers) : fromSteps;
   const tiles: SummaryTile[] = [{ label: "Time", value: rideClock(numbers.seconds) }];
   if (numbers.avgPower !== null) tiles.push({ label: "Avg W", value: `${Math.round(numbers.avgPower)}` });
   if (numbers.np !== null) tiles.push({ label: "NP", value: `${Math.round(numbers.np)}` });
@@ -305,13 +320,18 @@ export function rideSummary(plan: RidePlan, logs: Record<number, StepLog>, units
   const planRows = bikeStepRows(plan, units);
   const rows = plan.steps.map((s, i) => {
     const log = logs[s.programSetId] ?? null;
-    return { key: s.key, title: planRows[i].title, plan: planText(s, planRows[i], plan.mode), ...doneText(s, log, plan.mode) };
+    const onTarget = log && log.status !== "skipped" ? (stream?.numbers.onTarget[s.programSetId] ?? null) : null;
+    return { key: s.key, title: planRows[i].title, plan: planText(s, planRows[i], plan.mode), ...doneText(s, log, plan.mode), onTarget };
   });
+  const minutes = (m: number[]) => m.map((v, i) => ({ zone: i + 1, m: v })).filter((z) => z.m > 0);
 
   return {
     numbers,
     tiles,
-    zones: numbers.zoneMinutes.map((m, i) => ({ zone: i + 1, m })).filter((z) => z.m > 0),
+    zones: minutes(numbers.zoneMinutes),
+    hrZones: stream ? minutes(stream.numbers.hrZoneMinutes) : [],
+    drift: stream?.numbers.drift ?? null,
+    chart: stream?.chart ?? null,
     rows,
     effort,
     planOnly: riddenLogs.length > 0 && effort === null && !riddenLogs.some(hasNumber),

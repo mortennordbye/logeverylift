@@ -56,7 +56,7 @@ export default async function WorkoutExerciseSetsPage({ params, searchParams }: 
     const setNumbers = Object.fromEntries(pe.programSets.map((s) => [s.id, s.setNumber]));
     const sets = pe.programSets as (StepRow & { id: number })[];
     const doneHref = onlyExercise ? "/" : `/programs/${programId}/workout`;
-    const [found, { units }] = await Promise.all([ride === "1" ? rideOfExercise(user.id, peId) : null, getUserSettings(user.id)]);
+    const [found, { units, timeZone }] = await Promise.all([ride === "1" ? rideOfExercise(user.id, peId) : null, getUserSettings(user.id)]);
     if (found) {
       return (
         <RideMode
@@ -116,7 +116,10 @@ export default async function WorkoutExerciseSetsPage({ params, searchParams }: 
           programId={programId}
           exerciseName={pe.exercise.name}
           doneLine={after.doneLine}
-          summary={rideSummary(after.plan, after.logs, units)}
+          summary={rideSummary(after.plan, after.logs, units, after.garmin.stream)}
+          rideId={after.rideId}
+          garmin={{ state: after.garmin.state, candidates: after.garmin.candidates }}
+          timeZone={timeZone}
           doneHref={doneHref}
           saveTheRide={onlyExercise && after.sessionOpen}
         />

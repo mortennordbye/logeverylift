@@ -10,14 +10,16 @@
  *   load (minutes x RPE x 0.22, `srpeLoad`). Else no load.
  * - kJ: avg power x seconds / 1000, only when power covers 90% of the time.
  *
- * NP and IF from Garmin's 1 s stream come with step 7: a ride with a stream
- * fills `np` and `intensityFactor` and its load is not an estimate. Until then
- * they are null and the summary shows no NP or IF tile.
+ * A ride filled from a Garmin activity takes avg power, NP, IF, load, kJ and
+ * time in zones from its 1 s stream instead (`withStream`); its load is not
+ * an estimate. Without a stream NP and IF are null and the summary shows no
+ * NP or IF tile.
  *
  * Pure: the summary screen and `appSessionLoads` both call it.
  */
 
 import { powerZone } from "@/lib/utils/bike-outdoor";
+import type { StreamNumbers } from "@/lib/utils/ride-stream";
 import { plannedPowerIf, srpeLoad } from "@/lib/utils/training-load";
 
 /** Power on steps that cover at least this share of the ridden time gives a power load (4.6). */
@@ -28,7 +30,7 @@ export type RiddenStep = { seconds: number; avgPower: number | null };
 
 export type RideLoad = {
   value: number;
-  /** "power": from the step averages (est.); "effort": minutes x RPE x 0.22 (est.). */
+  /** "power": from the stream, or from the step averages (est.); "effort": minutes x RPE x 0.22 (est.). */
   method: "power" | "effort";
   estimated: boolean;
 };
@@ -40,7 +42,7 @@ export type DoneRideNumbers = {
   avgPower: number | null;
   /** Share of the ridden time with a power value, 0 to 1. */
   powerCoverage: number;
-  /** NP and IF from a Garmin stream (step 7); null without one. */
+  /** NP and IF from a Garmin stream; null without one. */
   np: number | null;
   intensityFactor: number | null;
   /** NP estimated from the step averages; null unless the power load applies. */
@@ -88,5 +90,24 @@ export function doneRideNumbers(steps: RiddenStep[], opts: { ftp: number | null;
     kj: covered ? Math.round((avgPower! * seconds) / 1000) : null,
     load,
     zoneMinutes: zoneSeconds.map((z) => Math.round(z / 60)),
+  };
+}
+
+/**
+ * The numbers with a Garmin stream (4.6): avg power, NP, IF, load and kJ from
+ * the 1 s stream, and time in power zones from it when it has power with an
+ * FTP. Ridden time stays the steps' own.
+ */
+export function withStream(n: DoneRideNumbers, s: StreamNumbers): DoneRideNumbers {
+  const zones = s.powerZoneMinutes.some((m) => m > 0);
+  return {
+    ...n,
+    avgPower: s.avgPower ?? n.avgPower,
+    np: s.np,
+    intensityFactor: s.intensityFactor,
+    npEstimate: s.np !== null ? null : n.npEstimate,
+    kj: s.kj ?? n.kj,
+    load: s.load !== null ? { value: s.load, method: "power", estimated: false } : n.load,
+    zoneMinutes: zones ? s.powerZoneMinutes : n.zoneMinutes,
   };
 }

@@ -8,6 +8,7 @@
  */
 
 import { CHART, type RideChart } from "@/lib/utils/bike-ride-view";
+import type { DoneChart } from "@/lib/utils/ride-stream";
 
 /** Accent opacity per power zone, one step up per zone to zone 5 and above: easy quiet, hard strong. */
 const ZONE_OPACITY = [0.25, 0.42, 0.6, 0.78, 0.95];
@@ -94,6 +95,81 @@ export function RideZoneBar({ zones, label, testId }: { zones: { zone: number; m
             {i === zones.length - 1 ? " min" : ""}
           </span>
         ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Plan against done from a Garmin stream (section 5, "Summary"): each ridden
+ * step's power target as a band, the power line, and heart rate as a dashed
+ * line on its own scale. The layout comes from `rideDoneChart`
+ * (src/lib/utils/ride-stream.ts).
+ */
+export function RideDoneChart({ chart }: { chart: DoneChart }) {
+  const { left, right, base, width, height } = CHART;
+  const label = `Done against plan${chart.power ? ": power line over the target bands" : ""}${chart.hr ? ", heart rate dashed" : ""}`;
+  return (
+    <div data-testid="summary-chart">
+      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={label} className="block w-full h-auto">
+        {chart.bands.map((b) => (
+          <rect key={b.key} x={b.x} y={b.y} width={b.w} height={b.h} className="fill-brand" fillOpacity={0.18} />
+        ))}
+        {chart.ftpY !== null && (
+          <>
+            <line x1={left} y1={chart.ftpY} x2={right} y2={chart.ftpY} className="stroke-foreground" strokeOpacity={0.4} strokeDasharray="3 3" />
+            <text x={left - 3} y={chart.ftpY + 2.5} textAnchor="end" fontSize={7.5} className="fill-foreground">
+              FTP
+            </text>
+          </>
+        )}
+        {chart.yTicks.map((t) => (
+          <text key={t.label} x={left - 3} y={t.y + 2.5} textAnchor="end" fontSize={7.5} className="fill-muted-foreground">
+            {t.label}
+          </text>
+        ))}
+        {chart.power && <polyline points={chart.power} fill="none" className="stroke-brand" strokeWidth={1.3} strokeLinejoin="round" data-testid="chart-power" />}
+        {chart.hr && (
+          <polyline points={chart.hr} fill="none" className="stroke-foreground" strokeOpacity={0.75} strokeWidth={1.1} strokeDasharray="3 2" data-testid="chart-hr" />
+        )}
+        {chart.hrLabel && (
+          <text x={chart.hrLabel.x} y={chart.hrLabel.y} textAnchor="end" fontSize={7} className="fill-foreground">
+            {chart.hrLabel.text}
+          </text>
+        )}
+        <line x1={left} y1={base} x2={right} y2={base} className="stroke-muted-foreground" strokeOpacity={0.5} />
+        {chart.xTicks.map((t, i) => (
+          <text
+            key={t.label}
+            x={t.x}
+            y={base + 11}
+            textAnchor={i === 0 ? "start" : i === chart.xTicks.length - 1 ? "end" : "middle"}
+            fontSize={7.5}
+            className="fill-muted-foreground"
+          >
+            {t.label}
+          </text>
+        ))}
+      </svg>
+      <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground" aria-hidden>
+        {chart.power && (
+          <span className="inline-flex items-center gap-1">
+            <i className="inline-block w-3 border-t-2 border-brand" />
+            Power
+          </span>
+        )}
+        {chart.hr && (
+          <span className="inline-flex items-center gap-1">
+            <i className="inline-block w-3 border-t-2 border-dashed border-foreground opacity-75" />
+            Heart rate
+          </span>
+        )}
+        {chart.bands.length > 0 && (
+          <span className="inline-flex items-center gap-1">
+            <i className="inline-block w-3 h-2 bg-brand opacity-30" />
+            Target
+          </span>
+        )}
       </div>
     </div>
   );

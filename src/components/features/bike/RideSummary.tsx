@@ -2,18 +2,33 @@
 
 /**
  * The summary of a finished ride (docs/plans/bike-ride-logger.md, section 5
- * "Summary" and "Empty states", 4.6): time, avg W, load and kJ tiles (NP and
- * IF only from a Garmin stream, step 7), time in power zones by step average,
- * the plan against what was done per step with ↓ under the target, and the
- * effort. Estimates say "est.". With nothing but times, "Plan only" offers
- * Add numbers. An ended-early ride says so and counts only the ridden steps.
+ * "Summary" and "Empty states", 4.6 and 4.8): time, avg W, NP, IF, load and
+ * kJ tiles (NP and IF only from a Garmin stream), plan against done from the
+ * stream, time in power zones (heart rate zones when there is no power), the
+ * plan against what was done per step with ↓ under the target and the time on
+ * target, heart rate drift, and the effort. Estimates say "est.". With nothing
+ * but times, "Plan only" offers Add numbers. An ended-early ride says so and
+ * counts only the ridden steps. A Garmin fill offers Undo; two matching
+ * Garmin rides offer Pick.
  */
 
-import { RideZoneBar } from "@/components/features/bike/RideProfileChart";
+import { RideDoneChart, RideZoneBar } from "@/components/features/bike/RideProfileChart";
 import { BackLink } from "@/components/ui/BackLink";
+import { pickRideGarminActivity, undoRideGarminFill } from "@/lib/actions/ride-garmin";
+import type { RideGarminView } from "@/lib/ride-garmin";
 import type { RideSummary as Summary } from "@/lib/utils/ride-results";
+import { callAction } from "@/lib/utils/stale-bundle";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useState } from "react";
+
+const COUNT_WORD = ["", "One", "Two", "Three", "Four", "Five"];
+
+/** "17:02 · 65 min" for a Garmin ride to pick. */
+function candidateText(c: RideGarminView["candidates"][number], timeZone: string | null) {
+  const at = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", ...(timeZone && { timeZone }) }).format(new Date(c.startMs));
+  return `${at} · ${Math.round(c.seconds / 60)} min`;
+}
 
 export function RideSummary({
   programId,
@@ -22,6 +37,9 @@ export function RideSummary({
   summary,
   doneHref,
   saveTheRide,
+  rideId,
+  garmin,
+  timeZone = null,
 }: {
   programId: number;
   exerciseName: string;
@@ -30,8 +48,27 @@ export function RideSummary({
   doneHref: string;
   /** A one-exercise workout still open after a ride that ended with the app closed: ride mode saves it. */
   saveTheRide: boolean;
+  rideId?: number;
+  garmin?: Pick<RideGarminView, "state" | "candidates">;
+  timeZone?: string | null;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const [picking, setPicking] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const run = async (call: () => Promise<{ success: boolean; error?: string }>) => {
+    setBusy(true);
+    setError(null);
+    const r = await callAction(call());
+    setBusy(false);
+    if (!r.success) {
+      setError("error" in r && r.error ? r.error : "Failed");
+      return;
+    }
+    setPicking(false);
+    router.refresh();
+  };
   const addHref = `${pathname}?results=1`;
   const s = summary;
   const cols = Math.min(3, s.tiles.length);
@@ -65,7 +102,21 @@ export function RideSummary({
               </div>
             ))}
           </div>
-          <RideZoneBar zones={s.zones} label="Time in power zones" testId="summary-zones" />
+          {s.chart && (
+            <div className="mt-3">
+              <RideDoneChart chart={s.chart} />
+            </div>
+          )}
+          {s.zones.length > 0 ? (
+            <RideZoneBar zones={s.zones} label="Time in power zones" testId="summary-zones" />
+          ) : (
+            <RideZoneBar zones={s.hrZones} label="Time in heart rate zones" testId="summary-hr-zones" />
+          )}
+          {s.drift && (
+            <p className="mt-2 text-xs text-muted-foreground tabular-nums" data-testid="summary-drift">
+              Heart rate drift {s.drift.pct.toFixed(1)}%{s.drift.steady ? " · steady" : ""}
+            </p>
+          )}
         </div>
 
         {(s.planOnly || s.noLoad) && (
@@ -95,11 +146,66 @@ export function RideSummary({
                       ↓
                     </span>
                   )}
+                  {r.onTarget !== null && (
+                    <small className="block text-[11px] font-normal text-muted-foreground" data-testid="row-on-target">
+                      {r.onTarget}% on target
+                    </small>
+                  )}
                 </span>
               </li>
             ))}
           </ol>
         </div>
+
+        {rideId !== undefined && garmin?.state === "filled" && (
+          <div className="flex items-center justify-between gap-2 rounded-xl border border-dashed border-border pl-4 pr-2 min-h-12 text-sm" data-testid="summary-garmin">
+            <span className="text-muted-foreground">Steps filled from Garmin</span>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => run(() => undoRideGarminFill({ rideId }))}
+              className="min-h-11 px-3 font-semibold text-primary whitespace-nowrap active:opacity-70 disabled:opacity-50"
+            >
+              Undo
+            </button>
+          </div>
+        )}
+        {rideId !== undefined && garmin?.state === "pick" && (
+          <div className="rounded-xl border border-dashed border-border text-sm" data-testid="summary-garmin-pick">
+            <div className="flex items-center justify-between gap-2 pl-4 pr-2 min-h-12">
+              <span className="text-muted-foreground">{COUNT_WORD[garmin.candidates.length] ?? garmin.candidates.length} Garmin rides match</span>
+              <button
+                type="button"
+                aria-expanded={picking}
+                onClick={() => setPicking((p) => !p)}
+                className="min-h-11 px-3 font-semibold text-primary whitespace-nowrap active:opacity-70"
+              >
+                Pick
+              </button>
+            </div>
+            {picking && (
+              <ul className="divide-y divide-border border-t border-border">
+                {garmin.candidates.map((c) => (
+                  <li key={c.garminActivityId}>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => run(() => pickRideGarminActivity({ rideId, garminActivityId: c.garminActivityId }))}
+                      className="w-full min-h-11 px-4 text-left tabular-nums active:bg-background disabled:opacity-50"
+                    >
+                      {candidateText(c, timeZone)}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+        {error && (
+          <p role="alert" className="text-sm text-destructive">
+            {error}
+          </p>
+        )}
       </div>
 
       <div className="shrink-0 px-4 pt-2 pb-3 flex flex-col gap-1 border-t border-border bg-background">

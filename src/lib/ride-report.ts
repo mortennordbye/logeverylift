@@ -1,8 +1,9 @@
 /**
  * A ride as the assistant reads it (docs/plans/bike-ride-logger.md, step 5,
  * MCP get_ride): the frozen plan, the mode, the status, each step planned
- * against done with the source of each number, and the numbers of 4.6 that
- * exist without a power stream.
+ * against done with the source of each number, and the numbers of 4.6: from
+ * the Garmin activity that filled the ride when there is one (NP, IF, zones,
+ * drift, time on target), else from the step averages.
  *
  * Read only: the status comes from the ride's timeline and is not stored
  * here, so a read never changes a ride (D9).
@@ -13,6 +14,7 @@
 import { db } from "@/db";
 import { rideEvents, rides, workoutSessions } from "@/db/schema";
 import { rideStepLogs } from "@/lib/bike-exercise-view";
+import { rideGarminView } from "@/lib/ride-garmin";
 import { getUserSettings } from "@/lib/user-settings";
 import { bikeStepRows, plannedRideNumbers } from "@/lib/utils/bike-ride-view";
 import { rideSummary } from "@/lib/utils/ride-results";
@@ -39,13 +41,14 @@ export async function rideReport(userId: string, by: { workoutSessionId?: number
     .limit(1);
   if (!ride) return null;
 
-  const [events, [session], { units }] = await Promise.all([
+  const [events, [session], { units }, garmin] = await Promise.all([
     db.select().from(rideEvents).where(eq(rideEvents.rideId, ride.id)).orderBy(asc(rideEvents.seq)),
     db
       .select({ plannedSessionId: workoutSessions.plannedSessionId, date: workoutSessions.date, isCompleted: workoutSessions.isCompleted })
       .from(workoutSessions)
       .where(and(eq(workoutSessions.id, ride.sessionId), eq(workoutSessions.userId, userId))),
     getUserSettings(userId),
+    rideGarminView(userId, ride.id),
   ]);
   const plan = ride.plan as RidePlan;
   const { logs, timeline } = await rideStepLogs(userId, {
@@ -54,7 +57,8 @@ export async function rideReport(userId: string, by: { workoutSessionId?: number
     serverNow: Date.now(),
     ride: { sessionId: ride.sessionId, heartbeatAt: ride.heartbeatAt?.getTime() ?? null },
   });
-  const summary = rideSummary(plan, logs, units);
+  const summary = rideSummary(plan, logs, units, garmin.stream);
+  const stream = garmin.stream;
   const planned = plannedRideNumbers(plan);
   const rows = bikeStepRows(plan, units);
   const n = summary.numbers;
@@ -120,28 +124,41 @@ export async function rideReport(userId: string, by: { workoutSessionId?: number
           sources: log.sources,
         },
         underTarget: summary.rows[i].under,
+        // Percent of the step's seconds inside its target (power indoors, heart rate outdoors), from the stream.
+        timeOnTargetPct: summary.rows[i].onTarget,
       };
     }),
     numbers: {
       seconds: n.seconds,
       avgPower: n.avgPower === null ? null : Math.round(n.avgPower),
       powerCoverage: r2(n.powerCoverage),
-      // From Garmin's 1 s power stream only (4.6); null until a stream is matched.
-      stream: false,
-      np: n.np,
-      intensityFactor: n.intensityFactor,
+      // NP, IF, heart rate zones, drift and time on target come from Garmin's 1 s stream only (4.6).
+      stream: stream !== null,
+      np: n.np === null ? null : Math.round(n.np),
+      intensityFactor: r2(n.intensityFactor),
       npEstimate: n.npEstimate === null ? null : Math.round(n.npEstimate),
       kj: n.kj,
       load: n.load && {
         value: r1(n.load.value),
-        method: n.load.method === "power" ? "bike_power" : "srpe",
+        // "power": from the Garmin stream; "bike_power": estimated from the step averages.
+        method: n.load.method === "power" ? (n.load.estimated ? "bike_power" : "power") : "srpe",
         estimated: n.load.estimated,
       },
       effort: summary.effort,
       powerZoneMinutes: zones(n.zoneMinutes),
-      heartRateZoneMinutes: null,
-      drift: null,
-      timeOnTarget: null,
+      heartRateZoneMinutes: stream ? zones(stream.numbers.hrZoneMinutes) : null,
+      drift: stream?.numbers.drift ? { pct: stream.numbers.drift.pct, steady: stream.numbers.drift.steady } : null,
+      timeOnTarget: stream
+        ? plan.steps.flatMap((s, i) => (summary.rows[i].onTarget === null ? [] : [{ key: s.key, pct: summary.rows[i].onTarget }]))
+        : null,
+    },
+    garmin: {
+      // "filled": the steps hold Garmin numbers (Undo in the app); "pick": two or more Garmin rides match and the rider picks one in the app.
+      state: garmin.state,
+      garminActivityId: garmin.garminActivityId,
+      declined: garmin.declined,
+      split: stream?.split ?? null,
+      matches: garmin.candidates.map((c) => ({ garminActivityId: c.garminActivityId, startedAt: iso(c.startMs), seconds: c.seconds })),
     },
   };
 }
