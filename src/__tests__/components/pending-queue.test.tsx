@@ -210,6 +210,19 @@ describe("useWorkoutSetWriter", () => {
     }
   });
 
+  it("offline with quietOffline: queues the write and shows no toast (the screen says it)", async () => {
+    let writer!: ReturnType<typeof useWorkoutSetWriter>;
+    mount((w) => (writer = w));
+    Object.defineProperty(navigator, "onLine", { configurable: true, get: () => false });
+    try {
+      await act(async () => { await writer.logWithRetry(payload, { quietOffline: true }); });
+      expect(screen.queryByText(/Offline/)).toBeNull();
+      expect(screen.getByTestId("count").textContent).toBe("1");
+    } finally {
+      Object.defineProperty(navigator, "onLine", { configurable: true, get: () => true });
+    }
+  });
+
   it("Retry replays the queued write rather than queueing it a second time", async () => {
     let writer!: ReturnType<typeof useWorkoutSetWriter>;
     mount((w) => (writer = w));

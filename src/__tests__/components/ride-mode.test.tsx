@@ -220,7 +220,7 @@ describe("RideMode", () => {
     await advance(600);
     expect(text("ride-step-title")).toBe("Easy");
     expect(text("ride-toast")).toBe("SkippedUndo");
-    expect(logWithRetry).toHaveBeenCalledWith(expect.objectContaining({ programSetId: 12, setNumber: 2, stepStatus: "skipped", isCompleted: false, durationSeconds: 102 }));
+    expect(logWithRetry).toHaveBeenCalledWith(expect.objectContaining({ programSetId: 12, setNumber: 2, stepStatus: "skipped", isCompleted: false, durationSeconds: 102 }), { quietOffline: true });
 
     fireEvent.click(screen.getByRole("button", { name: "Undo" }));
     await advance(0);
@@ -238,6 +238,7 @@ describe("RideMode", () => {
     expect(logWithRetry).toHaveBeenCalledTimes(1);
     expect(logWithRetry).toHaveBeenCalledWith(
       expect.objectContaining({ sessionId: 7, exerciseId: 3, programSetId: 11, stepStatus: "done", isCompleted: true, durationSeconds: 600, targetOffsetW: 0, extendedSeconds: 0, sources: { durationSeconds: "clock" } }),
+      { quietOffline: true },
     );
     await advance(10_000);
     expect(logWithRetry).toHaveBeenCalledTimes(1);
@@ -266,7 +267,7 @@ describe("RideMode", () => {
     fireEvent.click(screen.getByRole("button", { name: "End ride" }));
     await advance(0);
     expect(screen.getByText("Ride ended early")).toBeTruthy();
-    expect(logWithRetry).toHaveBeenCalledWith(expect.objectContaining({ programSetId: 12, stepStatus: "partial", durationSeconds: 100 }));
+    expect(logWithRetry).toHaveBeenCalledWith(expect.objectContaining({ programSetId: 12, stepStatus: "partial", durationSeconds: 100 }), { quietOffline: true });
     expect(completeWorkoutSession).toHaveBeenCalledWith({ sessionId: 7, endTime: new Date(T0 + 820_000).toISOString() });
     expect(clearActiveWorkout).toHaveBeenCalled();
     expect(replace).toHaveBeenCalledWith("/programs/1/workout/exercises/2?results=1");
@@ -293,7 +294,7 @@ describe("RideMode", () => {
     fireEvent.click(screen.getByRole("button", { name: "Lap" }));
     await advance(0);
     expect(text("ride-step-title")).toBe("Easy");
-    expect(logWithRetry).toHaveBeenCalledWith(expect.objectContaining({ programSetId: 12, stepStatus: "partial" }));
+    expect(logWithRetry).toHaveBeenCalledWith(expect.objectContaining({ programSetId: 12, stepStatus: "partial" }), { quietOffline: true });
   });
 
   it("offline: a tap applies on screen, says Saved on this phone, survives a reload and sends when online", async () => {
@@ -334,6 +335,9 @@ describe("RideMode", () => {
     expect(later.getAttribute("href")).toBe("/programs/1/workout");
     // The taps stay on this phone; the next page that opens the ride sends them.
     expect(JSON.parse(localStorage.getItem(RIDE_QUEUE_KEY)!)["5"].map((e: { kind: string }) => e.kind)).toEqual(["pause", "end"]);
+    // The screen says the steps wait on the phone; the step saves ask for no offline toast that says it again.
+    expect(logWithRetry).toHaveBeenCalled();
+    for (const call of logWithRetry.mock.calls) expect(call[1]).toEqual({ quietOffline: true });
     expect(completeWorkoutSession).not.toHaveBeenCalled();
   });
 
@@ -470,7 +474,7 @@ describe("RideMode", () => {
     const hold = screen.getByRole("button", { name: "Hold to skip step 2" });
     fireEvent.pointerDown(hold);
     await advance(600);
-    expect(logWithRetry).toHaveBeenCalledWith(expect.objectContaining({ programSetId: 12, stepStatus: "skipped" }));
+    expect(logWithRetry).toHaveBeenCalledWith(expect.objectContaining({ programSetId: 12, stepStatus: "skipped" }), { quietOffline: true });
     fireEvent.click(screen.getByRole("button", { name: "Undo" }));
     await advance(0);
     expect(unlogWithRetry).toHaveBeenCalledWith({ sessionId: 7, exerciseId: 3, setNumber: 2, programSetId: 12 });

@@ -189,7 +189,8 @@ export function RideMode({
 
   const saveStep = useCallback(
     (r: RideStepResult) => {
-      void logWithRetry(stepLogPayload(r, { sessionId: initial.ride.sessionId, exerciseId, setNumber: setNumbers[r.programSetId] ?? 1 }));
+      // Ride mode says "Saved on this phone" itself: no offline toast on top of it.
+      void logWithRetry(stepLogPayload(r, { sessionId: initial.ride.sessionId, exerciseId, setNumber: setNumbers[r.programSetId] ?? 1 }), { quietOffline: true });
     },
     [logWithRetry, initial.ride.sessionId, exerciseId, setNumbers],
   );
