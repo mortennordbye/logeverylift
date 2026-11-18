@@ -55,3 +55,17 @@ describe("StepsEditor with a ramp", () => {
     expect(sent.workout.steps[0].ramp).toBeUndefined();
   });
 });
+
+describe("StepsEditor step row", () => {
+  it("shows the step's cadence under the target", () => {
+    const withCadence = parseWorkout({
+      v: 2,
+      sport: "bike",
+      name: "Ride",
+      steps: [{ type: "work", end: { type: "time", seconds: 900 }, target: { metric: "power", anchor: "ftp", low: 75, high: 80 }, cadence: { low: 85, high: 95 } }],
+    });
+    if (!withCadence.ok) throw new Error(JSON.stringify(withCadence.errors));
+    render(<StepsEditor programId={1} programExerciseId={2} exerciseName="Bike" initial={withCadence.workout} converted={false} thresholds={{ ftp: 180 }} units={DEFAULT_UNITS} />);
+    expect(within(screen.getByTestId("step-row")).getByText("85-95 rpm")).toBeTruthy();
+  });
+});
