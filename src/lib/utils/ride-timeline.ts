@@ -207,6 +207,8 @@ export type RideTimeline = {
   plannedSeconds: number;
   /** Steps with no end time (lap), shown as "65 min + open". */
   openSteps: number;
+  /** The rider's pauses as [from, to], epoch ms; a pause still open ends at the ride's end, else it is left out. */
+  pauses: [number, number][];
 };
 
 /**
@@ -269,6 +271,7 @@ export function rideTimeline(plan: { steps: TimelineStep[]; test?: RideTest }, e
   const done: RideStepResult[] = [];
   let live: Live | null = null;
   let pauseAt: number | null = null;
+  const pauses: [number, number][] = [];
   let pausedOverMs = 0;
   let extendedOver = 0;
   let lastAt = 0;
@@ -358,6 +361,7 @@ export function rideTimeline(plan: { steps: TimelineStep[]; test?: RideTest }, e
         l.pausedMs += t - l.pausedAt!;
         l.pausedAt = null;
         pausedOverMs += t - pauseAt!;
+        pauses.push([pauseAt!, t]);
         pauseAt = null;
         status = "running";
         break;
@@ -416,5 +420,6 @@ export function rideTimeline(plan: { steps: TimelineStep[]; test?: RideTest }, e
     activeSeconds: done.reduce((a, r) => a + r.activeSeconds, 0) + (current?.activeSeconds ?? 0),
     plannedSeconds: steps.reduce((a, s) => a + (s.seconds ?? 0), 0) + extendedOver + (cur?.extendS ?? 0),
     openSteps: steps.filter((s) => s.seconds === null).length,
+    pauses: pauseAt !== null && endedAt !== null && endedAt > pauseAt ? [...pauses, [pauseAt, endedAt]] : pauses,
   };
 }

@@ -5,8 +5,9 @@
  * load, kJ, time in zones, time on target, heart rate drift), plus the
  * plan-against-done chart.
  *
- * Stream time `t` is seconds from the activity's first record. Garmin stops
- * recording while its timer is stopped, so its timer pauses are gaps in `t`.
+ * Stream time `t` is seconds from the activity's first record, on the wall
+ * clock: Garmin stops recording while its timer is stopped, so its timer
+ * pauses (and auto-pauses) are gaps in `t`, never a shift.
  *
  * Pure: the fill, the summary and get_ride call it.
  */
@@ -25,10 +26,11 @@ export type RideStreams = { t: Series; power?: Series; hr?: Series; cadence?: Se
 export type FitLap = { startTime?: unknown; totalElapsedTime?: unknown; totalTimerTime?: unknown };
 export type FitEvent = { timestamp?: unknown; eventType?: unknown };
 
-/** A step of the ride's timeline: its program set and the seconds ridden, pauses left out. */
-export type SplitStep = { programSetId: number; activeSeconds: number };
-/** A step's part of the activity, in stream seconds: from (inclusive) to (exclusive). */
-export type StepWindow = { programSetId: number; from: number; to: number };
+/** A step of the ride's timeline: its program set, the seconds ridden (pauses left out), and when it started and ended (epoch ms). */
+export type SplitStep = { programSetId: number; activeSeconds: number; startedAt: number; endedAt: number };
+/** A step's part of the activity, in stream seconds: from (inclusive) to (exclusive), less the rider's pauses in it (`gaps`). */
+export type StepWindow = { programSetId: number; from: number; to: number; gaps?: [number, number][] };
+/** `pauses`, in stream seconds, are left out of the chart's time axis: Garmin's timer pauses for a lap split, the rider's pauses in the app for a time split. */
 export type RideSplit = { method: "laps" | "time"; windows: StepWindow[]; pauses: [number, number][] };
 
 /** A lap may differ this much from its step's ridden time and still split the ride (4.8). */
@@ -57,13 +59,6 @@ export function timerPauses(events: FitEvent[], t0Ms: number): [number, number][
   return out;
 }
 
-/** Active seconds (Garmin's timer time) to stream seconds: each pause before it adds its length. */
-export function activeToStream(active: number, pauses: [number, number][]): number {
-  let t = active;
-  for (const [s, e] of pauses) if (s < t) t += e - s;
-  return t;
-}
-
 /** Stream seconds to active seconds: the pauses before it, and the part of one it falls in, are left out. */
 export function streamToActive(t: number, pauses: [number, number][]): number {
   let a = t;
@@ -74,12 +69,13 @@ export function streamToActive(t: number, pauses: [number, number][]): number {
 /**
  * Split the activity into the ride's steps (4.8). By Garmin's laps when there
  * is one lap per ridden step and each lap's timer time is within 10% of the
- * step's ridden time; else by the timeline's steps one after the other on
- * Garmin's timer time from the activity's start, so its pauses are skipped.
- * A step with no ridden time gets no window.
+ * step's ridden time; else by the wall clock: each step's own start and end
+ * from the ride's timeline, less the rider's pauses in the app (`ridePauses`,
+ * epoch ms). So a watch started before the app, Garmin's auto-pause or a
+ * second ride in the same activity never shift a step. A step with no ridden
+ * time gets no window.
  */
-export function splitRide(steps: SplitStep[], laps: FitLap[], events: FitEvent[], t0Ms: number): RideSplit {
-  const pauses = timerPauses(events, t0Ms);
+export function splitRide(steps: SplitStep[], laps: FitLap[], events: FitEvent[], t0Ms: number, ridePauses: [number, number][] = []): RideSplit {
   const ridden = steps.filter((s) => s.activeSeconds > 0);
   const lapTimes = laps.map((l) => ({ start: ms(l.startTime), elapsed: num(l.totalElapsedTime), timer: num(l.totalTimerTime) ?? num(l.totalElapsedTime) }));
   const lapsFit =
@@ -93,23 +89,33 @@ export function splitRide(steps: SplitStep[], laps: FitLap[], events: FitEvent[]
         const from = (lapTimes[i].start - t0Ms) / 1000;
         return { programSetId: s.programSetId, from, to: from + lapTimes[i].elapsed! };
       }),
-      pauses,
+      pauses: timerPauses(events, t0Ms),
     };
   }
-  const windows: StepWindow[] = [];
-  let at = 0;
-  for (const s of ridden) {
-    windows.push({ programSetId: s.programSetId, from: activeToStream(at, pauses), to: activeToStream(at + s.activeSeconds, pauses) });
-    at += s.activeSeconds;
-  }
+  const sec = (ms: number) => (ms - t0Ms) / 1000;
+  const pauses = ridePauses.map(([a, b]) => [sec(a), sec(b)] as [number, number]);
+  const windows: StepWindow[] = ridden.map((s) => {
+    const from = sec(s.startedAt);
+    const to = sec(s.endedAt);
+    const gaps = pauses.filter(([a, b]) => b > from && a < to).map(([a, b]) => [Math.max(a, from), Math.min(b, to)] as [number, number]);
+    return { programSetId: s.programSetId, from, to, ...(gaps.length && { gaps }) };
+  });
   return { method: "time", windows, pauses };
 }
 
-/** The sample indices inside a window. */
-function indices(t: Series, w: { from: number; to: number }): number[] {
+/** The streams cut to [from, to) stream seconds: a ride's numbers come from its own part of the activity. */
+export function clipStreams(streams: RideStreams, from: number, to: number): RideStreams {
+  const keep = streams.t.map((ti) => ti !== null && ti >= from && ti < to);
+  const out: RideStreams = { t: [] };
+  for (const [k, v] of Object.entries(streams) as [keyof RideStreams, Series | undefined][]) if (v) out[k] = v.filter((_, i) => keep[i]);
+  return out;
+}
+
+/** The sample indices inside a window, outside its gaps. */
+function indices(t: Series, w: { from: number; to: number; gaps?: [number, number][] }): number[] {
   const out: number[] = [];
   t.forEach((ti, i) => {
-    if (ti !== null && ti >= w.from && ti < w.to) out.push(i);
+    if (ti !== null && ti >= w.from && ti < w.to && !w.gaps?.some(([a, b]) => ti >= a && ti < b)) out.push(i);
   });
   return out;
 }
@@ -145,7 +151,7 @@ export type WindowValues = {
  * Speed is the window's distance over its moving time. Indoors no distance,
  * speed or climbing (D12).
  */
-export function windowValues(streams: RideStreams, w: { from: number; to: number }, mode: RideMode, d = sampleDurations(streams.t)): WindowValues {
+export function windowValues(streams: RideStreams, w: StepWindow | { from: number; to: number }, mode: RideMode, d = sampleDurations(streams.t)): WindowValues {
   const idx = indices(streams.t, w);
   const round = (v: number | null) => (v === null ? null : Math.round(v));
   const hrs = streams.hr ? idx.map((i) => streams.hr![i]).filter((v): v is number => v !== null && v > 0) : [];
@@ -363,7 +369,7 @@ const BINS = 120;
 /**
  * The plan-against-done chart (section 5, "Summary"): the power targets of the
  * ridden steps as bands, the power line, and heart rate as a dashed line on a
- * scale of its own, over Garmin's timer time of the ride's steps. Null when
+ * scale of its own, over the ridden time of the ride's steps (the split's pauses left out). Null when
  * the activity has neither power nor heart rate.
  */
 export function rideDoneChart(streams: RideStreams, steps: PlanStepLike[], split: RideSplit, ftp: number | null): DoneChart | null {
@@ -378,7 +384,7 @@ export function rideDoneChart(streams: RideStreams, steps: PlanStepLike[], split
   const total = Math.max(1, a1 - a0);
   const x = (active: number) => +(left + ((active - a0) / total) * span).toFixed(1);
 
-  // Mean per bin of timer time.
+  // Mean per bin of ridden time.
   const d = sampleDurations(t);
   const bins = Math.max(2, Math.min(BINS, Math.ceil(total / 30)));
   const binOf = (ti: number) => Math.floor(((streamToActive(ti, split.pauses) - a0) / total) * bins);

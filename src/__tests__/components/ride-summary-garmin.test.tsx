@@ -62,7 +62,8 @@ const log = (i: number, over: Partial<StepLog> = {}): StepLog => ({
 
 function withStream() {
   const streams = synthetic();
-  const split = splitRide(SECONDS.map((s, i) => ({ programSetId: i + 1, activeSeconds: s })), [], [], 0);
+  const starts = SECONDS.map((_, i) => SECONDS.slice(0, i).reduce((a, b) => a + b, 0) * 1000);
+  const split = splitRide(SECONDS.map((s, i) => ({ programSetId: i + 1, activeSeconds: s, startedAt: starts[i], endedAt: starts[i] + s * 1000 })), [], [], 0);
   const numbers = rideStreamNumbers(streams, plan.steps, split.windows, { ftp: 180, lthr: 171, mode: "indoor" });
   return rideSummary(plan, { 1: log(0), 2: log(1), 3: log(2) }, undefined, { numbers, chart: rideDoneChart(streams, plan.steps, split, 180) });
 }
@@ -94,13 +95,40 @@ describe("RideSummary with a Garmin stream", () => {
     expect(screen.getByTestId("summary-line").textContent).toContain("from Garmin");
   });
 
-  it("Steps filled from Garmin · Undo calls the undo and refreshes", async () => {
+  it("Steps filled from Garmin · Undo asks first; Keep leaves it, Remove calls the undo and refreshes", async () => {
     render(<RideSummary programId={1} exerciseName="Bike" doneLine="Done" summary={withStream()} doneHref="/" saveTheRide={false} rideId={4} garmin={{ state: "filled", candidates: [] }} />);
     const row = screen.getByTestId("summary-garmin");
     expect(row.textContent).toContain("Steps filled from Garmin");
     fireEvent.click(within(row).getByRole("button", { name: "Undo" }));
+    expect(undoRideGarminFill).not.toHaveBeenCalled();
+    expect(row.textContent).toContain("Remove the Garmin numbers?");
+    fireEvent.click(within(row).getByRole("button", { name: "Keep" }));
+    expect(row.textContent).toContain("Steps filled from Garmin");
+    fireEvent.click(within(row).getByRole("button", { name: "Undo" }));
+    fireEvent.click(within(row).getByRole("button", { name: "Remove" }));
     await waitFor(() => expect(refresh).toHaveBeenCalled());
     expect(undoRideGarminFill).toHaveBeenCalledWith({ rideId: 4 });
+  });
+
+  it("after an Undo with one Garmin ride: Fill from Garmin fills it again", async () => {
+    const candidates = [{ garminActivityId: 11, startMs: Date.parse("2026-11-17T16:02:00Z"), seconds: 3900 }];
+    render(
+      <RideSummary
+        programId={1}
+        exerciseName="Bike"
+        doneLine="Done"
+        summary={rideSummary(plan, { 1: log(0, { avgPower: null, sources: null }) })}
+        doneHref="/"
+        saveTheRide={false}
+        rideId={4}
+        garmin={{ state: "refill", candidates }}
+      />,
+    );
+    const row = screen.getByTestId("summary-garmin-refill");
+    expect(row.textContent).toContain("Garmin numbers removed");
+    fireEvent.click(within(row).getByRole("button", { name: "Fill from Garmin" }));
+    await waitFor(() => expect(refresh).toHaveBeenCalled());
+    expect(pickRideGarminActivity).toHaveBeenCalledWith({ rideId: 4, garminActivityId: 11 });
   });
 
   it("Two Garmin rides match · Pick lists them and fills from the one tapped", async () => {
@@ -134,6 +162,7 @@ describe("RideSummary with a Garmin stream", () => {
     undoRideGarminFill.mockResolvedValue({ success: false, error: "Failed to undo" });
     render(<RideSummary programId={1} exerciseName="Bike" doneLine="Done" summary={withStream()} doneHref="/" saveTheRide={false} rideId={4} garmin={{ state: "filled", candidates: [] }} />);
     fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
     expect(await screen.findByRole("alert")).toHaveProperty("textContent", "Failed to undo");
     expect(refresh).not.toHaveBeenCalled();
   });

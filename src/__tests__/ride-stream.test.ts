@@ -30,27 +30,57 @@ const planStep = (programSetId: number, type: WorkoutStep["type"], power: { from
 });
 
 describe("splitRide", () => {
+  /** The app's ride: step 1 from 0 to 660 s with a pause from 400 to 460 s, step 2 to 960 s, step 3 skipped at once. */
+  const ms = (sec: number) => T0 + sec * 1000;
   const steps = [
-    { programSetId: 1, activeSeconds: 600 },
-    { programSetId: 2, activeSeconds: 300 },
-    { programSetId: 3, activeSeconds: 0 },
+    { programSetId: 1, activeSeconds: 600, startedAt: ms(0), endedAt: ms(660) },
+    { programSetId: 2, activeSeconds: 300, startedAt: ms(660), endedAt: ms(960) },
+    { programSetId: 3, activeSeconds: 0, startedAt: ms(960), endedAt: ms(960) },
   ];
+  const appPauses: [number, number][] = [[ms(400), ms(460)]];
 
-  it("by time: steps follow each other on Garmin's timer time, and a timer pause is skipped", () => {
+  it("Garmin's timer pauses from its events", () => {
     const events = [
       { timestamp: iso(0), eventType: "start" },
       { timestamp: iso(400), eventType: "stop_all" },
       { timestamp: iso(460), eventType: "start" },
     ];
     expect(timerPauses(events, T0)).toEqual([[400, 460]]);
-    const split = splitRide(steps, [], events, T0);
+  });
+
+  it("by time: each step on the wall clock, less the app's own pauses; the skipped step gets no window", () => {
+    const split = splitRide(steps, [], [], T0, appPauses);
     expect(split.method).toBe("time");
-    // The step with no ridden time gets no window.
     expect(split.windows).toEqual([
-      { programSetId: 1, from: 0, to: 660 },
+      { programSetId: 1, from: 0, to: 660, gaps: [[400, 460]] },
       { programSetId: 2, from: 660, to: 960 },
     ]);
     expect(streamToActive(700, split.pauses)).toBe(640);
+  });
+
+  it("by time: a watch started 3 min before the app moves every window by 3 min", () => {
+    const split = splitRide(steps, [], [], T0 - 180_000, appPauses);
+    expect(split.windows).toEqual([
+      { programSetId: 1, from: 180, to: 840, gaps: [[580, 640]] },
+      { programSetId: 2, from: 840, to: 1140 },
+    ]);
+  });
+
+  it("by time: Garmin's own (auto-)pauses shift nothing", () => {
+    const events = [
+      { timestamp: iso(200), eventType: "stop_all" },
+      { timestamp: iso(300), eventType: "start" },
+    ];
+    expect(splitRide(steps, [], events, T0, appPauses).windows.map((w) => [w.from, w.to])).toEqual([
+      [0, 660],
+      [660, 960],
+    ]);
+  });
+
+  it("the step values leave out the samples of the app's pause", () => {
+    const s = stream([[0, 660]], { power: (t) => (t >= 400 && t < 460 ? 0 : 200) });
+    const [w] = splitRide(steps, [], [], T0, appPauses).windows;
+    expect(windowValues(s, w, "indoor").avgPower).toBe(200);
   });
 
   it("by laps: one lap per ridden step, each within 10% of its step's time", () => {
@@ -169,7 +199,7 @@ describe("rideStreamNumbers", () => {
 });
 
 describe("rideDoneChart", () => {
-  it("a band per ridden step with a power target, a power line and a dashed heart rate line over timer time", () => {
+  it("a band per ridden step with a power target, a power line and a dashed heart rate line over ridden time", () => {
     const s = stream(
       [
         [0, 400],
@@ -179,19 +209,17 @@ describe("rideDoneChart", () => {
     );
     const split = splitRide(
       [
-        { programSetId: 1, activeSeconds: 600 },
-        { programSetId: 2, activeSeconds: 300 },
+        { programSetId: 1, activeSeconds: 600, startedAt: T0, endedAt: T0 + 660_000 },
+        { programSetId: 2, activeSeconds: 300, startedAt: T0 + 660_000, endedAt: T0 + 960_000 },
       ],
       [],
-      [
-        { timestamp: iso(400), eventType: "stop_all" },
-        { timestamp: iso(460), eventType: "start" },
-      ],
+      [],
       T0,
+      [[T0 + 400_000, T0 + 460_000]],
     );
     const c = rideDoneChart(s, [planStep(1, "work", { from: 140, to: 160 }), planStep(2, "recovery", { from: null, to: 100 })], split, 200)!;
     expect(c.bands).toHaveLength(2);
-    // Step 2 starts at 600 s of 900 s of timer time.
+    // Step 2 starts at 600 s of 900 s of ridden time.
     expect(c.bands[1].x).toBeCloseTo(24 + (600 / 900) * 222, 0);
     // 30 bins of 30 s: the power drops at the step change, 600 s in, the pause does not show.
     const pts = c.power!.split(" ").map((p) => p.split(",").map(Number));

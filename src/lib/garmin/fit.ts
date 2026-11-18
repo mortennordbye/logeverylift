@@ -41,7 +41,9 @@ export type ParsedFit = {
   timeInZone: Record<string, unknown>[];
   /**
    * The FIT session message. Since v3 it also holds garminVo2Max and
-   * garminVo2MaxUpdated (see vo2MaxFromMessage), null when the file has none.
+   * garminVo2MaxUpdated (see vo2MaxFromMessage), null when the file has none,
+   * and firstRecordTime: the time of the first record, which is stream time 0
+   * (a file stored before this field was added has none).
    */
   session: Record<string, unknown> | null;
   /** Pool lengths: time, strokes, stroke type (swims only). Since v2. */
@@ -134,7 +136,9 @@ export function parseFit(file: Buffer): ParsedFit {
     laps: ((messages.lapMesgs ?? []) as Mesg[]).map(plain),
     sets: ((messages.setMesgs ?? []) as Mesg[]).map(plain),
     timeInZone: ((messages.timeInZoneMesgs ?? []) as Mesg[]).map(plain),
-    session: session ? { ...plain(session), garminVo2Max: vo2?.value ?? null, garminVo2MaxUpdated: vo2?.updated ?? false } : null,
+    session: session
+      ? { ...plain(session), garminVo2Max: vo2?.value ?? null, garminVo2MaxUpdated: vo2?.updated ?? false, firstRecordTime: first?.toISOString() ?? null }
+      : null,
     lengths: ((messages.lengthMesgs ?? []) as Mesg[]).map(plain),
     events: ((messages.eventMesgs ?? []) as Mesg[]).filter((e) => e.event === "timer").map(plain),
   };
