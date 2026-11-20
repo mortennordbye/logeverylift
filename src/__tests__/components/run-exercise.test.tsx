@@ -16,7 +16,9 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ replace }), usePathname:
 vi.mock("@/components/ui/BackLink", () => ({ BackLink: () => <span>Workout</span> }));
 vi.mock("@/contexts/workout-session-context", () => ({ useWorkoutSession: () => ({ sessionId: 7 }) }));
 const startRide = vi.fn();
-vi.mock("@/lib/actions/rides", () => ({ startRide: (d: unknown) => startRide(d) }));
+const getRide = vi.fn();
+const sendRideEvent = vi.fn();
+vi.mock("@/lib/actions/rides", () => ({ startRide: (d: unknown) => startRide(d), getRide: (d: unknown) => getRide(d), sendRideEvent: (d: unknown) => sendRideEvent(d) }));
 vi.mock("@/lib/audio-cues", () => ({ playCue: () => true, unlockAudio: () => true }));
 vi.mock("@/lib/push-client", () => ({ detectStepAlerts: async () => "off", turnOnStepAlerts: async () => ({ state: "on" }) }));
 vi.mock("@/lib/wake-lock", () => ({ wakeLockSupported: () => true, requestWakeLock: async () => ({ release: async () => undefined }) }));
@@ -169,5 +171,20 @@ describe("RunExercise", () => {
     screenOf(data(OWNER, { otherLive: { sport: "run", href: "/programs/9/workout/exercises/7?ride=1", rideId: 7 } }));
     expect(screen.getByTestId("run-running").textContent).toBe("Another run is running");
     expect(screen.getByRole("link", { name: "Resume" }).getAttribute("href")).toBe("/programs/9/workout/exercises/7?ride=1");
+  });
+});
+
+describe("End ride and start run, on the phone", () => {
+  it("a ride tap still on this phone that cannot be sent: no run starts, and the screen says why", async () => {
+    localStorage.setItem("rideEventQueue", JSON.stringify({ 8: [{ clientId: "q1", kind: "pause", clientAt: Date.now() - 5000 }] }));
+    getRide.mockResolvedValue({ success: true, data: { ride: { id: 8, seq: 1 }, events: [], plan: { steps: [] }, serverNow: Date.now() } });
+    sendRideEvent.mockResolvedValue({ success: false, error: "Couldn't reach the server" });
+    screenOf(data(OWNER, { otherLive: { sport: "bike", href: "/programs/9/workout/exercises/8?ride=1", rideId: 8 } }));
+    fireEvent.click(screen.getByRole("button", { name: "End ride and start run" }));
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toBe("The ride's taps are still on this phone. Go online to end the ride."));
+    expect(sendRideEvent).toHaveBeenCalledTimes(1);
+    expect(startRide).not.toHaveBeenCalled();
+    expect(JSON.parse(localStorage.getItem("rideEventQueue")!)[8]).toHaveLength(1);
+    localStorage.clear();
   });
 });
