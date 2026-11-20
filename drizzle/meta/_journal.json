@@ -722,6 +722,13 @@
       "when": 1794993303264,
       "tag": "0102_ride_garmin_fills_standing",
       "breakpoints": true
+    },
+    {
+      "idx": 103,
+      "version": "7",
+      "when": 1795194943983,
+      "tag": "0103_run_logger_groundwork",
+      "breakpoints": true
     }
   ]
 }

@@ -106,7 +106,7 @@ export const workoutSets = pgTable("workout_sets", {
   weightKg: decimal("weight_kg", { precision: 6, scale: 2 }).notNull(),
   durationSeconds: integer("duration_seconds"),
   distanceMeters: integer("distance_meters"),
-  inclinePercent: integer("incline_percent"),
+  inclinePercent: real("incline_percent"),
   heartRateZone: integer("heart_rate_zone"), // 1-5
   // Reps In Reserve (0 = to failure, 5 = 5+). Primary user-logged effort signal;
   // rpe is derived from it. Nullable for legacy rows logged before RIR existed.
