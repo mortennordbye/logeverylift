@@ -17,6 +17,8 @@ import { GarminFill } from "@/components/features/bike/GarminFill";
 import { RideDoneChart, RideZoneBar } from "@/components/features/bike/RideProfileChart";
 import { armRide, disarmRide } from "@/components/features/bike/useRide";
 import { RunEndReason } from "@/components/features/run/RunEndReason";
+import { RunTestLine } from "@/components/features/run/RunTestLine";
+import type { RunTestView } from "@/lib/utils/run-test";
 import { BackLink } from "@/components/ui/BackLink";
 import type { EndReason, RideMode, RunSurface } from "@/db/schema/rides";
 import type { RideGarminView } from "@/lib/ride-garmin";
@@ -40,6 +42,7 @@ export function RunSummary({
   runAgain = null,
   garmin,
   timeZone = null,
+  thresholdTest = null,
 }: {
   programId: number;
   exerciseName: string;
@@ -57,6 +60,8 @@ export function RunSummary({
   runAgain?: { sessionId: number; programExerciseId: number; mode: RideMode; surface: RunSurface | null } | null;
   garmin?: Pick<RideGarminView, "state" | "candidates">;
   timeZone?: string | null;
+  /** A run threshold test (4.10): "New threshold pace 5:30 /km · LTHR 176 · Save". */
+  thresholdTest?: RunTestView | null;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -136,6 +141,8 @@ export function RunSummary({
           )}
           <RideZoneBar zones={s.zones} label="Time in heart rate zones" testId="summary-hr-zones" />
         </div>
+
+        {thresholdTest && <RunTestLine rideId={rideId} test={thresholdTest} />}
 
         {!s.planOnly && s.noLoadReason === "short" && (
           <p className="rounded-xl bg-muted px-4 py-3 text-sm text-muted-foreground" data-testid="summary-no-load">

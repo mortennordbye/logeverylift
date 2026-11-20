@@ -417,7 +417,8 @@ export function RunMode({
         </div>
         <div className="flex flex-col gap-2">
           <button type="button" onClick={actions.end} className={`${BTN} bg-muted`}>
-            End run
+            {/* A run test (4.10): stopping it saves nothing to the thresholds. */}
+            {plan.test === "30min" ? "Stop test" : "End run"}
           </button>
           <p className="text-center text-sm text-muted-foreground" data-testid="ride-kept">
             {runKeptText(plan, timeline, true)}

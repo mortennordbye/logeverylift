@@ -168,6 +168,16 @@ describe("RunExercise", () => {
     expect(screen.queryByRole("button", { name: "Start run" })).toBeNull();
   });
 
+  it("a run test: the start checks, and no Start run within 7 days of being sick", () => {
+    const { unmount } = screenOf(data(OWNER, { test: { sick: false } }));
+    expect(screen.getByTestId("run-test-checks").textContent).toBe("No hard session in the last 48 hoursStop for chest pain, dizziness or unusual breathlessness");
+    expect((screen.getByRole("button", { name: "Start run" }) as HTMLButtonElement).disabled).toBe(false);
+    unmount();
+    screenOf(data(OWNER, { test: { sick: true } }));
+    expect(screen.getByTestId("run-test-sick").textContent).toBe("Wait 7 days after being sick");
+    expect((screen.getByRole("button", { name: "Start run" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
   it("with another run running: Resume opens it", () => {
     screenOf(data(OWNER, { otherLive: { sport: "run", href: "/programs/9/workout/exercises/7?ride=1", rideId: 7 } }));
     expect(screen.getByTestId("run-running").textContent).toBe("Another run is running");

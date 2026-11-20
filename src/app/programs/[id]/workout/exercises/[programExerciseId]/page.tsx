@@ -204,6 +204,7 @@ export default async function WorkoutExerciseSetsPage({ params, searchParams }: 
           rideId={after.rideId}
           garmin={{ state: after.garmin.state, candidates: after.garmin.candidates }}
           timeZone={timeZone}
+          thresholdTest={after.thresholdTest}
           early={after.status === "ended_early" ? { kept: after.kept, endReason: after.endReason } : null}
           brickLine={after.brick ? brickText(after.brick, summary.numbers.seconds) : null}
           doneHref={doneHref}

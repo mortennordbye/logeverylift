@@ -27,6 +27,7 @@ import { rideClock } from "@/lib/utils/ride-screen";
 import { rideLengthText } from "@/lib/utils/bike-ride-view";
 import { loadText } from "@/lib/utils/format";
 import { RUN_MODE_NAME, runAnchorText } from "@/lib/utils/run-view";
+import { SICK_TEXT } from "@/lib/utils/run-test";
 import { callAction } from "@/lib/utils/stale-bundle";
 import { Check } from "lucide-react";
 import Link from "next/link";
@@ -231,6 +232,20 @@ export function RunExercise({
           ))}
         </ol>
 
+        {/* The run threshold test (4.10): the checks before the start. */}
+        {data.test && !running && (
+          <div className="rounded-xl bg-muted px-4 py-3 text-sm flex flex-col gap-1" data-testid="run-test-checks">
+            {data.test.sick ? (
+              <p className="font-semibold" data-testid="run-test-sick">
+                {SICK_TEXT}
+              </p>
+            ) : (
+              <p className="font-semibold">No hard session in the last 48 hours</p>
+            )}
+            <p className="text-muted-foreground">Stop for chest pain, dizziness or unusual breathlessness</p>
+          </div>
+        )}
+
         {/* Outdoors, before the start only (4.6): the phone in a pocket gets no alerts while push is off. */}
         {!treadmill && !running && (
           <StepAlertsRow state={alerts.state} busy={alerts.busy} error={alerts.error} onTurnOn={alerts.turnOn} hint="Keep the screen on for beeps, or follow your watch" />
@@ -278,7 +293,7 @@ export function RunExercise({
             <button
               type="button"
               onClick={() => start()}
-              disabled={starting}
+              disabled={starting || !!data.test?.sick}
               className="min-h-12 rounded-2xl bg-brand-fill px-4 text-base font-semibold text-white active:opacity-80 disabled:opacity-50"
             >
               Start run
