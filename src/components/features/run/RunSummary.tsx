@@ -168,7 +168,17 @@ export function RunSummary({
             <ol className="divide-y divide-border">
               {s.rows.map((r) => (
                 <li key={r.key} className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-3 px-3 min-h-11 py-2 text-sm" data-testid="summary-row">
-                  <span className="truncate font-semibold">{r.title}</span>
+                  {/* The round ("1 of 3") on its own line, so a narrow phone never cuts it off. */}
+                  <span className="min-w-0">
+                    <span className="block truncate font-semibold" data-testid="row-name">
+                      {r.title.split(" · ")[0]}
+                    </span>
+                    {r.title.includes(" · ") && (
+                      <span className="block truncate text-xs text-muted-foreground" data-testid="row-round">
+                        {r.title.split(" · ").slice(1).join(" · ")}
+                      </span>
+                    )}
+                  </span>
                   <span className="text-right text-muted-foreground tabular-nums whitespace-nowrap">{r.plan ?? "–"}</span>
                   <span className={`min-w-20 text-right tabular-nums whitespace-nowrap ${r.quiet ? "text-muted-foreground" : "font-semibold"}`}>
                     {r.done}

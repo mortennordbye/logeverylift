@@ -194,3 +194,20 @@ describe("RunSummary with Garmin (step 7)", () => {
     expect(pickRideGarminActivity).toHaveBeenCalledWith({ rideId: 5, garminActivityId: 12, segment: 2 });
   });
 });
+
+describe("step 7 review: a rep's round at 320 px", () => {
+  it("shows the round on its own line under the step name, so a narrow row never cuts it", () => {
+    const reps = parseWorkout({
+      v: 2,
+      sport: "run",
+      name: "Reps",
+      steps: [{ type: "repeat", count: 2, steps: [{ type: "work", end: { type: "time", seconds: 300 }, target: { metric: "pace", anchor: "threshold_pace", low: 98, high: 102 } }, { type: "recovery", end: { type: "time", seconds: 120 } }] }],
+    });
+    if (!reps.ok) throw new Error("bad");
+    const p = buildRunPlan(reps.workout, [1, 2, 3, 4], { run_threshold_pace: 1000 / 339, lthr_run: 180 }, "outdoor");
+    render(<RunSummary programId={1} exerciseName="Run" doneLine="Done" summary={runSummary(p, { 1: log(300, null) }, { beltEvents: false })} rideId={5} early={null} doneHref="/" saveTheRun={false} />);
+    const row = screen.getAllByTestId("summary-row")[0];
+    expect(within(row).getByTestId("row-name").textContent).toBe("Work");
+    expect(within(row).getByTestId("row-round").textContent).toBe("1 of 2");
+  });
+});
