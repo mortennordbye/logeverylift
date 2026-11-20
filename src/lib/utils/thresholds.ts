@@ -272,12 +272,15 @@ export const PROTOCOL_KINDS: Record<ThresholdProtocol, ThresholdKind[]> = {
 export function testInputs(kind: ThresholdKind, protocol: ThresholdProtocol, data: Record<string, unknown>): Record<string, number> {
   const spec = protocolsFor(kind).find((p) => p.protocol === protocol);
   const out: Record<string, number> = {};
-  for (const i of spec?.inputs ?? []) {
-    const v = data[i.key];
-    if (typeof v === "number" && Number.isFinite(v)) out[i.key] = v;
+  for (const key of [...(spec?.inputs ?? []).map((i) => i.key), ...(OLD_INPUTS[`${kind}:${protocol}`] ?? [])]) {
+    const v = data[key];
+    if (typeof v === "number" && Number.isFinite(v)) out[key] = v;
   }
   return out;
 }
+
+/** Inputs a protocol took before, kept on the rows stored with them (the run test's pace took the last 20 min until run-logger step 8). */
+const OLD_INPUTS: Record<string, string[]> = { "run_threshold_pace:run_30min": ["distanceLast20Meters"] };
 
 const pos = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) && v > 0 ? v : null);
 
@@ -315,6 +318,9 @@ export function valueFromTest(
   }
   if (kind === "run_threshold_pace") {
     const d = pos(data.distance30Meters);
+    // A row stored before the whole 30 min input keeps the formula it was made with.
+    const last20 = pos(data.distanceLast20Meters);
+    if (!d && last20) return { value: last20 / 1200 };
     if (!d) return { error: "Enter the distance of the whole 30 minutes" };
     return { value: d / 1800 };
   }

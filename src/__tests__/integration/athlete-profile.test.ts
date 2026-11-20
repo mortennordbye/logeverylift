@@ -13,7 +13,7 @@ import {
   updateInjuryEntry,
   updateThresholdValue,
 } from "@/lib/actions/athlete-profile";
-import { addInjury, addThreshold, changeThreshold, garminSuggestions, getAthleteProfile, interviewRace, listInjuries, saveAthleteProfile } from "@/lib/athlete-profile";
+import { addInjury, addThreshold, changeThreshold, resolveThresholdValue, garminSuggestions, getAthleteProfile, interviewRace, listInjuries, saveAthleteProfile } from "@/lib/athlete-profile";
 import { restorePlanRevision, undoPlanChangeSet } from "@/lib/actions/plan-revisions";
 import { THRESHOLDS_PER_KIND_MAX, deleteCycles, deletePrograms, listRevisions, purgePlanRevisions, restoreChangeSet, restoreRevision } from "@/lib/plan-revisions";
 import { and, asc, eq } from "drizzle-orm";
@@ -243,6 +243,18 @@ describe("review fixes", () => {
     expect(row).toMatchObject({ status: "past", deletedAt: null });
     const [threshold] = await db.select().from(athleteThresholds).where(eq(athleteThresholds.id, t.data.id));
     expect(threshold.deletedAt).not.toBeNull();
+  });
+
+  it("a run_30min pace row stored with the old last 20 min input still updates and keeps its data", async () => {
+    // 4800 m in the last 20 min: 4.0 m/s (4:10 /km), as the training numbers page stored it before step 8 of the run logger.
+    expect(resolveThresholdValue({ kind: "run_threshold_pace", value: 4, protocol: "run_30min", testData: { distanceLast20Meters: 4800 } })).toBe(4);
+    const [row] = await db
+      .insert(athleteThresholds)
+      .values({ userId: me, kind: "run_threshold_pace", value: 4, measuredOn: "2026-10-01", source: "test", protocol: "run_30min", testData: { distanceLast20Meters: 4800 } })
+      .returning();
+    await changeThreshold({ userId: me, writer: "assistant", reason: "x" }, row.id, { value: 4, notes: "checked" });
+    const [after] = await db.select().from(athleteThresholds).where(eq(athleteThresholds.id, row.id));
+    expect([after.value, after.testData, after.notes]).toEqual([4, { distanceLast20Meters: 4800 }, "checked"]);
   });
 
   it("an object created and deleted in one change set is skipped by the undo, and the rest undoes", async () => {
