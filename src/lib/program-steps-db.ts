@@ -112,9 +112,10 @@ export async function replaceExerciseSteps(tx: Tx, programExerciseId: number, wo
       targetHeartRateZone: null,
       setType: "working",
       // The tree has no rest after a step (a rest is a step of its own), so the
-      // rest a row had stays with its place. Not on a bike: its rests are rest
-      // steps, and the workout screen would run the row's too (bike-ride-logger, step 1).
-      restTimeSeconds: workout.sport === "bike" ? 0 : (prev?.restTimeSeconds ?? 0),
+      // rest a row had stays with its place. Not on a bike or a run: their rests
+      // are rest steps, and the workout screen would run the row's too
+      // (bike-ride-logger, step 1; run-logger, step 1).
+      restTimeSeconds: workout.sport === "bike" || workout.sport === "run" ? 0 : (prev?.restTimeSeconds ?? 0),
       peakDistanceMeters: keepsAnchor && row.distanceMeters != null ? prev.peakDistanceMeters : null,
       peakDurationSeconds: keepsAnchor && row.durationSeconds != null ? prev.peakDurationSeconds : null,
       sessionRole: keepsAnchor ? prev.sessionRole : null,
@@ -149,10 +150,10 @@ export async function recentOpenWorkoutOn(ex: Executor, userId: string, programI
   return !!row;
 }
 
-type BikeSlot = { programId: number; name: string; userId: string; endurance: boolean };
+type StepSlot = { sport: "bike" | "run"; programId: number; name: string; userId: string; endurance: boolean };
 
-/** The slot's program and owner when it is a bike exercise, else null. */
-async function bikeSlot(tx: Tx, programExerciseId: number): Promise<BikeSlot | null> {
+/** The slot's sport, program and owner when it is a bike or run exercise, else null. */
+async function stepSlot(tx: Tx, programExerciseId: number): Promise<StepSlot | null> {
   // plan-read: includes deleted (the slot being written, for its sport and owner)
   const [slot] = await tx
     .select({ discipline: exercises.discipline, programId: programs.id, name: programs.name, userId: users.id, endurance: users.enduranceEnabled })
@@ -161,7 +162,8 @@ async function bikeSlot(tx: Tx, programExerciseId: number): Promise<BikeSlot | n
     .innerJoin(programs, eq(programs.id, programExercises.programId))
     .innerJoin(users, eq(users.id, programs.userId))
     .where(eq(programExercises.id, programExerciseId));
-  return slot?.discipline === "bike" ? slot : null;
+  if (slot?.discipline !== "bike" && slot?.discipline !== "run") return null;
+  return { ...slot, sport: slot.discipline };
 }
 
 const liveSlotSets = (tx: Tx, programExerciseId: number) =>
@@ -185,19 +187,20 @@ async function moveSet(tx: Tx, userId: string, programSetId: number, setNumber: 
 }
 
 /**
- * Plain bike sets as steps (docs/plans/bike-ride-logger.md, D3), when every
+ * Plain bike and run sets as steps (docs/plans/bike-ride-logger.md, D3;
+ * docs/plans/run-logger.md, step 1), when every
  * live set of the slot is plain: each set keeps its row (its id, its
  * weekly-sync anchor and role when the end keeps its kind), a zone stays a
  * zone target, and a rest after a set becomes a rest step. Sets no step can
  * hold stay plain (logged, not thrown), so no later write to the slot fails
  * on them. Returns whether rows changed.
  */
-async function plainBikeSetsToSteps(tx: Tx, programExerciseId: number, slot: BikeSlot): Promise<boolean> {
+async function plainSetsToSteps(tx: Tx, programExerciseId: number, slot: StepSlot): Promise<boolean> {
   const old = await liveSlotSets(tx, programExerciseId);
   if (old.length === 0 || old.some((r) => r.stepKind != null)) return false;
-  const out = plainSetsToStepRows(old, { sport: "bike", name: slot.name });
+  const out = plainSetsToStepRows(old, { sport: slot.sport, name: slot.name });
   if ("error" in out) {
-    console.warn("[bikeSetsToSteps] left plain", { programExerciseId, problem: out.error });
+    console.warn("[settleStepRows] left plain", { programExerciseId, sport: slot.sport, problem: out.error });
     return false;
   }
   const bySetNumber = new Map(old.map((r) => [r.setNumber, r]));
@@ -233,13 +236,13 @@ async function plainBikeSetsToSteps(tx: Tx, programExerciseId: number, slot: Bik
 }
 
 /**
- * A bike step has no rest of its own: the rest is the rest step after it. A
+ * A bike or run step has no rest of its own: the rest is the rest step after it. A
  * rest written on a step row (the rest editor, a drag, an assistant's set
  * list) goes to the rest step right after it, or a new one, and the row's
  * rest goes back to 0. A step inside a repeat keeps no rest, so its rounds
  * stay the same. Returns whether rows changed.
  */
-async function bikeRestsToSteps(tx: Tx, programExerciseId: number, slot: BikeSlot): Promise<boolean> {
+async function restsToSteps(tx: Tx, programExerciseId: number, slot: StepSlot): Promise<boolean> {
   const rows = await liveSlotSets(tx, programExerciseId);
   if (rows.length === 0 || rows.some((r) => r.stepKind == null) || rows.every((r) => r.restTimeSeconds === 0)) return false;
   const order: ({ id: number; setNumber: number } | { rest: number })[] = [];
@@ -276,21 +279,21 @@ async function bikeRestsToSteps(tx: Tx, programExerciseId: number, slot: BikeSlo
 }
 
 /**
- * The end of every write to a slot's sets. For a bike slot
- * (docs/plans/bike-ride-logger.md, D3): plain sets of an endurance user
- * become steps, unless a workout runs on the program (the slot then stays
- * plain until it ends, so the screen never changes under the rider), and a
- * rest on a step row moves to a rest step. Then the whole-exercise check.
- * Returns whether the bike rules changed rows.
+ * The end of every write to a slot's sets. For a bike or run slot
+ * (docs/plans/bike-ride-logger.md, D3; docs/plans/run-logger.md, step 1):
+ * plain sets of an endurance user become steps, unless a workout runs on the
+ * program (the slot then stays plain until it ends, so the screen never
+ * changes under the athlete), and a rest on a step row moves to a rest step.
+ * Then the whole-exercise check. Returns whether these rules changed rows.
  */
 export async function settleStepRows(tx: Tx, programExerciseId: number): Promise<boolean> {
-  const slot = await bikeSlot(tx, programExerciseId);
+  const slot = await stepSlot(tx, programExerciseId);
   let changed = false;
   if (slot) {
     if (slot.endurance && !(await recentOpenWorkoutOn(tx, slot.userId, slot.programId))) {
-      changed = await plainBikeSetsToSteps(tx, programExerciseId, slot);
+      changed = await plainSetsToSteps(tx, programExerciseId, slot);
     }
-    changed = (await bikeRestsToSteps(tx, programExerciseId, slot)) || changed;
+    changed = (await restsToSteps(tx, programExerciseId, slot)) || changed;
   }
   await assertStepRows(tx, programExerciseId);
   return changed;

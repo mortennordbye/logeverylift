@@ -376,7 +376,11 @@ export type PlainEnduranceSet = {
   setType?: string | null;
   peakDurationSeconds?: number | null;
   peakDistanceMeters?: number | null;
+  inclinePercent?: number | null;
 };
+
+/** How far each side of a plain run set's own pace its pace target reaches (docs/plans/run-logger.md, step 1). */
+const PLAIN_RUN_PACE_BAND = 0.02;
 
 /**
  * Older plain endurance sets as a step tree (docs/plans/one-program-model.md,
@@ -385,6 +389,11 @@ export type PlainEnduranceSet = {
  * zone becomes an HR zone target on LTHR (bike and run). A set ends on the
  * end its weekly-sync anchor scales (time or distance), else on its distance,
  * else on its time, else on the lap button. Rest after a set stays on the set.
+ *
+ * A run (docs/plans/run-logger.md, step 1): a set with time and distance ends
+ * on its time, unless its anchor is the distance alone, and gets the pace of
+ * distance over time as its target, the zone as its cap. Its incline becomes
+ * the step's incline.
  */
 export function plainSetsToWorkout(sets: PlainEnduranceSet[], meta: { sport: WorkoutSport; name: string; poolLengthM?: number | null }): Workout {
   const steps: WorkoutStep[] = [...sets]
@@ -394,14 +403,25 @@ export function plainSetsToWorkout(sets: PlainEnduranceSet[], meta: { sport: Wor
       const type: WorkoutStep["type"] = s.setType === "warmup" ? "warmup" : s.sessionRole === "work" || (zone ?? 0) >= 4 ? "work" : zone === 1 ? "recovery" : "work";
       const hasDistance = s.distanceMeters != null && s.distanceMeters > 0;
       const hasTime = s.durationSeconds != null && s.durationSeconds > 0;
-      const onTime = hasTime && (!hasDistance || (s.peakDurationSeconds != null && s.peakDistanceMeters == null));
+      const run = meta.sport === "run";
+      const onTime = run
+        ? hasTime && (!hasDistance || !(s.peakDistanceMeters != null && s.peakDurationSeconds == null))
+        : hasTime && (!hasDistance || (s.peakDurationSeconds != null && s.peakDistanceMeters == null));
       const end: WorkoutStep["end"] = onTime
         ? { type: "time", seconds: s.durationSeconds! }
         : hasDistance
           ? { type: "distance", meters: s.distanceMeters! }
           : { type: "lap" };
-      const target: WorkoutTarget | undefined = zone != null && meta.sport !== "swim" ? { metric: "hr", anchor: "lthr", zone } : undefined;
-      return { type, end, ...(target && { target }) };
+      const zoneTarget: WorkoutTarget | undefined = zone != null && meta.sport !== "swim" ? { metric: "hr", anchor: "lthr", zone } : undefined;
+      const speed = run && hasTime && hasDistance ? s.distanceMeters! / s.durationSeconds! : null;
+      const round3 = (n: number) => Math.round(n * 1000) / 1000;
+      const pace: WorkoutTarget | undefined =
+        speed != null && speed >= 0.3 && speed <= 12
+          ? { metric: "pace", anchor: "absolute", low: round3(Math.max(0.3, speed * (1 - PLAIN_RUN_PACE_BAND))), high: round3(Math.min(12, speed * (1 + PLAIN_RUN_PACE_BAND))) }
+          : undefined;
+      const [target, target2] = pace ? [pace, zoneTarget] : [zoneTarget, undefined];
+      const incline = run && s.inclinePercent != null ? s.inclinePercent : undefined;
+      return { type, end, ...(target && { target }), ...(target2 && { target2 }), ...(incline !== undefined && { incline }) };
     });
   return { v: 2, sport: meta.sport, name: meta.name.trim().slice(0, 80) || "Session", ...(meta.poolLengthM != null && { poolLengthM: meta.poolLengthM }), steps: steps.length ? steps : [{ type: "work", end: { type: "lap" } }] };
 }

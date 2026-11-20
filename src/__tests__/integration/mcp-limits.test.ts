@@ -332,7 +332,8 @@ describe("review fixes", () => {
     const result = await mcpTools(registerProgramTools, me)("edit_program_exercise", {
       operation: "update",
       programExerciseId: easy.programExerciseId,
-      sets: [{ id: easy.setId, setNumber: 1, durationSeconds: 40 * MIN, sessionRole: "work" }],
+      // Zone 4 makes it hard: the plain run set becomes a step, and a work step is hard by its target (run-logger, step 1).
+      sets: [{ id: easy.setId, setNumber: 1, durationSeconds: 40 * MIN, sessionRole: "work", targetHeartRateZone: 4 }],
       reason: "Intervals on Sunday",
       expectedVersion: await versionOf(easy.programId),
     });

@@ -56,13 +56,15 @@ export async function register() {
   void purge();
   setInterval(purge, 24 * 60 * 60 * 1000).unref();
 
-  // Plain bike sets of endurance users become steps, once per program
-  // (docs/plans/bike-ride-logger.md, D3). A program with a workout in progress
-  // waits for the next boot.
-  const { migrateBikeSetsToSteps } = await import("@/lib/bike-sets-to-steps");
-  migrateBikeSetsToSteps().catch((err) =>
-    console.error("[migrateBikeSetsToSteps] failed", err instanceof Error ? err.message : "unknown"),
-  );
+  // Plain bike and run sets of endurance users become steps, once per program
+  // (docs/plans/bike-ride-logger.md, D3; docs/plans/run-logger.md, step 1). A
+  // program with a workout in progress waits for the next boot. The run move
+  // goes after the bike move, so the two never write one program at once.
+  const { migrateBikeSetsToSteps, migrateRunSetsToSteps } = await import("@/lib/bike-sets-to-steps");
+  migrateBikeSetsToSteps()
+    .catch((err) => console.error("[migrateBikeSetsToSteps] failed", err instanceof Error ? err.message : "unknown"))
+    .then(() => migrateRunSetsToSteps())
+    .catch((err) => console.error("[migrateRunSetsToSteps] failed", err instanceof Error ? err.message : "unknown"));
 
   // Copy gyms from OpenStreetMap for "Gyms near me". Runs weekly; checked
   // hourly, so an import the busy Overpass server turns away is retried soon.
