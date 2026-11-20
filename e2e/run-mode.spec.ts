@@ -165,7 +165,8 @@ async function startRun(page: Page, s: { userId: string; programId: number; peId
     await freeze(page);
     startTap.set(s.userId, Date.now() + 5000);
     shifted.set(s.userId, 0);
-    await advance(page, s.userId, 5);
+    // A second past the count: the phone's clock offset can be a few hundred ms behind the server's.
+    await advance(page, s.userId, 6);
     await expect(count).toHaveCount(0);
   } else {
     await freeze(page);
