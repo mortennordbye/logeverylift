@@ -144,6 +144,15 @@ describe("run mode outdoors", () => {
     expect(screen.getByRole("button", { name: "Add 1 min" })).toBeTruthy();
   });
 
+  it("a target in words wraps in a smaller size, so Easy jog or walk fits a 320 px phone", async () => {
+    serve(buildRunPlan(outdoorRun, [11, 12], OWNER, "outdoor"));
+    vi.setSystemTime(T0 + 610_000);
+    await open();
+    const value = screen.getByTestId("run-target-value");
+    expect(value.textContent).toBe("Easy jog or walk");
+    expect(value.parentElement!.className).not.toContain("whitespace-nowrap");
+  });
+
   it("locks the controls 10 s after the last tap, and a hold unlocks them", async () => {
     serve(buildRunPlan(outdoorRun, [11, 12], OWNER, "outdoor"));
     await open();

@@ -464,7 +464,8 @@ export function RunMode({
   const targetCard = !treadmill && (
     <div className="rounded-2xl bg-muted px-4 py-3 text-center" data-testid="ride-target">
       {s.target ? (
-        <p className="whitespace-nowrap text-[min(3rem,11.5vw)] font-bold leading-tight tracking-tight tabular-nums">
+        // A number stays on one line at 320 px too; words ("Easy jog or walk") wrap in a smaller size.
+        <p className={`font-bold leading-tight tracking-tight tabular-nums ${s.target.unit === null && s.target.value.length > 10 ? "text-3xl" : "whitespace-nowrap text-[min(3rem,11.5vw)]"}`}>
           <span data-testid="run-target-value">{s.target.value}</span>
           {s.target.unit && <small className="ml-2 text-xl font-semibold text-muted-foreground">{s.target.unit}</small>}
         </p>
