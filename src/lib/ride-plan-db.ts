@@ -76,7 +76,8 @@ export async function liveRideOnSession(ex: Executor, userId: string, sessionId:
   const events = await ex.select().from(rideEvents).where(eq(rideEvents.rideId, ride.id)).orderBy(asc(rideEvents.seq));
   const t = rideTimeline(
     ride.plan as RidePlan,
-    events.map((e) => ({ seq: e.seq, kind: e.kind, value: e.value, at: e.at.getTime() })),
+    // With the step keys, as settle reads them: a run ignores an event meant for another step.
+    events.map((e) => ({ seq: e.seq, kind: e.kind, value: e.value, at: e.at.getTime(), stepKey: e.stepKey })),
     Date.now(),
     { heartbeatAt: ride.heartbeatAt?.getTime() ?? null },
   );
