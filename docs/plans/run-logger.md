@@ -422,7 +422,7 @@ before building (rule 3 of section 0).
 |---|---|
 | 0 Groundwork | done |
 | 1 One run model | done |
-| 2 Run exercise screen | todo |
+| 2 Run exercise screen | done |
 | 3 Run mode | todo |
 | 4 Results and numbers | todo |
 | 5 AI tools | todo |
@@ -609,3 +609,12 @@ before building (rule 3 of section 0).
 - Step 1, slots left plain: a program whose slots no step can hold (a set over 12 h) is not counted as moved and writes no revision, so the move reads it again at each boot and leaves it plain with a log line.
 - Step 1, hard sessions: a plain run set marked `work` with no zone becomes a work step with no target, which the limits read as steady (the step rule of `isHardSession`), as for the bike. A zone 4 or 5 set stays hard.
 - Step 1, log by hand: with no 5 km guess, a run logs on its time alone, as a ride does.
+- Step 2, mode default (R4): the last run of the exercise, else the mode of most runs in 28 days from `rides` of sport run, and only when there are none Garmin run types (for a user with Garmin access); a tie falls to the month. The shared helper is `defaultRunModeFor` in `src/lib/run-exercise-view.ts`.
+- Step 2, Start run before step 3: it starts the server run and opens `?ride=1`; until run mode exists that address shows the run screen with "Run running" and Resume. Step 3 puts run mode there.
+- Step 2, "a run already running": the screen shows Resume in place of Start run, hides Change, the surface choice and Log by hand; a ride or another run of the user shows "A ride is running" (or "Another run is running") with Resume to it. End, with its reason, is in run mode (step 3), and "End ride and start run" comes with the brick hand-off in step 3.
+- Step 2, Log by hand: `?hand=1` opens today's set list for the run (the sheet without the 5 km guess), not a results table; step 4 owns the run results table.
+- Step 2, step rows: a strides block (4.5) is one row "Strides 6 ×"; a work step in zone 1 or 2 is called "Steady"; time shows as m:ss as in the mockup. On a treadmill a heart rate step shows its cap or range with "start 8.2 km/h", or "set the belt by feel" with no belt; outdoors the target follows the 4.2 table for display (frozen into the plan in step 3). A cap is the top of the zone as `resolveTarget` gives it (Z1 under 151, Z2 under 160 at LTHR 180).
+- Step 2, Friel Z5 as a pace range: 90 to 100% of threshold pace time (Z5a and Z5b).
+- Step 2, planned numbers: load is `plannedLoad` with each heart rate or effort step at its type's default IF, said "about"; "at least" only when a step's time is not known. Distance shows only when every step's distance is known (belts on a treadmill, distances and pace targets outdoors). The zone bar needs a run LTHR. The mockup numbers were set to what the code gives (load 70, 10.1 km).
+- Step 2, alerts row: outdoors only, before the start, with the 4.6 hint after "Step alerts are off"; the treadmill phone sits on the console with the screen on.
+- Step 2, planned day card: the home Today card on a day whose program is one run exercise with steps says "Run · Treadmill · 75 min" (endurance users only), in place of the counts.
