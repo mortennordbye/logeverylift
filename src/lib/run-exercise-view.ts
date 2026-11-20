@@ -9,8 +9,12 @@
  */
 
 import { db } from "@/db";
-import { garminActivities, rides, workoutSessions, type RideMode, type RideSport } from "@/db/schema";
+import { garminActivities, rides, workoutSessions, type EndReason, type RideMode, type RideSport } from "@/db/schema";
 import { getRide } from "@/lib/actions/rides";
+import { recentRide } from "@/lib/bike-exercise-view";
+import { getUserSettings } from "@/lib/user-settings";
+import { rideTimeline } from "@/lib/utils/ride-timeline";
+import { runKeptText } from "@/lib/utils/run-screen";
 import { garminAllowedFor } from "@/lib/garmin/access";
 import { isIndoor, sportOf } from "@/lib/garmin/analytics/sport";
 import { thresholdValues } from "@/lib/session-compliance";
@@ -19,7 +23,7 @@ import type { RideChart } from "@/lib/utils/bike-ride-view";
 import { toDateStr } from "@/lib/utils/cycle-position";
 import { buildWorkout, type StepRow } from "@/lib/utils/program-steps";
 import { buildRunPlan } from "@/lib/utils/run-plan";
-import { defaultRunMode, needsThresholdPace, plannedRunNumbers, runChart, runStepRows, type RunNumbers, type RunStepRow } from "@/lib/utils/run-view";
+import { RUN_MODE_NAME, defaultRunMode, needsThresholdPace, plannedRunNumbers, runChart, runStepRows, type RunNumbers, type RunStepRow } from "@/lib/utils/run-view";
 import { parseWorkout, type WorkoutTest } from "@/lib/utils/workout-steps";
 import { and, desc, eq, gt, sql } from "drizzle-orm";
 
@@ -38,8 +42,8 @@ export type RunExerciseData = {
   paceSteps: boolean;
   /** The user's run of this exercise is running or paused: the screen offers Resume, not Start run. */
   liveRun: boolean;
-  /** Another ride or run of the user is running (one per user, 4.3): its sport and where it opens. */
-  otherLive: { sport: RideSport; href: string } | null;
+  /** Another ride or run of the user is running (one per user, 4.3): its sport, where it opens, and its id ("End ride and start run" sends its queued taps first). */
+  otherLive: { sport: RideSport; href: string; rideId: number } | null;
 };
 
 /** The mode a run's mode default looks back over (R4). */
@@ -108,7 +112,7 @@ export async function runExerciseView(
       .select({ programId: workoutSessions.programId })
       .from(workoutSessions)
       .where(and(eq(workoutSessions.id, live.ride.sessionId), eq(workoutSessions.userId, userId)));
-    if (s?.programId != null) otherLive = { sport: live.ride.sport, href: `/programs/${s.programId}/workout/exercises/${live.ride.programExerciseId}?ride=1` };
+    if (s?.programId != null) otherLive = { sport: live.ride.sport, href: `/programs/${s.programId}/workout/exercises/${live.ride.programExerciseId}?ride=1`, rideId: live.ride.id };
   }
   return {
     defaultMode,
@@ -120,5 +124,43 @@ export async function runExerciseView(
     paceSteps: needsThresholdPace(tree.workout),
     liveRun,
     otherLive,
+  };
+}
+
+// ── After the run ────────────────────────────────────────────────────────────
+
+export type RunDoneData = {
+  rideId: number;
+  status: "finished" | "ended_early";
+  /** "Done 17:12 · Treadmill", "Ended early 16:40 · Outdoor". */
+  doneLine: string;
+  /** "Steps 1 and 2 are saved". */
+  kept: string;
+  endReason: EndReason | null;
+};
+
+/**
+ * The user's run of this program exercise that ended in the last 12 hours,
+ * as its done screen shows it (section 5 "Run done / Run ended early"). The
+ * exercise then shows this, not Start run, as the bike shows its summary.
+ */
+export async function runDoneView(userId: string, programExerciseId: number): Promise<RunDoneData | null> {
+  const recent = await recentRide(userId, programExerciseId, "run");
+  if (!recent || (recent.status !== "finished" && recent.status !== "ended_early")) return null;
+  const [r, { timeZone }] = await Promise.all([getRide({ rideId: recent.id }), getUserSettings(userId)]);
+  if (!r.success || !r.data) return null;
+  const v = r.data;
+  const status = v.ride.status === "ended_early" ? "ended_early" : "finished";
+  const t = rideTimeline(v.plan, v.events, v.serverNow, { heartbeatAt: v.ride.heartbeatAt });
+  const endedAt = v.ride.endedAt ?? t.endedAt;
+  const at = endedAt
+    ? new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", ...(timeZone && { timeZone }) }).format(new Date(endedAt))
+    : null;
+  return {
+    rideId: v.ride.id,
+    status,
+    doneLine: [`${status === "ended_early" ? "Ended early" : "Done"}${at ? ` ${at}` : ""}`, RUN_MODE_NAME[v.plan.mode]].join(" · "),
+    kept: runKeptText(v.plan, t),
+    endReason: v.ride.endReason,
   };
 }

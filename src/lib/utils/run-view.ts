@@ -322,6 +322,35 @@ function treadmillText(s: RidePlanStep, th: ThresholdValues, zone: number | null
   return s.step.incline !== undefined ? `${text} · incline ${s.step.incline}%` : text;
 }
 
+/** "Warm-up", "Steady" (a work step in zone 1 or 2), "Work · 2 of 4", "Easy". */
+export function runStepTitle(s: RidePlanStep, th: ThresholdValues): string {
+  const zone = runStepZone(s.step, th);
+  const word = s.step.type === "work" && zone !== null && zone <= 2 ? "Steady" : STEP_WORD[s.step.type];
+  return `${word}${s.round && s.step.type !== "recovery" && s.step.type !== "rest" ? ` · ${s.round.index} of ${s.round.of}` : ""}`;
+}
+
+/** A step's main target as words ("HR under 160", "5:35-5:59 /km", "Effort 9"), as the step list says it on a treadmill. */
+export function runTargetText(s: RidePlanStep, th: ThresholdValues): string | null {
+  return targetText(s, runStepZone(s.step, th), th);
+}
+
+/** The cap at the top of a heart rate zone ("HR under 160"), or its effort with no run LTHR (4.2). */
+export function runZoneCapText(zone: number, th: ThresholdValues): string {
+  return zoneHrText(zone, true, th);
+}
+
+/** The row (0-based) each plan step shows in: a strides block is one row (4.5). */
+export function runRowOfStep(plan: Pick<RidePlan, "steps">): number[] {
+  const out: number[] = [];
+  let row = -1;
+  plan.steps.forEach((s, i) => {
+    const block = s.run?.block ?? null;
+    if (!block || plan.steps[i - 1]?.run?.block !== block) row++;
+    out.push(row);
+  });
+  return out;
+}
+
 /** One row per step the run runs; a strides block (4.5) is one row. */
 export function runStepRows(plan: RidePlan, surface: RunSurface = "road"): RunStepRow[] {
   const th = plan.thresholds;
@@ -352,7 +381,6 @@ export function runStepRows(plan: RidePlan, surface: RunSurface = "road"): RunSt
       continue;
     }
     const zone = runStepZone(s.step, th);
-    const word = s.step.type === "work" && zone !== null && zone <= 2 ? "Steady" : STEP_WORD[s.step.type];
     const rule = s.run?.rule ?? "time";
     let detail: string | null;
     if (treadmill) detail = treadmillText(s, th, zone);
@@ -365,7 +393,7 @@ export function runStepRows(plan: RidePlan, surface: RunSurface = "road"): RunSt
     rows.push({
       key: s.key,
       n: rows.length + 1,
-      title: `${word}${s.round && s.step.type !== "recovery" && s.step.type !== "rest" ? ` · ${s.round.index} of ${s.round.of}` : ""}`,
+      title: runStepTitle(s, th),
       detail,
       note: s.step.note ?? null,
       time: rule === "time" && s.seconds !== null ? clockText(s.seconds) : meters !== null ? distanceText(meters) : "to lap",

@@ -287,6 +287,20 @@ export async function getActiveSessionCompletedProgramSetIds(
 }
 
 /**
+ * The result fields this write sends from the belt whose stored value was
+ * typed: the typed value stays (docs/plans/run-logger.md, 4.7).
+ */
+async function typedOverBelt(sessionId: number, programSetId: number, sources: Partial<Record<string, string>> | undefined): Promise<Set<string>> {
+  const belt = Object.entries(sources ?? {}).filter(([, s]) => s === "belt").map(([k]) => k);
+  if (!belt.length) return new Set();
+  const [stored] = await db
+    .select({ sources: workoutSets.sources })
+    .from(workoutSets)
+    .where(and(eq(workoutSets.sessionId, sessionId), eq(workoutSets.programSetId, programSetId)));
+  return new Set(belt.filter((k) => stored?.sources?.[k] === "typed"));
+}
+
+/**
  * Log a workout set
  *
  * Records a single set within a workout session. This is called after each
@@ -440,16 +454,18 @@ export async function logWorkoutSet(
     // fields the rider changed (docs/plans/bike-ride-logger.md, 4.5). Sources
     // merge into the stored map; a field sent as null loses its source.
     const rideWrite = plannedStep != null && sources !== undefined;
+    // A treadmill step's belt numbers never replace typed ones (docs/plans/run-logger.md, 4.7).
+    const typedOver = rideWrite && slot?.programSetId != null ? await typedOverBelt(sessionId, slot.programSetId, sources) : new Set<string>();
     const results = plannedStep
-      ? Object.fromEntries(Object.entries({ avgPower, avgHr, maxHr, avgCadence, avgSpeed, climbM }).filter(([, v]) => v !== undefined))
+      ? Object.fromEntries(Object.entries({ avgPower, avgHr, maxHr, avgCadence, avgSpeed, climbM }).filter(([k, v]) => v !== undefined && !typedOver.has(k)))
       : {};
     const cleared = [
       ...Object.entries(results).filter(([, v]) => v === null).map(([k]) => k),
       ...(rideWrite && distanceMeters === null ? ["distanceMeters"] : []),
     ];
-    const addSources = sources ? Object.fromEntries(Object.entries(sources).filter(([k]) => !cleared.includes(k))) : undefined;
+    const addSources = sources ? Object.fromEntries(Object.entries(sources).filter(([k]) => !cleared.includes(k) && !typedOver.has(k))) : undefined;
     const keepRpe = rideWrite && rir === undefined && rpe === undefined;
-    const keepDistance = rideWrite && distanceMeters === undefined;
+    const keepDistance = rideWrite && (distanceMeters === undefined || typedOver.has("distanceMeters"));
 
     const setValues = {
       sessionId,

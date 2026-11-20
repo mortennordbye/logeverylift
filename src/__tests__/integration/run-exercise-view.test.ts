@@ -142,7 +142,7 @@ describe("runExerciseView", () => {
     const otherSets = await db.select().from(programSets).where(eq(programSets.programExerciseId, other.programExerciseId));
     const elsewhere = (await runExerciseView(me, other.programExerciseId, "Run", otherSets))!;
     expect(elsewhere.liveRun).toBe(false);
-    expect(elsewhere.otherLive).toEqual({ sport: "run", href: `/programs/${programId}/workout/exercises/${programExerciseId}?ride=1` });
+    expect(elsewhere.otherLive).toEqual({ sport: "run", href: `/programs/${programId}/workout/exercises/${programExerciseId}?ride=1`, rideId: started.success ? started.data.ride.id : -1 });
   });
 
   it("null for a run of plain sets: the set list stays", async () => {

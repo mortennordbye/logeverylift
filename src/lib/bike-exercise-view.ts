@@ -8,7 +8,7 @@
  */
 
 import { db } from "@/db";
-import { rides, workoutSessions, workoutSets, type RideMode } from "@/db/schema";
+import { rides, workoutSessions, workoutSets, type RideMode, type RideSport } from "@/db/schema";
 import { getRide, type RideView } from "@/lib/actions/rides";
 import { garminAllowedFor } from "@/lib/garmin/access";
 import { rideGarminView, type RideGarminView } from "@/lib/ride-garmin";
@@ -40,13 +40,13 @@ export type BikeExerciseData = {
 /** A ride counts as this workout's for this long after its start (step 3 choice, section 9). */
 export const RIDE_RECENT_MS = 12 * 60 * 60 * 1000;
 
-/** The user's latest ride of this program exercise started in the last 12 hours, with whether its workout is still open. */
-async function recentRide(userId: string, programExerciseId: number) {
+/** The user's latest ride (or run) of this program exercise started in the last 12 hours, with whether its workout is still open. */
+export async function recentRide(userId: string, programExerciseId: number, sport: RideSport = "bike") {
   const [row] = await db
     .select({ id: rides.id, status: rides.status, sessionOpen: sql<boolean>`not ${workoutSessions.isCompleted}` })
     .from(rides)
     .innerJoin(workoutSessions, eq(workoutSessions.id, rides.sessionId))
-    .where(and(eq(rides.userId, userId), eq(rides.sport, "bike"), eq(rides.programExerciseId, programExerciseId), gt(rides.startedAt, new Date(Date.now() - RIDE_RECENT_MS))))
+    .where(and(eq(rides.userId, userId), eq(rides.sport, sport), eq(rides.programExerciseId, programExerciseId), gt(rides.startedAt, new Date(Date.now() - RIDE_RECENT_MS))))
     .orderBy(desc(rides.startedAt))
     .limit(1);
   return row ?? null;
@@ -58,11 +58,11 @@ async function recentRide(userId: string, programExerciseId: number) {
  * it ended), so ride mode saves its last steps and finishes the workout.
  * Null when there is none: the page shows the bike screen.
  */
-export async function rideOfExercise(userId: string, programExerciseId: number): Promise<{ view: RideView; sessionCompleted: boolean } | null> {
+export async function rideOfExercise(userId: string, programExerciseId: number, sport: RideSport = "bike"): Promise<{ view: RideView; sessionCompleted: boolean } | null> {
   const active = await getRide({});
   let view = active.success && active.data?.ride.programExerciseId === programExerciseId ? active.data : null;
   if (!view) {
-    const recent = await recentRide(userId, programExerciseId);
+    const recent = await recentRide(userId, programExerciseId, sport);
     if (!recent?.sessionOpen) return null;
     const r = await getRide({ rideId: recent.id });
     view = r.success ? r.data : null;

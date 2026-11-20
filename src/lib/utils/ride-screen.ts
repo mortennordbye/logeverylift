@@ -196,7 +196,9 @@ export function stepLogPayload(r: RideStepResult, ctx: { sessionId: number; exer
 
 /** A saved step's values in one string: the step saves again only when they change. */
 export function stepSignature(r: RideStepResult): string {
-  return `${r.status}:${r.activeSeconds}:${r.offsetW}:${r.extendedSeconds}`;
+  const base = `${r.status}:${r.activeSeconds}:${r.offsetW}:${r.extendedSeconds}`;
+  // A run step saves its belt meters and incline too (docs/plans/run-logger.md, 4.7); a ride's signature stays as it was.
+  return r.distanceM === undefined && r.inclinePct === undefined ? base : `${base}:${r.distanceM ?? ""}:${r.inclinePct ?? ""}`;
 }
 
 /** The ended steps whose values differ from what this phone last saved for them. */

@@ -80,7 +80,7 @@ export const createWorkoutSessionSchema = z.object({
  * - 5-6: Easy, many reps left
  */
 /** The sources a client may send for a result field; the others are the server's (`RESULT_SOURCES`). */
-export const CLIENT_RESULT_SOURCES = ["typed", "clock"] as const satisfies readonly ResultSource[];
+export const CLIENT_RESULT_SOURCES = ["typed", "clock", "belt"] as const satisfies readonly ResultSource[];
 
 /** The result fields of a set whose source is kept (`workout_sets.sources`). */
 export const RESULT_FIELDS = ["durationSeconds", "distanceMeters", "avgPower", "avgHr", "maxHr", "avgCadence", "avgSpeed", "climbM", "measuredValue"] as const;

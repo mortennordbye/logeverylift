@@ -58,7 +58,8 @@ export const STEP_STATUS_VALUES = ["done", "partial", "skipped", "not_done"] as 
  * is an MCP log_step_results write (step 5): it fills empty, clock or
  * assistant values and never replaces typed or Garmin ones.
  */
-export const RESULT_SOURCES = ["typed", "clock", "garmin", "assistant"] as const;
+// "belt": a treadmill run step's distance and speed from the belt events (docs/plans/run-logger.md, 4.7).
+export const RESULT_SOURCES = ["typed", "clock", "garmin", "assistant", "belt"] as const;
 export type ResultSource = (typeof RESULT_SOURCES)[number];
 
 export const workoutSets = pgTable("workout_sets", {

@@ -13,6 +13,8 @@ import { isUniqueViolation } from "@/lib/custom-exercises";
 import { enduranceEnabledFor } from "@/lib/endurance";
 import { liveProgramExercises, liveProgramSets, livePrograms } from "@/lib/plan-live";
 import { sessionRide } from "@/lib/ride-plan-db";
+import { brickRideOf } from "@/lib/run-brick";
+import { rewriteBeltResults } from "@/lib/run-belt-results";
 import { LIVE, isLive, schedulePushes, settle, type RideView } from "@/lib/ride-settle";
 import { thresholdValues } from "@/lib/session-compliance";
 import { buildWorkout, type StepRow } from "@/lib/utils/program-steps";
@@ -60,7 +62,12 @@ const startRideSchema = z.object({
   surface: z.enum(RUN_SURFACES).optional(),
   // "End ride and start run" (4.3): end the user's active ride or run and start this one in one transaction.
   endActive: z.boolean().optional(),
+  // A treadmill run's 5 s "Step on" count (4.3): the clock starts 5 s after the tap.
+  countIn: z.boolean().optional(),
 });
+
+/** The count before a treadmill run's clock runs (docs/plans/run-logger.md, 4.3). */
+const COUNT_IN_MS = 5_000;
 
 /**
  * Start a ride of a bike exercise, or a run of a run exercise
@@ -75,7 +82,7 @@ export async function startRide(data: unknown): Promise<ActionResult<RideView>> 
   const parsed = startRideSchema.safeParse(data);
   if (!parsed.success) return { success: false, error: "Invalid input", fieldErrors: parsed.error.flatten().fieldErrors };
   const userId = auth.user.id;
-  const { sessionId, programExerciseId, mode, clientId, again, surface, endActive } = parsed.data;
+  const { sessionId, programExerciseId, mode, clientId, again, surface, endActive, countIn } = parsed.data;
   if (!(await enduranceEnabledFor(userId))) return { success: false, error: "Endurance features are not on for this account" };
 
   // Errors name the session by its sport: the run screen says run (docs/plans/run-logger.md, step 2).
@@ -121,6 +128,10 @@ export async function startRide(data: unknown): Promise<ActionResult<RideView>> 
     const plan = sport === "run" ? buildRunPlan(tree.workout, ids, thresholds, mode, { surface }) : buildRidePlan(tree.workout, ids, thresholds, mode);
 
     const now = Date.now();
+    // The run of a brick links to its ride from the planned pair (4.7).
+    const brick = sport === "run" && session.programId !== null ? await brickRideOf(userId, session.programId) : null;
+    // On a treadmill the clock runs after the 5 s count (4.3).
+    const startAt = sport === "run" && mode === "indoor" && countIn ? now + COUNT_IN_MS : now;
     const [active] = await db.select().from(rides).where(and(eq(rides.userId, userId), inArray(rides.status, LIVE)));
     if (active && !endActive && isLive((await settle(db, active, now)).ride.status)) {
       // The same start sent twice at once: the other one stored it after the read above.
@@ -145,9 +156,21 @@ export async function startRide(data: unknown): Promise<ActionResult<RideView>> 
       }
       const [row] = await tx
         .insert(rides)
-        .values({ userId, sessionId, programExerciseId, sport, mode, surface: sport === "run" && mode === "outdoor" ? (surface ?? "road") : null, status: "running", plan, seq: 1, startedAt: new Date(now) })
+        .values({
+          userId,
+          sessionId,
+          programExerciseId,
+          sport,
+          mode,
+          surface: sport === "run" && mode === "outdoor" ? (surface ?? "road") : null,
+          brickRideId: brick?.id ?? null,
+          status: "running",
+          plan,
+          seq: 1,
+          startedAt: new Date(startAt),
+        })
         .returning();
-      await tx.insert(rideEvents).values({ rideId: row.id, seq: 1, clientId, kind: "start", at: new Date(now) });
+      await tx.insert(rideEvents).values({ rideId: row.id, seq: 1, clientId, kind: "start", at: new Date(startAt) });
       // The session's ride mode is the bike's (the bike screen's default); a run keeps its mode on its ride.
       const reopened = reopen ? { isCompleted: false, endTime: null } : {};
       if (sport === "bike" || reopen) {
@@ -289,6 +312,8 @@ export async function sendRideEvent(data: unknown): Promise<ActionResult<RideVie
         .returning();
       const after = await settle(tx, next, now);
       await schedulePushes(tx, userId, after);
+      // A late belt or incline (an offline replay) moves the meters of steps already saved (4.7).
+      if (kind === "belt" || kind === "incline") await rewriteBeltResults(tx, userId, after);
       return { success: true, data: after };
     });
   } catch (e) {
@@ -320,5 +345,31 @@ export async function getRide(data: unknown): Promise<ActionResult<RideView | nu
   } catch {
     console.error("[getRide] failed", { rideId: parsed.data.rideId ?? null });
     return { success: false, error: "Failed to read the ride" };
+  }
+}
+
+const setRideEndReasonSchema = z.object({ rideId: z.number().int().positive(), reason: z.enum(END_REASONS).nullable() });
+
+/**
+ * Why a run ended early (docs/plans/run-logger.md, R15), chosen on its
+ * ended-early screen: Tired, Pain, Time or Other, or none. Only on a run or
+ * ride that ended early.
+ */
+export async function setRideEndReason(data: unknown): Promise<ActionResult<{ reason: (typeof END_REASONS)[number] | null }>> {
+  const auth = await requireSession();
+  const parsed = setRideEndReasonSchema.safeParse(data);
+  if (!parsed.success) return { success: false, error: "Invalid input", fieldErrors: parsed.error.flatten().fieldErrors };
+  const { rideId, reason } = parsed.data;
+  try {
+    const [row] = await db
+      .update(rides)
+      .set({ endReason: reason })
+      .where(and(eq(rides.id, rideId), eq(rides.userId, auth.user.id), eq(rides.status, "ended_early")))
+      .returning({ id: rides.id });
+    if (!row) return { success: false, error: "Not found" };
+    return { success: true, data: { reason } };
+  } catch {
+    console.error("[setRideEndReason] failed", { rideId });
+    return { success: false, error: "Failed to save the reason" };
   }
 }
