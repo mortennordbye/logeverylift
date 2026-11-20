@@ -53,8 +53,11 @@ export default function PrivacyPage() {
           thresholds used), from the guided player or typed in by you or your assistant. For a bike ride the app also keeps
           whether you rode indoors or outdoors, whether you ended before the last step, and per step your average power,
           maximum heart rate, average cadence, average speed, climbing, any change you made to the target, and where each
-          number came from. In ride mode it keeps the ride&apos;s plan as it was at the start and each tap you make (start,
-          pause, skip, an extra minute, a target change, lap, end) with its time. If Garmin is on for your account, a Garmin
+          number came from. For a run in run mode it keeps whether you ran on a treadmill or outdoors, an outdoor
+          run&apos;s surface, the reason you pick if you end it early (tired, pain, time or other), for the run of a brick
+          the ride it follows, and per treadmill step the distance, average speed and incline worked out from the belt
+          speed and incline you set. In ride mode and run mode it keeps the plan as it was at the start and each tap you
+          make (start, pause, skip, an extra minute, a target change, belt speed or incline, lap, end) with its time. If Garmin is on for your account, a Garmin
           bike ride that overlaps your ride fills the step numbers you left empty, and the app keeps what was there before
           so Undo can restore it, and whether you undid it. From your logged sessions and thresholds
           the app also works out a training load and your fitness, fatigue and form; these are calculated when shown,
