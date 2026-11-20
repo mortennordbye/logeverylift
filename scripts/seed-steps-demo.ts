@@ -29,6 +29,8 @@
  *                           mockups (docs/plans/run-logger.md), today.
  *   steps-run-nopace@demo.local   the same run with run LTHR 180 only.
  *   steps-run-nolthr@demo.local   the same run with threshold pace 5:39 only.
+ *   steps-run-pace@demo.local     pace 5:39 and LTHR 180: a run written in
+ *                                 pace, today, for Road and Trail or snow.
  *
  * Dates are relative to the run day. Each run deletes the demo accounts (and
  * with them all their data) and makes them again. No other account is touched.
@@ -51,6 +53,7 @@ const FTP_TEST = "steps-ftp@demo.local";
 const RUN = "steps-run@demo.local";
 const RUN_NOPACE = "steps-run-nopace@demo.local";
 const RUN_NOLTHR = "steps-run-nolthr@demo.local";
+const RUN_PACE = "steps-run-pace@demo.local";
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "postgres"]);
 const DEMO_TZ = "Europe/Oslo";
 
@@ -152,6 +155,26 @@ const BASE_RUN: Workout = {
   ],
 };
 
+/** A run written in pace: easy warm-up, a long tempo, 3 threshold reps, an easy cool-down. */
+const PACE_RUN: Workout = {
+  v: 2,
+  sport: "run",
+  name: "Run · Tempo",
+  steps: [
+    { type: "warmup", end: { type: "time", seconds: 600 }, target: { metric: "pace", anchor: "threshold_pace", low: 75, high: 80 } },
+    { type: "work", end: { type: "time", seconds: 1800 }, target: { metric: "pace", anchor: "threshold_pace", low: 88, high: 92 } },
+    {
+      type: "repeat",
+      count: 3,
+      steps: [
+        { type: "work", end: { type: "time", seconds: 300 }, target: { metric: "pace", anchor: "threshold_pace", low: 98, high: 102 } },
+        { type: "recovery", end: { type: "time", seconds: 120 } },
+      ],
+    },
+    { type: "cooldown", end: { type: "time", seconds: 300 }, target: { metric: "pace", anchor: "threshold_pace", low: 75, high: 80 } },
+  ],
+};
+
 const BRICK_BIKE: Workout = { v: 2, sport: "bike", name: "Brick", steps: [{ type: "work", end: { type: "time", seconds: 3600 }, target: { metric: "power", anchor: "ftp", low: 70, high: 78 } }] };
 const BRICK_RUN: Workout = { v: 2, sport: "run", name: "Brick", steps: [{ type: "work", end: { type: "time", seconds: 1200 }, target: { metric: "pace", anchor: "threshold_pace", low: 88, high: 92 } }] };
 
@@ -174,7 +197,7 @@ async function main() {
 
   type Ctx = { userId: string; writer: "user" };
 
-  const old = await db.select({ id: s.users.id }).from(s.users).where(inArray(s.users.email, [TRI, LIFT, RIDE, NOFTP, HAND, GARMIN, FTP_TEST, RUN, RUN_NOPACE, RUN_NOLTHR]));
+  const old = await db.select({ id: s.users.id }).from(s.users).where(inArray(s.users.email, [TRI, LIFT, RIDE, NOFTP, HAND, GARMIN, FTP_TEST, RUN, RUN_NOPACE, RUN_NOLTHR, RUN_PACE]));
   if (old.length) {
     const ids = old.map((u) => u.id);
     await db.delete(s.planRevisions).where(inArray(s.planRevisions.userId, ids));
@@ -418,20 +441,21 @@ async function main() {
   }
 
   // ── steps-run, steps-run-nopace and steps-run-nolthr ──────────────────────
-  for (const [email, name, kinds] of [
-    [RUN, "Run Demo", ["run_threshold_pace", "lthr_run"]],
-    [RUN_NOPACE, "No Pace Demo", ["lthr_run"]],
-    [RUN_NOLTHR, "No LTHR Demo", ["run_threshold_pace"]],
+  for (const [email, name, kinds, workout] of [
+    [RUN, "Run Demo", ["run_threshold_pace", "lthr_run"], BASE_RUN],
+    [RUN_NOPACE, "No Pace Demo", ["lthr_run"], BASE_RUN],
+    [RUN_NOLTHR, "No LTHR Demo", ["run_threshold_pace"], BASE_RUN],
+    [RUN_PACE, "Pace Demo", ["run_threshold_pace", "lthr_run"], PACE_RUN],
   ] as const) {
     const id = await makeUser(email, name, true);
     const ctx: Ctx = { userId: id, writer: "user" };
     const value = { run_threshold_pace: 1000 / 339, lthr_run: 180 };
     await db.insert(s.athleteThresholds).values(kinds.map((kind) => ({ userId: id, kind, value: value[kind], measuredOn: today, source: "manual" as const })));
-    const programId = await stepProgram(ctx, BASE_RUN.name, [{ exercise: "Run", workout: BASE_RUN }]);
+    const programId = await stepProgram(ctx, workout.name, [{ exercise: "Run", workout }]);
     await weekdayCycle(ctx, "Base · Week 1", [{ dayOfWeek: dow(today), programId }], mondayOf(today));
   }
 
-  console.log(`Demo accounts ready (password "${DEMO_PASSWORD}"): ${TRI}, ${LIFT}, ${RIDE}, ${NOFTP}, ${HAND}, ${GARMIN}, ${FTP_TEST}, ${RUN}, ${RUN_NOPACE}, ${RUN_NOLTHR}`);
+  console.log(`Demo accounts ready (password "${DEMO_PASSWORD}"): ${TRI}, ${LIFT}, ${RIDE}, ${NOFTP}, ${HAND}, ${GARMIN}, ${FTP_TEST}, ${RUN}, ${RUN_NOPACE}, ${RUN_NOLTHR}, ${RUN_PACE}`);
   process.exit(0);
 }
 

@@ -35,11 +35,13 @@ const set: JourneySet = {
     run: { email: "steps-run@demo.local", password: PASSWORD, about: "threshold pace 5:39 /km and run LTHR 180, today's run is 2 Base · Run" },
     nopace: { email: "steps-run-nopace@demo.local", password: PASSWORD, about: "the same run, run LTHR 180 only" },
     nolthr: { email: "steps-run-nolthr@demo.local", password: PASSWORD, about: "the same run, threshold pace 5:39 /km only" },
+    pace: { email: "steps-run-pace@demo.local", password: PASSWORD, about: "threshold pace 5:39 /km and run LTHR 180, today's run is written in pace" },
   },
   journeys: [
     { id: 1, title: "Treadmill and outdoor", summary: "The planned day card, the treadmill plan, the mode sheet, the outdoor plan with the surface choice, Start run and Resume." },
     { id: 2, title: "No threshold pace", summary: "The treadmill plan with no threshold pace: Set pace, and heart rate steps by feel." },
     { id: 3, title: "No LTHR", summary: "The treadmill plan with no run LTHR: effort targets and no zone bar." },
+    { id: 4, title: "A run written in pace, outdoors", summary: "Road: heart rate caps on easy and long steps, pace on the reps. Trail or snow: heart rate on every step." },
   ],
   flows: [
     {
@@ -103,6 +105,23 @@ const set: JourneySet = {
           await openRun(c);
           await mode(c, "Treadmill");
           await c.shot(3, 1, "no-lthr", "No run LTHR: effort targets, no zone bar");
+        });
+      },
+    },
+    {
+      name: "pace",
+      account: "pace",
+      journeys: [4],
+      async run(c: Ctx) {
+        await c.step("J4 road", async () => {
+          await openRun(c);
+          await mode(c, "Outdoor");
+          await c.shot(4, 1, "pace-road", "Road: caps on easy and long steps, pace with heart rate on the reps");
+        });
+        await c.step("J4 trail", async () => {
+          await c.page.getByRole("button", { name: "Trail or snow" }).click();
+          await c.settle(400);
+          await c.shot(4, 2, "pace-trail", "Trail or snow: heart rate on every step, no pace");
         });
       },
     },
