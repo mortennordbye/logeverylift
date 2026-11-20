@@ -31,6 +31,13 @@
  *   steps-run-nolthr@demo.local   the same run with threshold pace 5:39 only.
  *   steps-run-pace@demo.local     pace 5:39 and LTHR 180: a run written in
  *                                 pace, today, for Road and Trail or snow.
+ *   steps-runmode@demo.local      pace 5:39 and LTHR 180: a 5:25 treadmill run
+ *                                 with a strides block, today, for run mode.
+ *   steps-runout@demo.local       the same thresholds: a 400 m rep and 1 min
+ *                                 easy, today, for run mode outdoors.
+ *   steps-brick@demo.local        the same thresholds and FTP 200 W: a short
+ *                                 ride today, then its run linked as a brick.
+ *   steps-brick-live@demo.local   the same brick, for "End ride and start run".
  *
  * Dates are relative to the run day. Each run deletes the demo accounts (and
  * with them all their data) and makes them again. No other account is touched.
@@ -54,6 +61,10 @@ const RUN = "steps-run@demo.local";
 const RUN_NOPACE = "steps-run-nopace@demo.local";
 const RUN_NOLTHR = "steps-run-nolthr@demo.local";
 const RUN_PACE = "steps-run-pace@demo.local";
+const RUN_MODE = "steps-runmode@demo.local";
+const RUN_OUT = "steps-runout@demo.local";
+const BRICK = "steps-brick@demo.local";
+const BRICK_LIVE = "steps-brick-live@demo.local";
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "postgres"]);
 const DEMO_TZ = "Europe/Oslo";
 
@@ -175,6 +186,58 @@ const PACE_RUN: Workout = {
   ],
 };
 
+/** A treadmill run short enough to walk through in run mode: warm-up, steady, 2 strides, cool-down. */
+const MODE_RUN: Workout = {
+  v: 2,
+  sport: "run",
+  name: "Run mode demo",
+  steps: [
+    { type: "warmup", end: { type: "time", seconds: 25 }, target: { metric: "hr", anchor: "lthr", zone: 1 }, belt: 7.5, incline: 1 },
+    { type: "work", end: { type: "time", seconds: 30 }, target: { metric: "hr", anchor: "lthr", zone: 2 } },
+    {
+      type: "repeat",
+      count: 2,
+      steps: [
+        { type: "work", end: { type: "time", seconds: 15 }, target: { metric: "rpe", anchor: "absolute", low: 9, high: 9 }, belt: 13 },
+        { type: "recovery", end: { type: "time", seconds: 20 }, target: { metric: "rpe", anchor: "absolute", low: 2, high: 3 }, belt: 7 },
+      ],
+    },
+    { type: "work", end: { type: "time", seconds: 180 }, target: { metric: "hr", anchor: "lthr", zone: 2 } },
+    { type: "cooldown", end: { type: "time", seconds: 20 }, target: { metric: "rpe", anchor: "absolute", low: 1, high: 2 } },
+  ],
+};
+
+/** One 400 m rep at threshold pace, then 1 min easy: an outdoor distance step that ends on its estimate or by Lap. */
+const REP_RUN: Workout = {
+  v: 2,
+  sport: "run",
+  name: "Run · 400 m",
+  steps: [
+    { type: "work", end: { type: "distance", meters: 400 }, target: { metric: "pace", anchor: "threshold_pace", low: 100, high: 100 } },
+    { type: "recovery", end: { type: "time", seconds: 60 }, target: { metric: "rpe", anchor: "absolute", low: 2, high: 2 } },
+  ],
+};
+
+/** The halves of a short brick: two ride steps, then a run with 10 min on effort. */
+const SHORT_BRICK_RIDE: Workout = {
+  v: 2,
+  sport: "bike",
+  name: "Brick ride",
+  steps: [
+    { type: "work", end: { type: "time", seconds: 300 }, target: { metric: "power", anchor: "ftp", low: 70, high: 78 } },
+    { type: "cooldown", end: { type: "time", seconds: 120 }, target: { metric: "power", anchor: "ftp", zone: 1 } },
+  ],
+};
+const SHORT_BRICK_RUN: Workout = {
+  v: 2,
+  sport: "run",
+  name: "Brick run",
+  steps: [
+    { type: "work", end: { type: "time", seconds: 600 }, target: { metric: "hr", anchor: "lthr", zone: 2 } },
+    { type: "work", end: { type: "time", seconds: 1200 }, target: { metric: "hr", anchor: "lthr", zone: 3 } },
+  ],
+};
+
 const BRICK_BIKE: Workout = { v: 2, sport: "bike", name: "Brick", steps: [{ type: "work", end: { type: "time", seconds: 3600 }, target: { metric: "power", anchor: "ftp", low: 70, high: 78 } }] };
 const BRICK_RUN: Workout = { v: 2, sport: "run", name: "Brick", steps: [{ type: "work", end: { type: "time", seconds: 1200 }, target: { metric: "pace", anchor: "threshold_pace", low: 88, high: 92 } }] };
 
@@ -197,7 +260,7 @@ async function main() {
 
   type Ctx = { userId: string; writer: "user" };
 
-  const old = await db.select({ id: s.users.id }).from(s.users).where(inArray(s.users.email, [TRI, LIFT, RIDE, NOFTP, HAND, GARMIN, FTP_TEST, RUN, RUN_NOPACE, RUN_NOLTHR, RUN_PACE]));
+  const old = await db.select({ id: s.users.id }).from(s.users).where(inArray(s.users.email, [TRI, LIFT, RIDE, NOFTP, HAND, GARMIN, FTP_TEST, RUN, RUN_NOPACE, RUN_NOLTHR, RUN_PACE, RUN_MODE, RUN_OUT, BRICK, BRICK_LIVE]));
   if (old.length) {
     const ids = old.map((u) => u.id);
     await db.delete(s.planRevisions).where(inArray(s.planRevisions.userId, ids));
@@ -446,6 +509,8 @@ async function main() {
     [RUN_NOPACE, "No Pace Demo", ["lthr_run"], BASE_RUN],
     [RUN_NOLTHR, "No LTHR Demo", ["run_threshold_pace"], BASE_RUN],
     [RUN_PACE, "Pace Demo", ["run_threshold_pace", "lthr_run"], PACE_RUN],
+    [RUN_MODE, "Run Mode Demo", ["run_threshold_pace", "lthr_run"], MODE_RUN],
+    [RUN_OUT, "Outdoor Run Demo", ["run_threshold_pace", "lthr_run"], REP_RUN],
   ] as const) {
     const id = await makeUser(email, name, true);
     const ctx: Ctx = { userId: id, writer: "user" };
@@ -455,7 +520,26 @@ async function main() {
     await weekdayCycle(ctx, "Base · Week 1", [{ dayOfWeek: dow(today), programId }], mondayOf(today));
   }
 
-  console.log(`Demo accounts ready (password "${DEMO_PASSWORD}"): ${TRI}, ${LIFT}, ${RIDE}, ${NOFTP}, ${HAND}, ${GARMIN}, ${FTP_TEST}, ${RUN}, ${RUN_NOPACE}, ${RUN_NOLTHR}, ${RUN_PACE}`);
+  // ── steps-brick and steps-brick-live: today's ride, then its run as a brick ─
+  for (const [email, name] of [
+    [BRICK, "Brick Demo"],
+    [BRICK_LIVE, "Brick Live Demo"],
+  ] as const) {
+    const id = await makeUser(email, name, true);
+    const ctx: Ctx = { userId: id, writer: "user" };
+    await db.insert(s.athleteThresholds).values([
+      { userId: id, kind: "run_threshold_pace", value: 1000 / 339, measuredOn: today, source: "manual" },
+      { userId: id, kind: "lthr_run", value: 180, measuredOn: today, source: "manual" },
+      { userId: id, kind: "ftp", value: 200, measuredOn: today, source: "manual" },
+    ]);
+    const rideId = await stepProgram(ctx, SHORT_BRICK_RIDE.name, [{ exercise: "Bike", workout: SHORT_BRICK_RIDE }]);
+    const runId = await stepProgram(ctx, SHORT_BRICK_RUN.name, [{ exercise: "Run", workout: SHORT_BRICK_RUN }]);
+    await weekdayCycle(ctx, "Brick · Week 1", [{ dayOfWeek: dow(today), programId: rideId }], mondayOf(today));
+    const [ridePlanned] = await db.select().from(s.plannedSessions).where(and(eq(s.plannedSessions.userId, id), eq(s.plannedSessions.date, today)));
+    await db.insert(s.plannedSessions).values({ userId: id, cycleId: ridePlanned.cycleId, date: today, position: 2, programId: runId, brickParentId: ridePlanned.id });
+  }
+
+  console.log(`Demo accounts ready (password "${DEMO_PASSWORD}"): ${TRI}, ${LIFT}, ${RIDE}, ${NOFTP}, ${HAND}, ${GARMIN}, ${FTP_TEST}, ${RUN}, ${RUN_NOPACE}, ${RUN_NOLTHR}, ${RUN_PACE}, ${RUN_MODE}, ${RUN_OUT}, ${BRICK}, ${BRICK_LIVE}`);
   process.exit(0);
 }
 
