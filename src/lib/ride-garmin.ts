@@ -192,7 +192,7 @@ export async function rideMatches(userId: string, ride: { startedAt: number; end
     const endMs = startMs + seconds * 1000;
     if (overlaps(startMs, endMs)) out.push({ garminActivityId: r.garminActivityId, segment: 0, typeKey: r.typeKey, startMs, endMs, meters: num(r.meters) });
   }
-  // A part Garmin also lists as an activity of its own is one match, not two.
+  // A part Garmin also lists as an activity of its own is one match, not two; so is the same part in two activities that hold the same file (`out` grows as parts go in).
   for (const p of parts) if (!out.some((o) => Math.abs(o.startMs - p.startMs) <= SAME_PART_MS && Math.abs(o.endMs - p.endMs) <= SAME_PART_MS)) out.push(p);
   return out.sort((a, b) => a.startMs - b.startMs);
 }
@@ -603,7 +603,9 @@ export async function garminFillState(userId: string, ride: Ride, t: RideTimelin
       garminActivityId: m.garminActivityId,
       startMs: m.startMs,
       seconds: Math.round((m.endMs - m.startMs) / 1000),
-      ...(run && { segment: m.segment, meters: m.meters }),
+      // The part of a multisport file, which Pick and Fill from Garmin send back; a one-sport ride's candidate stays as it was.
+      ...((run || m.segment !== 0) && { segment: m.segment }),
+      ...(run && { meters: m.meters }),
     }));
   if (active) {
     const c = matches.find((m) => m.garminActivityId === active.garminActivityId && m.segment === active.segment) ?? null;

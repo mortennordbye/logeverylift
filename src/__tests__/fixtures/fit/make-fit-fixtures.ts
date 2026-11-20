@@ -9,6 +9,8 @@
  * - outdoor.fit: a road run with GPS and a lap at each step: 300 s, 1000 m in
  *   310 s, 240 s, with a 20 m climb in the 1000 m.
  * - multisport.fit: a ride of 600 s, a 72 s transition and the same run.
+ * - run-bike.fit: the run first, a 60 s transition, then a ride of 600 s
+ *   (the ride is the file's third part, segment 2).
  */
 import { Encoder, Profile } from "@garmin/fitsdk";
 import { writeFileSync } from "node:fs";
@@ -17,6 +19,7 @@ import { join } from "node:path";
 export const TREADMILL_START = new Date("2026-11-17T16:00:00Z");
 export const OUTDOOR_START = new Date("2026-11-18T16:00:00Z");
 export const MULTISPORT_START = new Date("2026-11-19T09:00:00Z");
+export const RUN_BIKE_START = new Date("2026-11-16T09:00:00Z");
 
 type Sample = { hr: number; cadence: number; speed: number; power?: number; climb?: number };
 type Part = { sport: string; subSport: string; seconds: number; laps: number[]; sample: (s: number) => Sample | null; gps: boolean };
@@ -130,10 +133,19 @@ export function multisportFit(): Buffer {
   ]);
 }
 
+export function runBikeFit(): Buffer {
+  return encode(RUN_BIKE_START, [
+    { sport: "running", subSport: "street", ...outdoorRun, laps: [850] },
+    { sport: "transition", subSport: "generic", seconds: 60, laps: [60], gps: true, sample: () => ({ hr: 140, cadence: 0, speed: 1 }) },
+    { sport: "cycling", subSport: "road", seconds: 600, laps: [600], gps: true, sample: (s) => ({ hr: 135 + wobble(s, 7), cadence: 88, speed: 8, power: 150 + wobble(s, 21) }) },
+  ]);
+}
+
 // Run as a script: write the files next to this one.
 if (process.argv[1]?.endsWith("make-fit-fixtures.ts")) {
   const dir = import.meta.dirname;
   writeFileSync(join(dir, "treadmill.fit"), treadmillFit());
   writeFileSync(join(dir, "outdoor.fit"), outdoorFit());
   writeFileSync(join(dir, "multisport.fit"), multisportFit());
+  writeFileSync(join(dir, "run-bike.fit"), runBikeFit());
 }

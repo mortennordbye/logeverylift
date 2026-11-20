@@ -15,7 +15,7 @@ import { getRide, sendRideEvent, startRide } from "@/lib/actions/rides";
 import { logWorkoutSet } from "@/lib/actions/workout-sets";
 import { parseFit } from "@/lib/garmin/fit";
 import { RunLog, fetchActivities } from "@/lib/garmin/sync";
-import { fillRidesFromGarmin } from "@/lib/ride-garmin";
+import { fillRidesFromGarmin, rideGarminView } from "@/lib/ride-garmin";
 import { runGarminView } from "@/lib/run-garmin";
 import { runAfterView } from "@/lib/run-exercise-view";
 import { runReport } from "@/lib/run-report";
@@ -25,7 +25,7 @@ import { and, eq } from "drizzle-orm";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MULTISPORT_START, OUTDOOR_START, TREADMILL_START } from "../fixtures/fit/make-fit-fixtures";
+import { MULTISPORT_START, OUTDOOR_START, RUN_BIKE_START, TREADMILL_START } from "../fixtures/fit/make-fit-fixtures";
 import { createExercise, createSession, createStepProgram, createUser } from "./factories";
 import { asUser } from "./setup";
 
@@ -433,5 +433,32 @@ describe("a multisport file (integration 4)", () => {
     const after = await runAfterView(me, run.programExerciseId);
     expect(after?.brick).toEqual({ rideSeconds: 600, t2Seconds: 72 });
     expect((await runGarminView(me, run.rideId)).t2Seconds).toBe(72);
+  });
+});
+
+describe("step 7 review", () => {
+  it("a ride filled from the bike part of a multisport file (segment 2) fills again after Undo, with the candidate the summary shows", async () => {
+    const ride = await runThrough(ride600, bikeEx, "outdoor", at(RUN_BIKE_START, 910));
+    await storeFit(901, "run-bike", "multi_sport");
+    later(RUN_BIKE_START, 3000);
+    expect(await fillRidesFromGarmin(me)).toBe(1);
+    ok(await undoRideGarminFill({ rideId: ride.rideId }));
+    const view = await rideGarminView(me, ride.rideId);
+    expect(view.state).toBe("refill");
+    const c = view.candidates[0];
+    expect(c.segment).toBe(2);
+    // As GarminFill sends it.
+    const r = await pickRideGarminActivity({ rideId: ride.rideId, garminActivityId: c.garminActivityId, ...(c.segment !== undefined && { segment: c.segment }) });
+    expect(r).toEqual({ success: true, data: null });
+    expect((await rowsOf(ride.sessionId)).every((x) => x.avgPower !== null)).toBe(true);
+  });
+
+  it("two activities that hold the same multisport file are one match, not a Pick", async () => {
+    const run = await runThrough(kmRun, runEx, "outdoor", at(MULTISPORT_START, 690));
+    await storeFit(801, "multisport", "multi_sport");
+    await storeFit(802, "multisport", "multi_sport");
+    later(MULTISPORT_START, 3000);
+    expect(await fillRidesFromGarmin(me)).toBe(1);
+    expect((await runGarminView(me, run.rideId)).state).toBe("filled");
   });
 });
