@@ -14,7 +14,7 @@ import { settle } from "@/lib/ride-settle";
 import { getUserSettings, userToday } from "@/lib/user-settings";
 import { localDateStr } from "@/lib/utils/user-date";
 import { toDateStr } from "@/lib/utils/cycle-position";
-import { rideTimeline } from "@/lib/utils/ride-timeline";
+import { rideTimeline, type RideTimeline } from "@/lib/utils/ride-timeline";
 import { and, asc, desc, eq, gt, inArray, isNotNull, or } from "drizzle-orm";
 
 /** A ride counts for today's brick when it started this recently (as RIDE_RECENT_MS). */
@@ -152,8 +152,12 @@ export async function brickSummaryOf(userId: string, brickRideId: number, runSta
   if (!ride) return null;
   const v = await settle(db, ride, Date.now());
   const t = rideTimeline(v.plan, v.events, v.serverNow, { heartbeatAt: v.ride.heartbeatAt });
+  return brickTimes(t, v.ride.endedAt, runStartedAt);
+}
+
+/** The brick ride's run time and T2 (4.7) from its timeline and end. */
+export function brickTimes(t: Pick<RideTimeline, "steps" | "autoEnded">, rideEndedAt: number | null, runStartedAt: number): { rideSeconds: number; t2Seconds: number | null } {
   const rideSeconds = t.steps.reduce((a, s) => a + s.activeSeconds, 0);
-  const endedAt = v.ride.endedAt;
-  const gap = endedAt !== null ? runStartedAt - endedAt : null;
+  const gap = rideEndedAt !== null ? runStartedAt - rideEndedAt : null;
   return { rideSeconds, t2Seconds: gap !== null && gap >= 0 && gap <= T2_MAX_MS && !t.autoEnded ? Math.round(gap / 1000) : null };
 }

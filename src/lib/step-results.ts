@@ -80,8 +80,14 @@ export type StepResultsView = {
   source: "player" | "manual" | "assistant";
   workout: Workout;
   anchors: ThresholdValues;
-  /** `sources`: who wrote each result field (typed, clock, garmin, assistant); null on steps logged without. */
-  rows: (PlannedRow & { result: StepResult | null; sources: Partial<Record<string, ResultSource>> | null; compare: StepCompare })[];
+  /** `sources`: who wrote each result field (typed, clock, belt, garmin, assistant); null on steps logged without. */
+  rows: (PlannedRow & {
+    /** A treadmill run's step: the belt in km/h and the incline in % frozen at its start (null: by feel, or the incline before carries on). */
+    plannedBelt?: { kmh: number | null; inclinePercent: number | null };
+    result: StepResult | null;
+    sources: Partial<Record<string, ResultSource>> | null;
+    compare: StepCompare;
+  })[];
   sessionRpe: number | null;
   durationSeconds: number | null;
   distanceMeters: number | null;

@@ -88,6 +88,10 @@ async function stepRows(programExerciseIds: number[]) {
     .orderBy(asc(programSets.setNumber), asc(programSets.id));
 }
 
+/** Belt and incline go only to the steps of a treadmill run from run mode (docs/plans/run-logger.md, 4.7). */
+const TREADMILL_ONLY = "beltKmh and inclinePercent are only for the steps of a treadmill run from run mode";
+const beltSent = (s: StepResult) => s.beltKmh !== undefined || s.inclinePercent !== undefined;
+
 /** Results that fit the play steps: known keys, each once. */
 function checkKeys(play: ProgramPlay[], input: unknown): StepResult[] {
   const r = stepResultsSchema.safeParse(input);
@@ -98,6 +102,7 @@ function checkKeys(play: ProgramPlay[], input: unknown): StepResult[] {
   r.data.forEach((s, i) => {
     if (!keys.has(s.key)) errors.push({ path: `${i}.key`, message: `no step "${s.key}" in this session` });
     else if (seen.has(s.key)) errors.push({ path: `${i}.key`, message: `step "${s.key}" is given twice` });
+    if (beltSent(s)) errors.push({ path: `${i}.beltKmh`, message: `${TREADMILL_ONLY}: send the run's workoutSessionId (get_ride gives it)` });
     seen.add(s.key);
   });
   if (errors.length) throw new StepResultsError(errors);
@@ -149,8 +154,8 @@ function stepEntry(
   const rpe = r.rpe ?? sessionRpe ?? null;
   const sent = sentStep(r, sessionRpe);
   const sources = Object.fromEntries(RESULT_FIELDS.filter((f) => sent[f] !== undefined).map((f) => [f, "assistant" as const]));
-  // The ride numbers only when given: a save that does not send one leaves the stored value.
-  const rideNumbers = Object.fromEntries((["avgHr", "avgPower", "maxHr", "avgCadence", "avgSpeed", "climbM"] as const).filter((f) => r[f] !== undefined).map((f) => [f, r[f]]));
+  // The ride numbers only when given: a save that does not send one leaves the stored value. A belt gives the speed.
+  const rideNumbers = Object.fromEntries((["avgHr", "avgPower", "maxHr", "avgCadence", "avgSpeed", "climbM"] as const).filter((f) => sent[f] !== undefined).map((f) => [f, sent[f]]));
   return {
     key,
     sent: given ? sent : null,
@@ -158,7 +163,7 @@ function stepEntry(
       exerciseId: row.exerciseId,
       setNumber: row.setNumber,
       ...(r.activeSeconds !== undefined && r.activeSeconds > 0 && { durationSeconds: r.activeSeconds }),
-      ...(r.distanceMeters !== undefined && r.distanceMeters > 0 && { distanceMeters: Math.round(r.distanceMeters) }),
+      ...(sent.distanceMeters !== undefined && { distanceMeters: sent.distanceMeters }),
       // The session RPE goes on each step without its own, so the
       // time-weighted RPE of the load stays the session's.
       ...(rpe != null && done && { rpe }),
@@ -171,6 +176,7 @@ function stepEntry(
         extendedSeconds: r.extendedSeconds ?? null,
         measuredValue: r.value ?? null,
         ...rideNumbers,
+        ...(sent.inclinePercent !== undefined && { inclinePercent: sent.inclinePercent }),
         ...(source === "assistant" && Object.keys(sources).length > 0 && { sources }),
         plannedStep: snapshot,
       },
@@ -188,11 +194,13 @@ async function rideEntries(plan: RidePlan, programExerciseId: number, input: Pic
   if (!parsed.success) throw new StepResultsError(parsed.error.issues.map((i) => ({ path: i.path.join("."), message: i.message })));
   const steps = [...plan.steps, ...(plan.dropped ?? [])];
   const byKey = new Map(steps.map((s) => [s.key, s]));
+  const treadmill = planSport(plan) === "run" && plan.mode === "indoor";
   const seen = new Set<string>();
   const errors: { path: string; message: string }[] = [];
   parsed.data.forEach((s, i) => {
     if (!byKey.has(s.key)) errors.push({ path: `${i}.key`, message: `no step "${s.key}" in this ride (get_ride lists its keys)` });
     else if (seen.has(s.key)) errors.push({ path: `${i}.key`, message: `step "${s.key}" is given twice` });
+    if (beltSent(s) && !treadmill) errors.push({ path: `${i}.beltKmh`, message: `${TREADMILL_ONLY}; this is ${planSport(plan) === "run" ? "an outdoor run" : "a ride"}` });
     seen.add(s.key);
   });
   if (errors.length) throw new StepResultsError(errors);
@@ -293,6 +301,7 @@ async function upsertAssistantSets(tx: Tx, sessionId: number, entries: StepEntry
         avgSpeed: row.avgSpeed,
         climbM: row.climbM,
         measuredValue: row.measuredValue,
+        inclinePercent: row.inclinePercent,
         rpe: row.rpe,
         notes: row.notes,
         stepStatus: row.stepStatus,
@@ -610,6 +619,8 @@ async function stepResultsOf(
     const planIndex = new Map(planSteps.map((st, i) => [st.programSetId, i]));
     const rideKey = (k: string) => (rideList.length > 1 ? `e${e + 1}:${k}` : k);
     const rideRows = ride !== undefined;
+    // A treadmill run's belt (docs/plans/run-logger.md, step 5): its speed in km/h, planned and done.
+    const treadmill = ride?.sport === "run" && ridePlan?.mode === "indoor";
     const mine = logged.filter((l) => l.set.programExerciseId === pw.programExerciseId);
     if (rideRows) mine.sort((a, b) => (planIndex.get(a.set.programSetId ?? -1) ?? 1e9) - (planIndex.get(b.set.programSetId ?? -1) ?? 1e9));
     // Keys follow today's plan when it still has the same steps, so a later
@@ -635,11 +646,20 @@ async function stepResultsOf(
             ...(set.avgCadence != null && { avgCadence: set.avgCadence }),
             ...(set.avgSpeed != null && { avgSpeed: set.avgSpeed }),
             ...(set.climbM != null && { climbM: set.climbM }),
+            ...(treadmill && set.avgSpeed != null && { beltKmh: Math.round(set.avgSpeed * 36) / 10 }),
+            ...(set.inclinePercent != null && { inclinePercent: set.inclinePercent }),
             ...(set.rpe != null && { rpe: set.rpe }),
             ...(set.notes && { notes: set.notes }),
           }
         : null;
-      return { ...p, result, sources: set.sources ?? null, compare: compareStep(p, result ?? undefined) };
+      const run = treadmill && inPlan ? (inPlan as RidePlan["steps"][number]).run : undefined;
+      return {
+        ...p,
+        ...(run && { plannedBelt: { kmh: run.belt === null ? null : run.belt / 10, inclinePercent: run.incline === null ? null : run.incline / 10 } }),
+        result,
+        sources: set.sources ?? null,
+        compare: compareStep(p, result ?? undefined),
+      };
     });
   });
   const rpes = logged.map((l) => l.set.rpe).filter((r): r is number => r != null);
