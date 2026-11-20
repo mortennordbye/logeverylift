@@ -1,0 +1,588 @@
+# Run logger
+
+Status: written on 2026-11-20 and waiting for the owner's yes. Nothing is built.
+Plan page with the pictures: https://claude.ai/artifact/A8QRyLwG2PviN3WBauvDtu.
+A copy of the page is in the repo: `docs/design/run-logger.html` (open it in a browser).
+This brief is the same plan in text. It is written so that an agent with no conversation history
+can build it from start to end with **no input from the owner**. Every decision is made (section 2).
+Four reviews (code, running coach, screens, logic) checked version 1 of the plan on 2026-11-20.
+Their findings are in this brief. Names marked *new* do not exist yet.
+
+This is the run version of [`bike-ride-logger.md`](bike-ride-logger.md), which shipped in PR #256.
+Read that brief first (sections 2 to 5 and 9). This brief uses its words (ride, event, timeline,
+fill) and changes only what a run needs.
+
+## 0. How to work on this brief
+
+1. Read `CLAUDE.md` (repo) and the owner's global rules first. They apply in full: a live status
+   page, screenshots of each step next to the mockup, no trailers on commits, STE-style prose, no
+   colons or em dashes in UI copy, monochrome plus one accent.
+2. Build the steps in section 6 in order, 0 to 8, on one branch `feat/run-logger`, the same way
+   as the bike build. One PR at the end, green CI, squash merge, deploy check. If the owner asks for
+   one PR per step at the start of the build, do that.
+3. Do not ask the owner. When this brief does not settle a detail, pick the option closest to the
+   rules in section 4 and the mockups, write it in section 10 ("Choices made during the build") in
+   the same commit, and go on.
+4. Stop only for the things the owner's global rules name: something that cannot be undone outside
+   the plan (the step 1 data move is in the plan and approved), secret values, or prod data other
+   than what step 1 says.
+5. **Never deploy while the owner trains.** Before the merge, check prod for an open workout
+   session of the owner with sets logged in the last 2 hours. If one is open, wait.
+6. Run mode is a critical flow (timers, set logging). Steps 3, 4 and 6 each get `make e2e`, the
+   CLAUDE.md smoke pass and a `journey-review` at 390 and 320 px.
+7. Changes to stored health data (steps 0, 4, 7, 8) go through the `privacy-compliance` skill and
+   `docs/privacy/data-inventory.md`.
+8. **Keep the bike the same.** Every change to a shared file keeps bike behaviour bit for bit. Step
+   0 starts with a golden test that fixes today's bike timeline output (section 7).
+9. When a step is done, set its row in section 6 to done, and update `docs/plans/README.md`.
+
+## 1. Goal and why
+
+The owner trains for a half-distance triathlon (2027-08-29). In winter, most runs are on a
+treadmill: 8 of the last 10 Garmin runs up to 2026-11-18 were "Treadmill Running". Today:
+
+- The owner's run programs (93, 97, 102, 106, 95, 104) hold plain sets. "2 Base · Run" is one set,
+  4500 s, heart rate zone 2, rest 0. The strides ("6 x 20 s strides") are only in the exercise
+  note. "Brick run · 40 min" is two plain sets (600 s zone 2, 1800 s zone 3).
+- For a run, play only opens `LogRunModal`, which starts at `defaultDistanceM` (5000 m for a run,
+  in `DISCIPLINE_CONFIG`). For the 75 min set that shows 15:00 /km. No clock runs.
+- The guided player (`GuidedPlayer`) opens only from `/planned/[id]/play` for a planned session of
+  today. It keeps its state in the phone's browser storage, saves nothing per step, sends no alert
+  and gets no Garmin fill.
+- Garmin says "Treadmill pace is not measured" for a treadmill run, so the watch's distance is a
+  guess. The belt speed that the runner sets on the machine is the best pace there is.
+- Wrist running power reads about 295 W on the treadmill (HR 135) and about 375 W outdoors
+  (HR 153). It does not compare between modes.
+
+Goal: open the run exercise in a program and see the run as a coach would plan it: pace and heart
+rate profile, every step with its target, the belt speed to set on a treadmill. Tap Start run. The
+phone runs the run step by step, cues each step, records belt changes with one tap, and saves each
+step when it ends. After the run, Garmin fills heart rate and cadence (and the outdoor distance), and
+the app shows planned against done with the numbers a runner uses. A 30 min test sets the threshold
+pace and LTHR. The AI assistant can write every part of a run over MCP. The run lives in the run
+exercise of the program. The app guides and logs, and Garmin records.
+
+## 2. Decisions (all made)
+
+| # | Decision |
+|---|---|
+| R1 | Run only. Swim keeps today's steps and player and gets this in a later change. |
+| R2 | Everything here is for users with endurance features on (`enduranceEnabledFor`). Other users keep today's run screen, with only the 5 km guess removed. |
+| R3 | Two modes, Treadmill and Outdoor. Stored as the existing `indoor` and `outdoor` values (no data move); a run shows `indoor` as "Treadmill". The mode is fixed when the run starts. |
+| R4 | Mode default: the mode of the last run of this program exercise, else the mode of most of the user's runs in the last 4 weeks (from `rides` of sport run, then Garmin run types for users with Garmin access), else Treadmill from November to March and Outdoor from April to October. After the run, Garmin corrects it only as section 4.8 says. |
+| R5 | On a treadmill the belt is the pace. Each step starts at its frozen belt speed; a tap on belt or incline stores an event with the new absolute value. Distance and pace come from the events. Garmin distance is a backup. |
+| R6 | Km only: km/h, min/km, km. mph and min/mi go to the backlog. (Owner, 2026-11-20.) |
+| R7 | Push stays off in prod: the VAPID keys are not set in this build. Run alert code ships and works where keys exist. Outdoor run mode says so before the start (section 5). (Owner, 2026-11-20.) |
+| R8 | The 30 min run threshold test is in this build (step 8). (Owner, 2026-11-20.) |
+| R9 | An outdoor distance step ends on the time that its target pace gives. Lap ends it early, +1 min extends it. (Owner, 2026-11-20.) |
+| R10 | One table: `rides` gets a `sport` column. No rename, no second table. |
+| R11 | No run power as a target or as a number. No live sensors (Safari has no Bluetooth; GPS stops when the screen locks). No sending workouts to the watch. |
+| R12 | Nothing to type during a run. One results table after it, filled from the belt, with effort once. |
+| R13 | Easy, long, warm-up and cool-down heart rate targets are caps. Under the cap is a pass. |
+| R14 | Outdoor mode has a surface choice before start: Road (default) or Trail or snow. On trail or snow, pace targets show as heart rate or effort, and the load does not use pace. |
+| R15 | End run asks for an optional reason (Tired, Pain, Time, Other). Pain links to the injury log. |
+| R16 | The old player address `/planned/[id]/play` opens run mode for a run-only program. Swim and programs with more than one sport keep the old player. A brick is two sessions, so each half opens its own mode. |
+| R17 | After step 1 is live, the AI rewrites the owner's run programs through the MCP tools (section 6, step 1), so each change is a revision the owner can restore. |
+
+## 3. The ground (read before step 0)
+
+The four reviews of 2026-11-20 opened each of these files. Line numbers are as of commit `1c3598f6`.
+
+| Area | Where |
+|---|---|
+| Exercise screen | `src/app/programs/[id]/workout/exercises/[programExerciseId]/page.tsx` (the bike branch is the `discipline === "bike"` check), `src/components/features/WorkoutSetsClient.tsx`, `src/components/features/WorkoutSetsList.tsx` (`handlePlayClick`), `src/components/features/LogRunModal.tsx`, `src/components/features/WorkoutExerciseList.tsx` (the run ring), `src/app/programs/[id]/workout/page.tsx` (`opensExercise` is bike only) |
+| Bike parts to reuse | `src/components/features/bike/` (`RideMode`, `BikeExercise`, `RideResults`, `RideSummary`, `StepAlerts`, `useRide`) |
+| Ride server | `src/db/schema/rides.ts`, `src/lib/actions/rides.ts` (`startRide` refuses a non-bike slot), `src/lib/ride-settle.ts`, `src/lib/ride-plan-db.ts` (`sessionRide`, `rideStepSnapshot`) |
+| Timeline | `src/lib/utils/ride-timeline.ts` (`buildRidePlan`, `rideTimeline`, `OPEN_STEP_SPEED_MS`) |
+| Step model | `src/lib/utils/workout-steps.ts` (`TARGET_RANGE`, `SPORTS_FOR`, `RUN_HR_ZONES`, `estimateWorkout`), `src/lib/utils/program-steps.ts` (`plainSetsToWorkout`, `workoutToRows`, `buildWorkout`), `src/lib/program-steps-db.ts` (`replaceExerciseSteps`, `plainSetsToStepRows`, `bikeSlot`, `bikeRestsToSteps`, `settleStepRows`) |
+| One-time move | `src/lib/bike-sets-to-steps.ts` (`migrateBikeSetsToSteps`), called from `src/instrumentation.ts` and `src/lib/actions/admin.ts` |
+| Cycle sync | `src/lib/periodization-sync.ts` (rest steps for bike only) |
+| Load | `src/lib/utils/training-load.ts` (`runPaceLoad`, `plannedLoad`, `pairWithGarmin`), `src/lib/training-load.ts` (`appSessionLoads`) |
+| Garmin | `src/lib/ride-garmin.ts` (`fillRidesFromGarmin`, `rideMatches`, `modeOfActivity`), `src/lib/garmin/fit.ts` (`parseFit`), `src/lib/garmin/analytics/sport.ts` (`sportOf`, `isIndoor`), `src/lib/garmin/charts/activity.ts` (run cadence doubled for display) |
+| Push | `src/lib/utils/ride-pushes.ts`, `src/lib/push.ts` |
+| Thresholds | `src/db/schema/athlete-profile.ts` (`THRESHOLD_KINDS`, protocol `run_30min`), `src/lib/utils/thresholds.ts` |
+| Brick | `src/db/schema/planned-sessions.ts` (`brickParentId`) |
+| MCP | `src/lib/mcp/tools/programs.ts` (`edit_program_exercise`), `src/lib/mcp/tools/endurance-app.ts` (`get_ride`), `docs/mcp/workout-steps.md` |
+| Set editing (5 km default) | `src/lib/utils/discipline.ts`, `src/components/features/NewSetView.tsx`, `src/components/features/SetEditView.tsx` |
+| Privacy | `docs/privacy/data-inventory.md` (rides and the event queue are described as bike only) |
+
+Facts the reviews found that the design depends on (each was checked at the line):
+
+- `program_sets.incline_percent` and `workout_sets.incline_percent` are integers
+  (`src/db/schema/programs.ts:202`, `src/db/schema/workout-sets.ts:109`). A 0.5% step does not fit.
+- Every step write sets incline to null (`src/lib/program-steps-db.ts:112` and `:217`), and the step
+  schema has no incline key. A treadmill incline is lost today when a set becomes a step.
+- `rideStepSnapshot` writes `sport: "bike"` (`src/lib/ride-plan-db.ts:45`), and so does the
+  assistant's step result save (`src/lib/program-step-results.ts:210`). A run step would get a bike
+  snapshot.
+- `sessionRide` takes the latest ride of a session without checking the exercise
+  (`src/lib/ride-plan-db.ts:19`). A program with a bike and a run exercise would mix them.
+- `ride_events.value` is an integer (`src/db/schema/rides.ts:71`), and one active ride per user is a
+  unique index (`src/db/schema/rides.ts:50`).
+- `runPaceLoad` returns null on any incline (`src/lib/utils/training-load.ts:62`), so every 1%
+  treadmill run falls back to effort load today.
+- `parseFit` keeps only the first sport message (`src/lib/garmin/fit.ts:125`), so a multisport file
+  is read as one activity.
+- Garmin's FIT cadence for a run is per foot. The Garmin charts double it
+  (`src/lib/garmin/charts/activity.ts:196`). The fill must double it too.
+- `plainSetsToWorkout` ends a set that has both time and distance on the distance
+  (`src/lib/utils/program-steps.ts:384`), and makes a zone 2 set a `work` step.
+- The cycle sync puts the phase rest on a rest step only for bike
+  (`src/lib/periodization-sync.ts:352`).
+- Pace targets are already stored as % of threshold *speed*, 50 to 130, higher is faster
+  (`src/lib/utils/workout-steps.ts:57`). Keep that. Run heart rate zones are Friel's
+  (`src/lib/utils/workout-steps.ts:371`): Z1 under 85%, Z2 85-89%, Z3 90-94%, Z4 95-99%, Z5 100% of
+  run LTHR and more.
+
+## 4. Rules
+
+### 4.1 Modes
+
+| | Treadmill | Outdoor |
+|---|---|---|
+| Main target | Belt speed (km/h) and incline | Pace, heart rate or effort (4.2) |
+| Second line | Heart rate, pace in min/km | Heart rate or pace, whichever is not the main one |
+| Steps end on | Time, or distance from the belt | Time, distance as an estimated time (R9), or a lap |
+| Controls | Belt −/+ 0.5 km/h, incline −/+ 0.5%, +1 min, hold to skip, pause | +1 min, hold to skip, pause, Lap |
+| Results per step | Belt speed, incline, distance and pace from the belt, avg and max HR, cadence | Time, distance, pace, avg and max HR, cadence, climbing |
+
+Both modes have the same steps. A mode changes the target shown and how a distance step ends, never
+the steps.
+
+### 4.2 Targets
+
+**Belt speed from a pace target:** km/h = 3.6 × threshold speed (m/s) × pct / 100, at the midpoint
+of the range, rounded to 0.5 km/h. For the owner, threshold pace 5:39 /km is 10.62 km/h.
+
+**Run pace zones** (*new* table next to `RUN_HR_ZONES`, Friel, as % of threshold pace *time*; a
+higher number is slower):
+
+| Zone | % of threshold pace time | Owner (5:39 /km) |
+|---|---|---|
+| Z1 | over 129% | slower than 7:17 |
+| Z2 | 114-129% | 6:26-7:17 |
+| Z3 | 106-113% | 5:59-6:26 |
+| Z4 | 99-105% | 5:35-5:59 |
+| Z5a | 97-100% | 5:28-5:35 |
+| Z5b | 90-96% | 5:05-5:28 |
+| Z5c | under 90% | faster than 5:05 |
+
+**Frozen belt of each treadmill step**, the first that exists:
+
+1. A belt speed written on the step (*new* step field, treadmill only).
+2. The pace target's midpoint.
+3. For a heart rate target: the median belt of the user's done treadmill steps in the last 6 weeks
+   whose Garmin average heart rate was in that zone, when there are 2 or more of 10 min or longer.
+4. For a heart rate target: the slow end of the Friel pace zone of the same number (Z2 gives
+   7:17 /km, 8.2 km/h). The cue says "Adjust after 6 min to hold HR 153-160".
+5. Effort: effort 1 to 2 is 5.5 km/h ("walk or easy jog"), effort 3 to 4 is the Z1 pace, effort 5 to 6
+   the Z2 pace, effort 7 the Z3 pace, effort 8 the Z4 pace, effort 9 to 10 the Z5b pace.
+6. None (no threshold pace and no history): the step shows "Set the belt by feel" and its belt is
+   null.
+
+The belt never carries over from a work step into a recovery. Incline carries over unless the step
+has its own incline.
+
+**Outdoor target when the AI wrote none** (rules key on the target zone, not on the step type,
+because `plainSetsToWorkout` makes a zone 2 set a work step):
+
+| Step | Outdoor target |
+|---|---|
+| Warm-up, cool-down, heart rate zone 1 or 2, any step of 20 min or more at zone 3 or less | Heart rate cap at the top of the zone (R13) |
+| Pace or zone 3 to 5 work of 8 min or more | Pace range, heart rate as information |
+| Pace or zone 3 to 5 work of 3 to 8 min | Pace range. Heart rate shows but is judged only on the last half of the step (cardiac lag) |
+| Under 3 min, strides, hill repeats | Effort ("Fast and relaxed" for strides, "Hard" for hill repeats), with the climb in the note |
+| Walk breaks, recovery | Effort 2, "Easy jog or walk" |
+| Surface Trail or snow (R14) | Every pace target becomes the heart rate range of the same zone, else effort |
+
+Without a run LTHR, heart rate targets become effort targets (Z1 2, Z2 3, Z3 5, Z4 7, Z5 9).
+Without a threshold pace, pace targets show in % and "Set your threshold pace".
+
+**Brick run (the run of a linked brick):** for its first 10 min, the main target is effort 4 to 5
+with the cue "Short quick steps", and the second line is a cap at the top of Z2. After that the
+written target applies. Heart rate is 5 to 10 bpm higher off the bike; this is normal.
+
+**Judging a step (summary arrows):** a cap passes when the step is at or under it; it shows ↑ when
+the step is more than 10% of its time over the cap. A range shows ↓ or ↑ when the step's value is
+outside it. A heart rate on a step under 8 min is not judged.
+
+### 4.3 Run life
+
+The bike rules of `bike-ride-logger.md` 4.3 apply, with these changes:
+
+- `rides.sport` (*new*, `text NOT NULL DEFAULT 'bike'`). Every reader of `rides` filters or branches
+  by sport: `getRide`, the fill loop, `rideMatches`, `appSessionLoads`, `get_ride`, the ride
+  numbers, push text, the `log_step_results` ride check, the summary routes.
+- A ride is keyed by session **and** program exercise (fix `sessionRide`).
+- The frozen plan (*new* plan version with `sport`) gives each step an end rule: `time`, `belt_distance`
+  (treadmill distance step), `estimate` (outdoor distance step, R9) or `lap`, with its seconds and
+  meters, and for a treadmill step its belt and incline. `rideTimeline` reads only these. A later
+  Garmin mode correction changes labels and fill fields, never the timeline.
+- Auto end uses run speeds: a `belt_distance` step with a null belt and an `estimate` step with no
+  pace count at 6 km/h. Add run constants; do not use `OPEN_STEP_SPEED_MS` (25 km/h, a bike speed).
+- An `estimate` step: its seconds come from its pace target, else from the user's recent easy pace
+  (median pace of done Z1 to Z2 outdoor steps in 6 weeks) for a heart rate step, else the Z2 pace,
+  else it becomes a `lap` step. The screen shows "1 km · about 4:50".
+- Start on a treadmill shows a 5 s "Step on · Set belt 7.5 km/h" count before the clock runs.
+- Only one session runs per user (bike or run). "End ride and start run" is one action (*new*
+  `startRide` option to end the active one): it settles the ride, sends its end, and starts the run
+  in one transaction. The client sends its queued ride events first; when it cannot, Start run waits.
+- Once a later session of the user has started, the server refuses any event that would make an
+  earlier session live again ("The ride has ended"), and the queue drops it.
+- End run while paused or before the last step asks for an optional reason (R15). The run is
+  `ended_early` as for the bike; a reason Pain shows "Log an injury" which opens the existing
+  injury entry.
+
+### 4.4 Belt and incline events
+
+- *new* event kinds `belt` and `incline` with **absolute** values in tenths: belt is km/h × 10
+  (80 is 8.0 km/h), incline is % × 10 (10 is 1.0%). Clamp belt to 0 to 250, incline to −30 to 150.
+  `nudge` stays bike only.
+- Each event carries the step key the client saw. When the timeline places it in another step (an
+  offline replay clamped to a later time), it is ignored.
+- Taps in a burst (within 2 s) send one event with the last value. The toast says "Belt 9.5 km/h ·
+  Undo" for 5 s; Undo sends the value from before the burst, and shows only while the same step runs.
+- Distance builds from the belt over active time only. While paused, no distance builds. A belt
+  event while paused stores the value, which counts from resume. Resume on a treadmill shows "Set
+  belt 8.0 km/h".
+- A `belt_distance` step ends when its distance is reached; each belt event moves its end and
+  rewrites the push rows. +1 min is hidden on it.
+- A cue card "Speed up to 13.0 km/h" (or "Slow down to 8.0 km/h") shows 10 s before any step whose
+  frozen belt differs from the current belt by 1 km/h or more.
+- When a run has no belt events, the summary says "Distance from the plan · no belt changes".
+
+### 4.5 Short-step blocks (strides)
+
+- A block is a repeat whose work step is under 60 s.
+- Screen: "Stride 3 of 6", the step clock, a row of dots, the belt target. Recovery: "Easy · 1:40 ·
+  Set belt 8.0 km/h". Belt events in a block come from the frozen plan without a tap.
+- With the screen on: a beep at each rep start and end, plus the last 3 s beep.
+- Push: one alert at block start (the whole block as the title) and one at the end of the last work
+  round. No "1 min left" inside a block.
+- Hold to skip in a block skips the rest of the block (*new* `skip` with value 1). The toast says
+  "Strides skipped · Undo"; one `unskip` cancels it.
+- Results and summary show the block as one row: "Strides 6 × 20 s · 5 of 6".
+- On a treadmill a belt takes 5 to 15 s to speed up. The AI writes treadmill strides as 30 s steps
+  (`docs/mcp/workout-steps.md` says so), and the cue comes 10 s before.
+
+### 4.6 Outdoor without alerts
+
+Push is off in prod (R7). So outdoor run mode:
+
+- Before start: "Step alerts are off · Keep the screen on for beeps, or follow your watch".
+- With the screen on (armband): the wake lock, a beep at each step start and the last 3 s beep.
+- A controls lock: 10 s after the last tap, "Controls locked · Hold to unlock" (600 ms, the hold
+  component of skip) covers the controls, so a pocket or armband cannot tap them.
+- With the phone locked: steps still end and save on server time.
+
+### 4.7 Saving
+
+- The bike rule `bike-ride-logger.md` 4.5 applies: each step logs through `logWorkoutSet` via
+  `callAction` and the offline queue.
+- The server works out each treadmill step's distance, average speed and incline from the timeline
+  when it settles, so late offline belt events recompute them.
+- *new* result source `belt`. Priority per field: treadmill distance and pace are typed, then belt,
+  then Garmin; outdoor distance and pace are typed, then Garmin, then clock. A typed distance never
+  changes the events.
+- Run results columns use the existing `workout_sets` fields (`avg_hr`, `max_hr`, `avg_cadence`,
+  `avg_speed`, `climb_m`, `incline_percent`, distance, `sources`). Incline becomes a real number
+  (step 0).
+- Totals of a run count the active seconds and distance of skipped steps too (a skipped step was
+  still run). Say so in the summary helper.
+- The step snapshot takes its sport from the plan (fix `rideStepSnapshot` and the assistant save).
+- Brick: *new* `rides.brick_ride_id` links the run to the ride, set from the planned brick pair
+  (`brickParentId`), never from "the last ride today". T2 = run start minus ride end, shown only when
+  60 min or less and the ride did not auto end.
+
+### 4.8 Garmin fill
+
+The bike rules of `bike-ride-logger.md` 4.8 apply, with these changes:
+
+- Match a ride's sport: run types (`running`, `treadmill_running`, `indoor_running`, trail, track)
+  for a run session, bike types for a ride. The fill loop never gives a run a bike fill or the
+  reverse.
+- Treadmill fill fields: avg and max HR, cadence (doubled from the FIT per-foot value). Distance only
+  for a step with no belt value. Never power (R11).
+- Outdoor fill fields: time, distance, pace, avg and max HR, cadence (doubled), climbing. Garmin lap
+  time and distance replace the clock values of `estimate` steps.
+- A re-sync of the same activity (Garmin's treadmill calibration changes distance after the run)
+  rewrites only fields still marked Garmin, never a declined pair. Undo restores belt values with
+  their source.
+- Mode correction: a treadmill or indoor run type means Treadmill. Outdoor only when the stream has
+  GPS positions. When belt events exist and the run becomes Outdoor, GPS distance wins and the belt
+  values stay stored.
+- Multisport files: `parseFit` reads every session in the file, each with its own time window and
+  sport (bump the parser version). The fill matches by segment, keyed by activity id plus segment.
+  Garmin's transition segment gives T2 when present.
+- A late lap: a lap within 30 s after an `estimate` step ended on its time moves that step's end to
+  the lap; the step is done there, and the next step starts there. A lap on a distance step is
+  always done; only a lap on a time step is partial.
+
+### 4.9 Numbers
+
+- Distance and avg pace: from the belt (treadmill) or Garmin (outdoor), with the source shown.
+  Pace is moving pace.
+- Grade-adjusted pace (GAP): treadmill from belt and incline; outdoor from the `distance` and
+  `altitude` streams smoothed over 30 s. The Garmin stream has no GAP field. Use Minetti 2002 for
+  the cost of grade. Treadmill incline of 0 to 1% counts as flat (Jones and Doust 1996); only the
+  part above 1% is adjusted. Belt under 7 km/h uses Minetti's walking curve.
+- IF = GAP speed / threshold speed. Load = hours × IF² × 100, per step, summed (*new* run step
+  load next to the bike's power load in `appSessionLoads`, its own method name). Marked "est.".
+  Garmin load still wins in pairing for Garmin users.
+- No pace load (fall back to today's order, which ends in effort load) when: surface is Trail or
+  snow, a treadmill run has no belt at all, or no threshold pace is set.
+- Time in heart rate zones (Friel, run LTHR): from the 1 s stream; without it, each step's time goes
+  to the zone of its average.
+- Time on target per step: share of the step's seconds inside its target (pace outdoors, heart rate
+  for heart rate steps). Only with a stream.
+- Decoupling (Friel Pa:HR): only on steady steps that together run 45 min or more. Leave out the
+  first 10 min, strides, intervals, cool-down and Garmin pauses. Split by time into two halves,
+  efficiency = GAP speed / avg HR per half, drift = (first − second) / first × 100. Under 5% shows as
+  "steady". On a treadmill, weight by belt segment.
+- Cadence (steps per minute): information only, never a target.
+- Cut: run power, ground contact, stride length, VO2 max.
+- Mockup numbers for unit tests: warm-up 10 min at 7.5 km/h, steady 50 min at 8.0 km/h, strides
+  6 × (20 s at 13 km/h + 100 s at 7 km/h), cool-down 3 min at 5.5 km/h give 9.8 km and 7:39 /km.
+
+### 4.10 Run threshold test
+
+- Two templates the AI tool and the step editor can insert, treadmill and outdoor: warm-up 15 min
+  with 3 × 1 min pickups, then the test as two steps with the same target: 10 min and 20 min,
+  "Run as hard as you can hold for 30 min". Treadmill: "Start at 10.0 km/h, raise it if you can".
+  Stored as the existing protocol `run_30min`.
+- Before start: "No hard session in the last 48 hours". When an illness entry is open or ended in
+  the last 7 days, the test does not start ("Wait 7 days after being sick").
+- Results: LTHR = avg HR of the 20 min step (Friel). Threshold pace = avg pace of the whole 30 min.
+  Verify these two against Friel's own text in step 8 and write the source in section 10.
+- No result when the 20 min step is not done or has more than 60 s of pause. On a treadmill with
+  no belt event during the test: LTHR only.
+- Checks: no stops, the 20 min pace within 5% of the first 10 min, the 20 min HR at 80% of max HR or
+  more, effort 8 or more. A failed check shows "Test may be invalid" and Save is not the default
+  button.
+- Sane range: LTHR 120 to 210 bpm, pace 2:30 to 10:00 /km. Against the current value: within 5 bpm
+  and 3% shows Save; 6 to 10 bpm or 3 to 8% shows both side by side to choose; further off says
+  "Run the test again in 4 weeks" and keeps Save as the second button.
+- "Stop test" saves nothing to thresholds. One line on the start screen: "Stop for chest pain,
+  dizziness or unusual breathlessness".
+- Save adds a threshold row through the existing threshold path. Frozen plans of running sessions
+  keep their thresholds; every other % target reads the new value.
+
+## 5. Screens (match the mockups)
+
+Reuse the bike parts in `src/components/features/bike/`: wake lock, last 3 s beep, the undo toast in
+the Next card's place, hold to skip (600 ms), the paused screen with End at the bottom, the landscape
+grid, "Saved on this phone", `StepAlertsRow`. Touch targets for controls used while running are
+64 px or more.
+
+- **Run exercise, ready.** Title, line "75 min · load about 60 · threshold 5:39 /km", mode row
+  ("Treadmill" with Change; Outdoor adds the surface choice), planned profile chart (heart rate or
+  pace zones as bands), step list (name, round, zone chip, target and time; on a treadmill the belt),
+  bottom bar "Start run" and "Log by hand". Change opens a two-option sheet before start only.
+  Outdoor shows the alerts-off row (4.6).
+- **Run mode, treadmill.** Header "Treadmill · step 2 of 4" and elapsed of total; step name; clock;
+  the belt card with a big − and + on each side of "8.0 km/h" (label "Belt"), and "Plan 8.0" muted
+  under it when the recorded belt differs; an incline row "−" · "Incline 1%" · "+" under it; Next
+  card ("Next · Strides 6 × 20 s · 13.0 km/h"), which turns into the cue card and the undo toast;
+  bottom row +1 min, Hold to skip, Pause. No Lap unless the step ends on a lap. Nothing critical in
+  the last 40 px (a console ledge covers it). Big numbers stay white; the accent is only for the cue.
+- **Landscape on a console.** Clock left; belt card with − and + right; incline under it; bottom row
+  +1 min, Hold to skip, Pause.
+- **Run mode, outdoor.** Main target (pace, heart rate cap or effort) big; second line; Lap; the
+  controls lock (4.6); "Saved on this phone" when offline; a distance step shows "1 km · about
+  4:50".
+- **Strides block** (4.5).
+- **Run done / Run ended early.** As the bike. Ended early: "Steps 1 and 2 are saved" and the reason
+  chips (R15).
+- **Brick.** The ride's done screen in a brick shows "Start run" as the pinned primary and "Ride
+  numbers later"; the ride results move to after the run. The run ready screen shows a live "T2
+  1:12" with its mode chosen. "End ride and start run" when the ride is still running.
+- **Run results.** One row per step, belt with a stepper (0.1 km/h) on a treadmill, avg HR optional,
+  "More numbers" for max HR and cadence, effort once, Done. "Waiting for your Garmin run". "Later"
+  leaves it. An outdoor run with no Garmin asks for one optional total distance.
+- **Summary.** Tiles time, distance (with its source line), pace "7:39 /km", avg HR, load ("est."),
+  drift ("3% · steady"). Plan against done chart. Zone bar. Step table with plan and done in the same
+  units per row (4.2 judging). "Steps filled from Garmin · Undo". Brick: "Brick · ride 60:00 · T2
+  1:12 · run 40:00". No Share button.
+- **Empty states.** No threshold pace ("Set your threshold pace to see belt speeds · Set pace"); no
+  LTHR (effort targets, no zone bar); no Garmin ("Plan only · Add numbers"); two Garmin matches
+  ("Two Garmin runs match · Pick", a sheet with start time, time and distance of each); a run
+  already running (Resume or End at the last step); no belt events (4.4).
+- **Planned day card.** "Run · Treadmill · 75 min".
+- **Log by hand.** Today's sheet without the 5 km guess.
+- **Threshold test result.** "New threshold pace 5:30 /km · LTHR 176 · Save", with the checks of
+  4.10.
+
+Each of these states gets a mockup on the plan page before step 2 starts. The plan page (version 4) shows the
+main ones. The builder adds the rest to the plan page in the same style and shows them to nobody
+before building (rule 3 of section 0).
+
+## 6. Steps
+
+| Step | Status |
+|---|---|
+| 0 Groundwork | todo |
+| 1 One run model | todo |
+| 2 Run exercise screen | todo |
+| 3 Run mode | todo |
+| 4 Results and numbers | todo |
+| 5 AI tools | todo |
+| 6 Alerts | todo |
+| 7 Garmin fill and stream numbers | todo |
+| 8 Run threshold test | todo |
+
+### Step 0. Groundwork
+
+- Golden test first: for a set of stored bike plans and random event lists, the output of
+  `rideTimeline` equals a frozen copy of today's output. It must pass before and after every step.
+- Schema (one migration, idempotent SQL, committed with its snapshot): `rides.sport`,
+  `rides.brick_ride_id`, `rides.surface`, `rides.end_reason`; `program_sets.incline_percent` and `workout_sets.incline_percent` to
+  `real`; widen their validators to −3 to 30 with one decimal.
+- Step model: *new* step fields `incline` and `belt` (treadmill), `outdoor` allowed for run, `test`
+  allowed for run. Keep strict objects. Map them in `workoutToRows` and `buildWorkout`. Stop setting
+  incline to null in `replaceExerciseSteps` and `plainSetsToStepRows`.
+- Run pace zones (4.2). Belt resolution (4.2) as a pure function.
+- Events: kinds `belt` and `incline`, the block skip, the step key, the schema refine ranges, the
+  client queue.
+- *new* run plan builder and the timeline changes (4.3 to 4.5) behind `plan.sport`. Fix
+  `sessionRide`, `rideStepSnapshot` and the assistant snapshot sport.
+- Every reader of `rides` filters by sport (4.3).
+- Privacy check and `docs/privacy/data-inventory.md` for belt, incline, sport, brick link, surface
+  and end reason.
+- **Done when:** the golden test passes; the timeline tests of section 7 pass; integration tests for
+  `startRide` on a run, the end-and-start option, and a refused event on an earlier session.
+
+### Step 1. One run model
+
+- *new* one-time move for run (own revision reason "Run sets became steps", so a program with bike
+  and run moves both). Generalize `bikeSlot` to bike and run. Rest moves to rest steps for run, as
+  for the bike, also in `settleStepRows` and the cycle sync (this changes the bike brief's D1 note
+  that run keeps rest on the row). A plain set's incline becomes the step's incline. A set with both
+  time and distance becomes a time end with a pace target (distance / time). A distance-only set gets
+  a distance end. Hook it where `migrateBikeSetsToSteps` is called.
+- Run writers write steps: `triathlon-plan.ts`, program shares, the MCP tool.
+- Remove the 5 km guess for run (`defaultDistanceM`), and check `NewSetView` and `SetEditView`
+  (set editing is a critical flow: add a component test).
+- A share to a non-endurance user keeps the steps; test what today's run screen shows for a step row.
+- After deploy (R17): with the `logeverylift` MCP tools, rewrite the owner's run programs (list them
+  with `list_programs`; on 2026-11-20 they were 93, 97, 102, 106, 95, 104). Turn the notes into steps:
+  for "2 Base · Run", warm-up 10 min Z1, steady 50 min Z2, strides 6 × 30 s fast with 1:30 easy (the
+  treadmill rule of 4.5), cool-down 3 min walk. For the brick runs, the first 10 min at Z2 and the rest
+  at Z3. Keep the note text. Use `expectedVersion` and a reason on each write.
+- **Done when:** integration tests: distance only, time plus distance, rest, incline; a second run
+  of the move changes nothing; the revision restores it; the cycle sync still moves a zone target.
+
+### Step 2. Run exercise screen
+
+- For a run exercise of an endurance user, the exercise route renders *new* `RunExercise` (in
+  `src/components/features/run/`, reusing the bike parts). The run ring in the workout list opens it.
+- Chart, stats, step list with belts, mode row with R4 default and the surface choice, empty states,
+  planned day card.
+- **Done when:** journey screenshots at 390 and 320 px match the mockups; bike, swim and strength
+  screens unchanged; component tests for the mode default and the no-threshold state.
+
+### Step 3. Run mode
+
+- Run mode per 4.3 to 4.6 and section 5: belt and incline controls, the start count, cue cards,
+  strides block, outdoor view, controls lock, paused and offline states, landscape.
+- Each step saves per 4.7. Finish, end early with reason, brick hand-off. R16 routing.
+- **Done when:** the e2e tests of section 7 pass; journey review and smoke pass.
+
+### Step 4. Results and numbers
+
+- Results table and summary per section 5. Numbers of 4.9 that need no stream: distance and pace from
+  the belt, GAP on a treadmill, per-step load, zone time by step, planned numbers.
+- **Done when:** unit tests with the mockup numbers (9.8 km, 7:39 /km); the summary marks estimates;
+  journey review.
+
+### Step 5. AI tools
+
+- `edit_program_exercise` accepts run belt, incline, outdoor, test and the treadmill stride rule in
+  its docs; `get_ride` returns run sessions with the numbers of 4.9; `log_step_results` and
+  `get_step_results` carry belt values and sources. Update `docs/mcp/workout-steps.md` and the server
+  instructions.
+- **Done when:** integration tests write and read each new field through the tools.
+
+### Step 6. Alerts
+
+- Run alert text (target first, no colons, no em dashes), one alert per block (4.5), the tap opens the
+  run exercise in run mode. Push stays off in prod (R7); the app shows the alerts-off row.
+- **Done when:** integration test: events rewrite the push rows for a run with a block; a belt event
+  moves the alert of a belt distance step. Check on a dev setup with keys and note it in section 10.
+
+### Step 7. Garmin fill and stream numbers
+
+- Per 4.8, plus the stream numbers of 4.9: outdoor GAP, IF and load from the stream, time in zones,
+  time on target, decoupling. Mode correction. Multisport files.
+- **Done when:** the Garmin integration tests of section 7 pass with a stored treadmill FIT file, an
+  outdoor FIT file and a multisport FIT file.
+
+### Step 8. Run threshold test
+
+- Per 4.10: templates in the step editor and the MCP tool, the start checks, the result line, Save.
+- **Done when:** unit tests for the results and checks; e2e saves a new threshold pace and the run
+  screen shows the new belt speeds.
+
+## 7. Tests the build must have
+
+**Unit (timeline and numbers)**
+
+1. Golden bike test (step 0).
+2. A belt distance step ends at the distance built from 2 belt changes.
+3. The same with a pause, and a belt event during the pause.
+4. A belt event whose step key belongs to the step before is ignored.
+5. Undo of a belt burst restores the value from before it.
+6. A recovery after a 13 km/h stride counts its own frozen belt.
+7. A heart rate step with no history uses the zone pace; with no threshold pace the belt is null.
+8. An outdoor distance step: end on the estimate, Lap early (done), +1 min, a lap 25 s late (moves
+   the end), a lap 31 s late (ends the next step as partial).
+9. Auto end with a null-belt distance step.
+10. A Garmin mode correction does not change the timeline output.
+11. Block: alert rows for 6 × 20 s strides, a skip inside the block, a skip of the rest with its
+    unskip.
+12. Threshold result: done, ended early, paused 90 s, treadmill with no belt events, out of range,
+    each band of the comparison.
+13. Mockup numbers 9.8 km and 7:39 /km. GAP at 0%, 1%, 5% and a walk at 6 km/h and 5%.
+14. Decoupling leaves out the strides and the first 10 min.
+
+**Integration (`pnpm test:int`)**
+
+1. The fill loop ignores run sessions for bike activities and the reverse.
+2. Garmin does not overwrite a belt distance; it fills distance when there are no belt events.
+3. A re-sync after calibration, Undo, then a re-sync of the declined pair.
+4. A multisport file fills the ride and the run, and gives T2.
+5. "End ride and start run" with a ride whose stored status is stale.
+6. A queued unskip on the ride after the run started is refused.
+7. T2: a linked brick, a run the next day, two bricks on one day.
+8. The run move: distance only, time plus distance, rest, incline, a second pass, restore.
+9. A share to a non-endurance user.
+10. A threshold save during a running session leaves its frozen plan unchanged.
+
+**e2e (`make e2e`)**
+
+1. A treadmill run with belt taps, one taken back with Undo; a reload resumes at the right second;
+   each step saves with the right belt.
+2. Offline belt taps replay and land in the right steps.
+3. An outdoor 400 m rep ended by Lap.
+4. The brick prompt opens the run from a ride that ended early.
+5. The bike specs `e2e/bike-ride.spec.ts` and `e2e/bike-exercise.spec.ts` still pass unchanged.
+
+## 8. Out of scope (goes to BACKLOG.md with this brief)
+
+- Swim on the same parts (R1).
+- mph and min/mi (R6).
+- Push keys in prod (R7, existing backlog entry).
+- A fuel prompt at the end of runs of 75 min or more and bricks.
+- Run dynamics (ground contact, stride length) and run power numbers.
+- Sending runs to the watch.
+- A race or stroller flag that leaves a run out of the drift and pace models.
+
+## 9. Checks the owner will do
+
+- After step 3: run "2 Base · Run" on the treadmill from start to end; every step saves with its
+  belt speed.
+- After step 7: after the Garmin sync, heart rate and cadence fill, and the distance is the belt's.
+- After step 8: run the 30 min test on the treadmill and save the result.
+
+## 10. Choices made during the build
+
+(Add one line per choice: step, what was open, what you chose, why.)
