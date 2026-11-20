@@ -30,6 +30,11 @@ const set: JourneySet = {
     garmin: { email: "steps-rungarmin@demo.local", password: PASSWORD, about: "admin, the 2 Base treadmill run filled from a synthetic Garmin treadmill run" },
     garminOut: { email: "steps-rungarmin-out@demo.local", password: PASSWORD, about: "admin, Run · Tempo run outdoors and filled from a synthetic Garmin run with GPS" },
     pick: { email: "steps-runpick@demo.local", password: PASSWORD, about: "admin, Run · Tempo outdoors with two synthetic Garmin runs that match it" },
+    testReady: { email: "steps-runtest-ready@demo.local", password: PASSWORD, about: "the treadmill run test today, not run" },
+    testSick: { email: "steps-runtest-sick@demo.local", password: PASSWORD, about: "the same test, sick until 3 days ago" },
+    testChoose: { email: "steps-runtest-choose@demo.local", password: PASSWORD, about: "the test run, the 20 min at HR 186 against LTHR 180" },
+    testRetest: { email: "steps-runtest-retest@demo.local", password: PASSWORD, about: "the test run, the 20 min at HR 165 against LTHR 180" },
+    testInvalid: { email: "steps-runtest-invalid@demo.local", password: PASSWORD, about: "the test run at effort 7" },
     test: { email: "steps-runtest@demo.local", password: PASSWORD, about: "pace 5:39 and LTHR 180, the treadmill run test run 10 min ago at 10.9 km/h, the 20 min at HR 176, and Run · Tempo in pace" },
   },
   journeys: [
@@ -39,6 +44,7 @@ const set: JourneySet = {
     { id: 4, title: "Treadmill run filled from Garmin", summary: "Heart rate and cadence from Garmin, distance from the belt, drift, the chart, time on target and Undo." },
     { id: 5, title: "Outdoor run filled from Garmin", summary: "Distance, pace and GAP from Garmin's GPS run, load from the stream, the chart in pace and the arrows." },
     { id: 6, title: "Two Garmin runs match", summary: "Pick lists both with start, time and distance; picking one fills the run." },
+    { id: 8, title: "Run test states", summary: "The start checks, the sick state, and the Choose, Retest and Test may be invalid lines." },
     { id: 7, title: "Run threshold test", summary: "The result line New threshold pace and LTHR with Save, Saved, and a pace run's belts after Save." },
   ],
   flows: [
@@ -203,6 +209,36 @@ const set: JourneySet = {
         });
       },
     },
+    ...(
+      [
+        ["testReady", 1, "start", "Run test before the start: No hard session in the last 48 hours and the stop line"],
+        ["testSick", 2, "sick", "Sick until 3 days ago: Wait 7 days after being sick, no Start run"],
+        ["testChoose", 3, "choose", "HR 186 against LTHR 180: the current and new values side by side to choose"],
+        ["testRetest", 4, "retest", "HR 165 against LTHR 180: Run the test again in 4 weeks, Save second"],
+        ["testInvalid", 5, "invalid", "Effort 7: Test may be invalid, Save second"],
+      ] as const
+    ).map(([account, n, slug, title]) => ({
+      name: account,
+      account,
+      journeys: [8],
+      async run(c: Ctx) {
+        const { page, go, step, shot, settle } = c;
+        await step(`J8 ${slug}`, async () => {
+          await go("/programs");
+          await settle(1200);
+          const hrefs = await page.locator('a[href^="/programs/"]').evaluateAll((as) => as.map((a) => [a.getAttribute("href") ?? "", a.textContent ?? ""]));
+          const href = hrefs.find(([h, t]) => /^\/programs\/\d+$/.test(h) && /30 min run test/.test(t))?.[0];
+          await go(`${href}/workout`);
+          await page.getByRole("link", { name: /^Open / }).first().click();
+          await page.waitForURL(/\/workout\/exercises\/\d+/);
+          const id = n <= 2 ? "run-test-checks" : "summary-threshold";
+          await page.getByTestId(id).filter({ visible: true }).waitFor();
+          await page.getByTestId(id).filter({ visible: true }).scrollIntoViewIfNeeded();
+          await settle(800);
+          await shot(8, n, slug, title);
+        });
+      },
+    })),
   ],
 };
 

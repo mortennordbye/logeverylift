@@ -37,6 +37,8 @@ describe("RunTestLine", () => {
     expect(row.textContent).toBe("New threshold pace 5:30 /km · LTHR 176Save");
     expect(row.textContent!.replace(/\d:\d/g, "")).not.toContain(":");
     expect(saveButton().className).toContain("text-primary");
+    // A wrap never leaves the dot at the end of a line: it stays with LTHR.
+    expect(screen.getByText("· LTHR 176").className).toContain("whitespace-nowrap");
     fireEvent.click(saveButton());
     await waitFor(() => expect(saveRunThreshold).toHaveBeenCalledWith({ rideId: 7 }));
     await waitFor(() => expect(refresh).toHaveBeenCalled());

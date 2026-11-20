@@ -62,6 +62,11 @@
  *                                 typed at HR 176, effort 9: the summary offers
  *                                 New threshold pace 5:30 /km · LTHR 176. Also
  *                                 "Run · Tempo" in pace, for the belts after Save.
+ *   steps-runtest-ready@demo.local   the same test today, not run: the start checks.
+ *   steps-runtest-sick@demo.local    the same, sick until 3 days ago: no Start run.
+ *   steps-runtest-choose@demo.local  the test run, the 20 min at HR 186: Choose.
+ *   steps-runtest-retest@demo.local  the test run, the 20 min at HR 165: Retest.
+ *   steps-runtest-invalid@demo.local the test run at effort 7: Test may be invalid.
  *
  * Dates are relative to the run day. Each run deletes the demo accounts (and
  * with them all their data) and makes them again. No other account is touched.
@@ -96,6 +101,12 @@ const RUN_GARMIN = "steps-rungarmin@demo.local";
 const RUN_GARMIN_OUT = "steps-rungarmin-out@demo.local";
 const RUN_PICK = "steps-runpick@demo.local";
 const RUN_TEST = "steps-runtest@demo.local";
+const RUN_TEST_READY = "steps-runtest-ready@demo.local";
+const RUN_TEST_SICK = "steps-runtest-sick@demo.local";
+const RUN_TEST_CHOOSE = "steps-runtest-choose@demo.local";
+const RUN_TEST_RETEST = "steps-runtest-retest@demo.local";
+const RUN_TEST_INVALID = "steps-runtest-invalid@demo.local";
+const RUN_TESTS_MORE = [RUN_TEST_READY, RUN_TEST_SICK, RUN_TEST_CHOOSE, RUN_TEST_RETEST, RUN_TEST_INVALID];
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "postgres"]);
 const DEMO_TZ = "Europe/Oslo";
 
@@ -295,7 +306,7 @@ async function main() {
 
   type Ctx = { userId: string; writer: "user" };
 
-  const old = await db.select({ id: s.users.id }).from(s.users).where(inArray(s.users.email, [TRI, LIFT, RIDE, NOFTP, HAND, GARMIN, FTP_TEST, RUN, RUN_NOPACE, RUN_NOLTHR, RUN_PACE, RUN_MODE, RUN_OUT, BRICK, BRICK_LIVE, RUN_DONE, RUN_EARLY, RUN_BRICK, RUN_GARMIN, RUN_GARMIN_OUT, RUN_PICK, RUN_TEST]));
+  const old = await db.select({ id: s.users.id }).from(s.users).where(inArray(s.users.email, [TRI, LIFT, RIDE, NOFTP, HAND, GARMIN, FTP_TEST, RUN, RUN_NOPACE, RUN_NOLTHR, RUN_PACE, RUN_MODE, RUN_OUT, BRICK, BRICK_LIVE, RUN_DONE, RUN_EARLY, RUN_BRICK, RUN_GARMIN, RUN_GARMIN_OUT, RUN_PICK, RUN_TEST, ...RUN_TESTS_MORE]));
   if (old.length) {
     const ids = old.map((u) => u.id);
     await db.delete(s.planRevisions).where(inArray(s.planRevisions.userId, ids));
@@ -766,8 +777,28 @@ async function main() {
     await stepProgram(ctx, PACE_RUN.name, [{ exercise: "Run", workout: PACE_RUN }]);
     await ranRun(id, programId, test, "indoor", { agoMin: 10, belts: [{ at: 901, kmh: 10.9 }], hr: (i) => (i === 7 ? 170 : i === 8 ? 176 : null), rpe: 9 });
   }
+  {
+    // The other states of the run test: before the start, sick, and the three result lines that are not plain Save.
+    const test = runTestWorkout("treadmill");
+    const account = async (email: string, name: string) => {
+      const a = await runAccount(email, name, test);
+      await db.update(s.athleteThresholds).set({ measuredOn: addDaysStr(today, -7) }).where(eq(s.athleteThresholds.userId, a.id));
+      return a;
+    };
+    await account(RUN_TEST_READY, "Run Test Ready Demo");
+    const sick = await account(RUN_TEST_SICK, "Run Test Sick Demo");
+    await db.insert(s.illnessPeriods).values({ userId: sick.id, startedOn: addDaysStr(today, -6), endedOn: addDaysStr(today, -3) });
+    for (const [email, name, hr20, rpe] of [
+      [RUN_TEST_CHOOSE, "Run Test Choose Demo", 186, 9],
+      [RUN_TEST_RETEST, "Run Test Retest Demo", 165, 9],
+      [RUN_TEST_INVALID, "Run Test Invalid Demo", 176, 7],
+    ] as const) {
+      const a = await account(email, name);
+      await ranRun(a.id, a.programId, test, "indoor", { agoMin: 10, belts: [{ at: 901, kmh: 10.9 }], hr: (i) => (i === 7 ? 170 : i === 8 ? hr20 : null), rpe });
+    }
+  }
 
-  console.log(`Demo accounts ready (password "${DEMO_PASSWORD}"): ${TRI}, ${LIFT}, ${RIDE}, ${NOFTP}, ${HAND}, ${GARMIN}, ${FTP_TEST}, ${RUN}, ${RUN_NOPACE}, ${RUN_NOLTHR}, ${RUN_PACE}, ${RUN_MODE}, ${RUN_OUT}, ${BRICK}, ${BRICK_LIVE}, ${RUN_DONE}, ${RUN_EARLY}, ${RUN_BRICK}, ${RUN_GARMIN}, ${RUN_GARMIN_OUT}, ${RUN_PICK}, ${RUN_TEST}`);
+  console.log(`Demo accounts ready (password "${DEMO_PASSWORD}"): ${TRI}, ${LIFT}, ${RIDE}, ${NOFTP}, ${HAND}, ${GARMIN}, ${FTP_TEST}, ${RUN}, ${RUN_NOPACE}, ${RUN_NOLTHR}, ${RUN_PACE}, ${RUN_MODE}, ${RUN_OUT}, ${BRICK}, ${BRICK_LIVE}, ${RUN_DONE}, ${RUN_EARLY}, ${RUN_BRICK}, ${RUN_GARMIN}, ${RUN_GARMIN_OUT}, ${RUN_PICK}, ${RUN_TEST}, ${RUN_TESTS_MORE.join(", ")}`);
   process.exit(0);
 }
 

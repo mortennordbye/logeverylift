@@ -64,8 +64,13 @@ export function RunTestLine({ rideId, test }: { rideId: number; test: RunTestVie
           ) : (
             <>
               New {r.speed !== null && <>threshold pace <span className="whitespace-nowrap">{pace(r.speed)}</span></>}
-              {r.speed !== null && r.lthr !== null && " · "}
-              {r.lthr !== null && <span className="whitespace-nowrap">LTHR {r.lthr}</span>}
+              {r.lthr !== null && (
+                <>
+                  {r.speed !== null && " "}
+                  {/* The dot stays with LTHR, so a wrap never leaves it at the end of a line. */}
+                  <span className="whitespace-nowrap">{`${r.speed !== null ? "· " : ""}LTHR ${r.lthr}`}</span>
+                </>
+              )}
             </>
           )}
         </span>
