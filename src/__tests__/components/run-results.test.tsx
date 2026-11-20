@@ -21,6 +21,7 @@ const pickRideGarminActivity = vi.fn();
 const undoRideGarminFill = vi.fn();
 vi.mock("@/lib/actions/ride-garmin", () => ({ pickRideGarminActivity: (d: unknown) => pickRideGarminActivity(d), undoRideGarminFill: (d: unknown) => undoRideGarminFill(d) }));
 const logWithRetry = vi.fn();
+vi.mock("@/lib/actions/run-test", () => ({ saveRunThreshold: vi.fn() }));
 vi.mock("@/contexts/pending-queue-context", () => ({ useWorkoutSetWriter: () => ({ logWithRetry, unlogWithRetry: vi.fn() }) }));
 
 const parsed = parseWorkout({
