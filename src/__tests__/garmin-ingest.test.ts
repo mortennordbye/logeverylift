@@ -4,6 +4,8 @@ import { readZipEntry } from "@/lib/garmin/zip";
 import { chunkRange } from "@/lib/garmin/dates";
 import { describe, expect, it } from "vitest";
 import { buildFit, buildZip } from "./helpers/garmin-files";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 describe("readZipEntry", () => {
   it("returns the .fit entry of a deflated zip", () => {
@@ -55,6 +57,20 @@ describe("parseFit", () => {
 
   it("refuses a file that isn't FIT", () => {
     expect(() => parseFit(Buffer.from("definitely not a fit file"))).toThrow();
+  });
+
+  it("keeps every session of a multisport file as a segment with its own sport and time window", () => {
+    const multi = parseFit(readFileSync(join(__dirname, "fixtures/fit/multisport.fit")));
+    expect(multi.session?.segments).toEqual([
+      { sport: "cycling", subSport: "road", startTime: "2026-11-19T09:00:00.000Z", totalElapsedTime: 600, totalTimerTime: 600, totalDistance: 4800 },
+      { sport: "transition", subSport: "generic", startTime: "2026-11-19T09:10:00.000Z", totalElapsedTime: 72, totalTimerTime: 72, totalDistance: 72 },
+      { sport: "running", subSport: "street", startTime: "2026-11-19T09:11:12.000Z", totalElapsedTime: 850, totalTimerTime: 850, totalDistance: 2278 },
+    ]);
+    // One stream for the whole file, and the first part's sport as before.
+    expect(multi.streams.t).toHaveLength(1522);
+    expect(multi.sport).toBe("cycling");
+    // A one-sport file has one segment.
+    expect(parsed.session?.segments).toHaveLength(1);
   });
 });
 
