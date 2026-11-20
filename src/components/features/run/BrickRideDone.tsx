@@ -7,7 +7,19 @@
 import { BackLink } from "@/components/ui/BackLink";
 import Link from "next/link";
 
-export function BrickRideDone({ programId, exerciseName, doneLine, runHref }: { programId: number; exerciseName: string; doneLine: string; runHref: string }) {
+export function BrickRideDone({
+  programId,
+  exerciseName,
+  doneLine,
+  endedEarly,
+  runHref,
+}: {
+  programId: number;
+  exerciseName: string;
+  doneLine: string;
+  endedEarly: boolean;
+  runHref: string;
+}) {
   return (
     <div className="h-[100dvh] pb-nav-safe bg-background flex flex-col overflow-hidden" data-testid="brick-ride-done">
       <div className="flex items-center px-4 pt-6 pb-2 shrink-0">
@@ -16,7 +28,7 @@ export function BrickRideDone({ programId, exerciseName, doneLine, runHref }: { 
       <div className="flex-1 min-h-0 overflow-y-auto px-4 pb-4 flex flex-col gap-3">
         <div>
           <p className="text-sm text-muted-foreground">{exerciseName}</p>
-          <h1 className="text-3xl font-bold tracking-tight">Ride done</h1>
+          <h1 className="text-3xl font-bold tracking-tight">{endedEarly ? "Ride ended early" : "Ride done"}</h1>
           <p className="mt-1 text-sm text-muted-foreground tabular-nums">{doneLine}</p>
         </div>
         <p className="rounded-xl bg-muted px-4 py-3 text-sm">Brick · the run is next</p>

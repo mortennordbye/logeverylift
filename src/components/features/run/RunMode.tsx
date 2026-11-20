@@ -363,7 +363,7 @@ export function RunMode({
   // Opened on a running run without a tap: sound and the wake lock need one.
   if (prompt) {
     return (
-      <div data-ride-mode className="fixed inset-0 z-50 flex flex-col gap-4 bg-background px-4 pt-6 pb-8" data-testid="ride-prompt">
+      <div data-ride-mode className={`fixed inset-0 z-50 flex flex-col gap-4 bg-background px-4 pt-6 ${treadmill ? "pb-10" : "pb-8"}`} data-testid="ride-prompt">
         {header()}
         {title}
         <div className="flex flex-1 flex-col items-center justify-center gap-2">
@@ -435,16 +435,16 @@ export function RunMode({
           −
         </button>
         <div className="text-center">
-          <p className="text-xs text-muted-foreground">
-            Belt
-            {planBelt !== null && beltShown !== Math.round(planBelt * 10) && (
-              <span data-testid="run-plan-belt"> · Plan {planBelt.toFixed(1)}</span>
-            )}
-          </p>
+          <p className="text-xs text-muted-foreground">Belt</p>
           <p className="whitespace-nowrap text-[min(3rem,11.5vw)] font-bold leading-tight tabular-nums">
             <span data-testid="run-belt">{beltShown !== null ? (beltShown / 10).toFixed(1) : "By feel"}</span>
             {beltShown !== null && <small className="ml-1 text-lg font-semibold text-muted-foreground">km/h</small>}
           </p>
+          {planBelt !== null && beltShown !== Math.round(planBelt * 10) && (
+            <p className="text-xs leading-none text-muted-foreground tabular-nums" data-testid="run-plan-belt">
+              Plan {planBelt.toFixed(1)}
+            </p>
+          )}
         </div>
         <button type="button" onClick={() => knob("belt", 1)} aria-label="Belt up 0.5 km/h" className={BELT_BTN}>
           +
@@ -552,10 +552,11 @@ export function RunMode({
             {clock}
             {s.block && <Dots block={s.block} />}
             {sub}
+            {/* The second line sits under the clock: the right column holds the belt and Next above the controls. */}
+            {treadmill && <Second s={s} belt={beltShown !== null ? beltShown / 10 : null} />}
           </div>
           <div className="flex flex-col gap-2">
             {beltCard || targetCard}
-            {treadmill && <Second s={s} belt={beltShown !== null ? beltShown / 10 : null} />}
             {nextCard}
           </div>
         </div>

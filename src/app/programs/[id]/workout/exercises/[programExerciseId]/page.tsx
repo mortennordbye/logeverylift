@@ -104,7 +104,7 @@ export default async function WorkoutExerciseSetsPage({ params, searchParams }: 
     // The ride of a brick hands over to its run; its results and summary wait until the run has started (docs/plans/run-logger.md, section 5 "Brick").
     const brickRun = after ? await brickRunOf(user.id, after.rideId) : null;
     if (after && brickRun && !brickRun.started) {
-      return <BrickRideDone programId={programId} exerciseName={pe.exercise.name} doneLine={after.doneLine} runHref={brickRun.href} />;
+      return <BrickRideDone programId={programId} exerciseName={pe.exercise.name} doneLine={after.doneLine} endedEarly={after.status === "ended_early"} runHref={brickRun.href} />;
     }
     if (after) {
       // Later and Done leave for home or the workout; a workout the ride could not finish yet goes back to the summary's Save the ride.
