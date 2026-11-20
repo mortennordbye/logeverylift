@@ -421,7 +421,7 @@ before building (rule 3 of section 0).
 | Step | Status |
 |---|---|
 | 0 Groundwork | done |
-| 1 One run model | todo |
+| 1 One run model | done |
 | 2 Run exercise screen | todo |
 | 3 Run mode | todo |
 | 4 Results and numbers | todo |
