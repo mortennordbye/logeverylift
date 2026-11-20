@@ -21,6 +21,7 @@
 
 import { computePmc, type DayLoad, type PmcDay } from "@/lib/garmin/analytics/pmc";
 import type { Sport } from "@/lib/garmin/analytics/sport";
+import { gapSpeed } from "@/lib/utils/run-gap";
 
 export type EnduranceSport = "swim" | "bike" | "run";
 /** bike_power: a ride's step averages with an FTP (docs/plans/bike-ride-logger.md, 4.6), set by appSessionLoads. */
@@ -53,15 +54,18 @@ export function weightedRpe(sets: { durationSeconds: number | null; rpe: number 
   return w > 0 ? sum / w : null;
 }
 
-/** Run pace load: hours x IF^2 x 100, IF = speed / threshold speed (m/s). Inference. */
+/**
+ * Run pace load: hours x IF^2 x 100, IF = speed / threshold speed (m/s).
+ * Inference. An incline is a treadmill's: the speed is grade-adjusted, its
+ * first 1% counted as flat (docs/plans/run-logger.md, 4.9).
+ */
 export function runPaceLoad(
   r: { seconds: number; meters: number; inclinePercent?: number | null },
   thresholdSpeed: number | null | undefined,
 ): { load: number; intensityFactor: number } | null {
   if (!thresholdSpeed || thresholdSpeed <= 0) return null;
-  if (r.inclinePercent) return null; // pace does not see the hill: sRPE instead
   if (r.meters < RUN_PACE_FLOOR.meters || r.seconds < RUN_PACE_FLOOR.seconds) return null;
-  const intensityFactor = r.meters / r.seconds / thresholdSpeed;
+  const intensityFactor = gapSpeed(r.meters / r.seconds, r.inclinePercent, true) / thresholdSpeed;
   if (intensityFactor < IF_RANGE.min || intensityFactor > IF_RANGE.max) return null;
   return { load: (r.seconds / 3600) * intensityFactor ** 2 * 100, intensityFactor };
 }
