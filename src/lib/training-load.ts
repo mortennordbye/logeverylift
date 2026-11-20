@@ -115,7 +115,9 @@ export async function appSessionLoads(userId: string, from: string | null, to: s
       // Distance only from sets with a time, so a set with no time cannot raise the pace (review fix 2).
       const meters = g.reduce((a, s) => a + (s.durationSeconds && s.durationSeconds > 0 ? (s.distanceMeters ?? 0) : 0), 0);
       enduranceSeconds += seconds;
-      const incline = Math.max(0, ...g.map((s) => s.inclinePercent ?? 0));
+      // Time-weighted, so one short steep set does not grade-adjust the whole run (docs/plans/run-logger.md, 4.9).
+      const inclineSeconds = g.reduce((a, s) => a + (s.durationSeconds ?? 0) * (s.inclinePercent ?? 0), 0);
+      const incline = seconds > 0 ? Math.max(0, inclineSeconds / seconds) : 0;
       const rpe = weightedRpe(g);
       // A ride's steps with power on 90% of the time and an FTP: the estimated
       // power load (docs/plans/bike-ride-logger.md, 4.6). The FTP is the one

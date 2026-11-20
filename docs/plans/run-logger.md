@@ -647,3 +647,8 @@ before building (rule 3 of section 0).
 - Step 4, run load in appSessionLoads: method `run_gap` (the Garmin series takes it as `run_pace`). A run from run mode with no pace load (Trail or snow, too little distance) takes the effort load, not the plain session pace.
 - Step 4, planned numbers: step 2 already gives them (`plannedRunNumbers`); step 4 adds none.
 - Step 4, demo accounts: `steps-rundone`, `steps-runearly` and `steps-runbrick` (`scripts/seed-steps-demo.ts`), with journeys in `scripts/journeys/runresults.journeys.ts`.
+- Step 4 review, incline of a plain run: `appSessionLoads` grade-adjusts a run's pace with the time-weighted incline of its sets, not the steepest one.
+- Step 4 review, a typed total outdoors: it spreads over every step that ran, a skipped one too (4.7); the table then saves the skipped step's distance with its status and time unchanged.
+- Step 4 review, easy pace (overrides the step 4 line on its sources): only outdoor steps whose distance is their own (Garmin's or the assistant's) count; a typed distance outdoors is one total spread by time.
+- Step 4 review, Ride again and Run again (changes the bike final review line on the summary): the results table and the summary read only the steps the latest ride or run ended (`rideStepLogs`), and a clock-timed row whose time or status differs from its timeline is the earlier one's, so the step shows as not saved yet. The earlier rows stay in the session.
+- Step 4 review, plan against done chart: the bike's chart (`RideDoneChart`) draws from a Garmin 1 s stream only, so the run summary gets it with step 7's stream.

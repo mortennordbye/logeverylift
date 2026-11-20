@@ -199,13 +199,18 @@ export async function rideStepLogs(
   userId: string,
   view: Pick<RideView, "plan" | "serverNow"> & { events: RideEventInput[]; ride: Pick<RideView["ride"], "sessionId" | "heartbeatAt"> },
 ): Promise<{ logs: Record<number, StepLog>; timeline: ReturnType<typeof rideTimeline>; unsaved: boolean }> {
-  const logs = await stepLogs(userId, view.ride.sessionId, view.plan.steps.map((s) => s.programSetId));
   const timeline = rideTimeline(view.plan, view.events, view.serverNow, { heartbeatAt: view.ride.heartbeatAt });
+  // Only the steps this ride ran: after Ride again (or Run again) the session still holds the earlier ride's rows of steps this one did not reach.
+  const ran = timeline.steps.map((t) => t.programSetId);
+  const logs = await stepLogs(userId, view.ride.sessionId, ran);
   let unsaved = false;
   // A treadmill run's step not saved yet shows its belt numbers (docs/plans/run-logger.md, 4.7).
   const belt = planSport(view.plan) === "run" && view.plan.mode === "indoor";
   for (const t of timeline.steps) {
-    if (logs[t.programSetId]) continue;
+    const row = logs[t.programSetId];
+    // A clock-timed row whose time or status is not this ride's is the earlier ride's (Ride again): this ride's step is not saved yet.
+    const earlier = row && (row.sources?.durationSeconds ?? "clock") === "clock" && (row.durationSeconds !== t.activeSeconds || row.status !== t.status);
+    if (row && !earlier) continue;
     unsaved = true;
     const b = belt ? beltResults(t) : {};
     logs[t.programSetId] = {

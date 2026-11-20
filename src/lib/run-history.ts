@@ -55,7 +55,9 @@ export async function runPlanHistory(userId: string, lthr: number | null | undef
     // A belt the runner ran (from the belt or typed in the results), with the heart rate Garmin measured.
     const belt = r.sources?.avgSpeed === "belt" || r.sources?.avgSpeed === "typed";
     if (r.mode === "indoor" && belt && r.avgSpeed && r.sources?.avgHr === "garmin") history.push({ beltKmh: r.avgSpeed * 3.6, avgHr: r.avgHr!, seconds });
-    if (r.mode === "outdoor" && r.meters && seconds > 0) easy.push({ meters: r.meters, seconds, avgHr: r.avgHr! });
+    // A step's own distance (Garmin's or the assistant's): a typed distance outdoors is one total spread by time, the same pace on every step.
+    const ownDistance = r.sources?.distanceMeters === "garmin" || r.sources?.distanceMeters === "assistant";
+    if (r.mode === "outdoor" && ownDistance && r.meters && seconds > 0) easy.push({ meters: r.meters, seconds, avgHr: r.avgHr! });
   }
   return { history, easySpeed: recentEasySpeed(easy, lthr) };
 }

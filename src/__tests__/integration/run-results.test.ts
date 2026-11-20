@@ -10,11 +10,13 @@ import { athleteThresholds, rides, users, workoutSessions, workoutSets } from "@
 import { sendRideEvent, startRide } from "@/lib/actions/rides";
 import { completeWorkoutSession } from "@/lib/actions/workout-sessions";
 import { logWorkoutSet } from "@/lib/actions/workout-sets";
+import { rideAfterView } from "@/lib/bike-exercise-view";
 import { runAfterView } from "@/lib/run-exercise-view";
 import { runPlanHistory } from "@/lib/run-history";
 import { appSessionLoads } from "@/lib/training-load";
 import { rideTimeline } from "@/lib/utils/ride-timeline";
 import { beltResults } from "@/lib/utils/run-screen";
+import { runPaceLoad } from "@/lib/utils/training-load";
 import { and, eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createExercise, createSession, createStepProgram, createUser } from "./factories";
@@ -118,10 +120,11 @@ describe("the runner's own runs reach the next plan (4.2, 4.3)", () => {
       expect(r.sport).toBe("run");
       later(30 * MIN * (kmh === 9 ? 2 : 1));
     }
-    // Two easy outdoor runs: 2.5 and 2.7 m/s at heart rate 150.
+    // Two easy outdoor runs: 2.5 and 2.7 m/s at heart rate 150, distance from Garmin.
     for (const speed of [2.5, 2.7]) {
       const s = await setup(steady);
-      await runThrough(s, "outdoor", 720, () => ({ distanceMeters: Math.round(speed * 720), avgHr: 150, sources: { durationSeconds: "clock", distanceMeters: "typed", avgHr: "typed" } }));
+      await runThrough(s, "outdoor", 720, () => ({ avgHr: 150, sources: { durationSeconds: "clock", avgHr: "typed" } }));
+      await db.update(workoutSets).set({ distanceMeters: Math.round(speed * 720), sources: { durationSeconds: "clock", distanceMeters: "garmin", avgHr: "typed" } }).where(eq(workoutSets.sessionId, s.sessionId));
       later(30 * MIN * (speed === 2.5 ? 3 : 4));
     }
     const history = await runPlanHistory(me, 180);
@@ -207,5 +210,78 @@ describe("Run again (section 5)", () => {
     expect(again.ride).toMatchObject({ sport: "run", status: "running", programExerciseId: s.programExerciseId, sessionId: s.sessionId });
     const [session] = await db.select().from(workoutSessions).where(and(eq(workoutSessions.id, s.sessionId), eq(workoutSessions.userId, me)));
     expect(session.isCompleted).toBe(false);
+  });
+});
+
+describe("step 4 review", () => {
+  it("(1) a plain treadmill run's incline is time-weighted: one short steep set does not grade-adjust the whole run", async () => {
+    const { program } = await createStepProgram(me, run, steady);
+    const session = await createSession(me, program.id);
+    const set = (setNumber: number, seconds: number, meters: number, inclinePercent: number) => ({
+      sessionId: session.id, exerciseId: run, setNumber, actualReps: 0, weightKg: "0", restTimeSeconds: 0, durationSeconds: seconds, distanceMeters: meters, inclinePercent, isCompleted: true, rpe: 5,
+    });
+    await db.insert(workoutSets).values([set(1, 3420, 9500, 0), set(2, 180, 500, 8)]);
+    await db.update(workoutSessions).set({ isCompleted: true, endTime: new Date(T0.getTime() + 3600_000) }).where(eq(workoutSessions.id, session.id));
+    const [row] = await appSessionLoads(me, null, null, { sessionIds: [session.id] });
+    // 0.4% on average: flat on a treadmill, so the load of 10 km in 60 min at threshold 5:39 /km.
+    const flat = runPaceLoad({ seconds: 3600, meters: 10000 }, 1000 / 339)!.load;
+    expect(row.method).toBe("run_pace");
+    expect(row.load).toBeCloseTo(flat, 1);
+  });
+
+  it("(3) distances spread from a typed total are left out of the easy pace", async () => {
+    for (const k of [0, 1]) {
+      const s = await setup(steady);
+      await runThrough(s, "outdoor", 720, () => ({ distanceMeters: 1900, avgHr: 150, sources: { durationSeconds: "clock", distanceMeters: "typed", avgHr: "typed" } }));
+      later(30 * MIN * (k + 1));
+    }
+    expect((await runPlanHistory(me, 180)).easySpeed).toBeNull();
+  });
+
+  it("(4) after Run again, the summary lists only the second run's steps", async () => {
+    // Three steps: an end on the last step would be a finished run.
+    const s = await setup({ ...twoSteps, steps: [...twoSteps.steps, { type: "cooldown", end: { type: "time", seconds: 300 }, belt: 6 }] });
+    const first = ok(await startRide({ ...s, mode: "indoor", clientId: cid() }));
+    // Run 1 runs the first step and 2 min of the second, then ends.
+    later(12 * MIN);
+    const t1 = rideTimeline(first.plan, first.events, Date.now());
+    ok(await logWorkoutSet({ sessionId: s.sessionId, exerciseId: run, setNumber: 1, programSetId: s.setIds[0], actualReps: 0, weightKg: 0, durationSeconds: 600, restTimeSeconds: 0, isCompleted: true, stepStatus: "done", targetOffsetW: 0, extendedSeconds: 0, sources: { durationSeconds: "clock" } }));
+    expect(t1.steps.length).toBe(1);
+    ok(await sendRideEvent({ rideId: first.ride.id, clientId: cid(), kind: "end", expectedSeq: 1 }));
+    ok(await logWorkoutSet({ sessionId: s.sessionId, exerciseId: run, setNumber: 2, programSetId: s.setIds[1], actualReps: 0, weightKg: 0, durationSeconds: 120, restTimeSeconds: 0, isCompleted: true, stepStatus: "partial", targetOffsetW: 0, extendedSeconds: 0, sources: { durationSeconds: "clock" } }));
+    ok(await completeWorkoutSession({ sessionId: s.sessionId, endTime: new Date().toISOString() }));
+    // Run 2 ends after 1 min of the first step.
+    later(15 * MIN);
+    const second = ok(await startRide({ ...s, mode: "indoor", again: true, clientId: cid() }));
+    later(16 * MIN);
+    ok(await sendRideEvent({ rideId: second.ride.id, clientId: cid(), kind: "end", expectedSeq: 1 }));
+    const after = (await runAfterView(me, s.programExerciseId))!;
+    expect(after.rideId).toBe(second.ride.id);
+    expect(Object.keys(after.logs).map(Number)).toEqual([s.setIds[0]]);
+    expect(after.logs[s.setIds[0]]).toMatchObject({ status: "partial", durationSeconds: 60 });
+  });
+
+  it("(4) after Ride again, the ride summary lists only the second ride's steps", async () => {
+    const ride = { v: 2, sport: "bike", name: "Ride", steps: [
+      { type: "work", end: { type: "time", seconds: 600 }, target: { metric: "power", anchor: "ftp", zone: 2 } },
+      { type: "work", end: { type: "time", seconds: 600 }, target: { metric: "power", anchor: "ftp", zone: 3 } },
+      { type: "cooldown", end: { type: "time", seconds: 300 }, target: { metric: "power", anchor: "ftp", zone: 1 } },
+    ] };
+    await db.insert(athleteThresholds).values({ userId: me, kind: "ftp", value: 200, measuredOn: "2026-11-01", source: "manual" });
+    const s = await setup(ride, bike);
+    const first = ok(await startRide({ ...s, mode: "indoor", clientId: cid() }));
+    later(12 * MIN);
+    for (const [i, sec, status] of [[0, 600, "done"], [1, 120, "partial"]] as const) {
+      ok(await logWorkoutSet({ sessionId: s.sessionId, exerciseId: bike, setNumber: i + 1, programSetId: s.setIds[i], actualReps: 0, weightKg: 0, durationSeconds: sec, restTimeSeconds: 0, isCompleted: true, stepStatus: status, targetOffsetW: 0, extendedSeconds: 0, sources: { durationSeconds: "clock" } }));
+    }
+    ok(await sendRideEvent({ rideId: first.ride.id, clientId: cid(), kind: "end", expectedSeq: 1 }));
+    ok(await completeWorkoutSession({ sessionId: s.sessionId, endTime: new Date().toISOString() }));
+    later(15 * MIN);
+    const second = ok(await startRide({ ...s, mode: "indoor", again: true, clientId: cid() }));
+    later(16 * MIN);
+    ok(await sendRideEvent({ rideId: second.ride.id, clientId: cid(), kind: "end", expectedSeq: 1 }));
+    const after = (await rideAfterView(me, s.programExerciseId))!;
+    expect(after.rideId).toBe(second.ride.id);
+    expect(Object.keys(after.logs).map(Number)).toEqual([s.setIds[0]]);
   });
 });
