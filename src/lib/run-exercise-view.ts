@@ -19,8 +19,8 @@ import type { RideChart } from "@/lib/utils/bike-ride-view";
 import { toDateStr } from "@/lib/utils/cycle-position";
 import { buildWorkout, type StepRow } from "@/lib/utils/program-steps";
 import { buildRunPlan } from "@/lib/utils/run-plan";
-import { defaultRunMode, plannedRunNumbers, runChart, runStepRows, type RunNumbers, type RunStepRow } from "@/lib/utils/run-view";
-import { parseWorkout, rowMainTarget, type WorkoutTest } from "@/lib/utils/workout-steps";
+import { defaultRunMode, needsThresholdPace, plannedRunNumbers, runChart, runStepRows, type RunNumbers, type RunStepRow } from "@/lib/utils/run-view";
+import { parseWorkout, type WorkoutTest } from "@/lib/utils/workout-steps";
 import { and, desc, eq, gt, sql } from "drizzle-orm";
 
 export type RunModeView = { numbers: RunNumbers; chart: RideChart; rows: RunStepRow[] };
@@ -34,7 +34,7 @@ export type RunExerciseData = {
   /** Threshold speed in m/s, and run LTHR. */
   thresholdPace: number | null;
   lthr: number | null;
-  /** A step has a pace target: outdoors it needs the threshold pace too. */
+  /** A step's pace is a share of the threshold pace: outdoors it needs one too. */
   paceSteps: boolean;
   /** The user's run of this exercise is running or paused: the screen offers Resume, not Start run. */
   liveRun: boolean;
@@ -117,7 +117,7 @@ export async function runExerciseView(
     trail: view("outdoor", "trail"),
     thresholdPace: thresholds.run_threshold_pace ?? null,
     lthr: thresholds.lthr_run ?? null,
-    paceSteps: rows.some((r) => rowMainTarget(r)?.metric === "pace"),
+    paceSteps: needsThresholdPace(tree.workout),
     liveRun,
     otherLive,
   };

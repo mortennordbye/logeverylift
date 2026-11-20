@@ -15,7 +15,7 @@ import type { RidePlan, RidePlanStep } from "@/lib/utils/ride-timeline";
 import { hrTargetZone, WALK_BELT_KMH } from "@/lib/utils/run-plan";
 import { minSec } from "@/lib/utils/thresholds";
 import { plannedLoad } from "@/lib/utils/training-load";
-import { mainTarget, resolveTarget, RUN_PACE_ZONES, targetLabel, type ThresholdValues, type WorkoutStep } from "@/lib/utils/workout-steps";
+import { mainTarget, resolveTarget, RUN_PACE_ZONES, targetLabel, type ThresholdValues, type Workout, type WorkoutStep } from "@/lib/utils/workout-steps";
 
 // ── Mode ─────────────────────────────────────────────────────────────────────
 
@@ -149,14 +149,27 @@ export function runOutdoorText(s: RidePlanStep, thresholds: ThresholdValues, sur
   if (step.type === "work" && seconds < 180) return { main: "Hard", second: null };
   const zone = runStepZone(step, thresholds);
   const t = mainTarget(step);
-  if (!t || zone === null || isCap(step, zone, seconds) || t.metric === "rpe") return { main: targetText(s, zone, thresholds), second: null };
-  // Pace, or heart rate zone 3 to 5: a pace range, heart rate as the second line.
+  // An effort is kept as written; a step with no zone has nothing to turn into.
+  if (!t || zone === null || t.metric === "rpe") return { main: targetText(s, zone, thresholds), second: null };
   const lthr = !!thresholds.lthr_run;
+  if (isCap(step, zone, seconds)) {
+    // Easy and long steps: a heart rate cap at the top of the zone (R13), also when a pace is written.
+    if (lthr || t.metric === "hr") return { main: t.metric === "hr" ? targetText(s, zone, thresholds) : zoneHrText(zone, true, thresholds), second: null };
+    // No LTHR: Road keeps the pace; Trail or snow never shows one (R14).
+    return { main: surface === "trail" ? `Effort ${EFFORT_OF_ZONE[zone - 1]}` : targetText(s, zone, thresholds), second: null };
+  }
+  // Pace, or heart rate zone 3 to 5: a pace range, heart rate as the second line.
   if (surface === "trail") return { main: lthr || t.metric === "hr" ? zoneHrText(zone, false, thresholds) : `Effort ${EFFORT_OF_ZONE[zone - 1]}`, second: null };
   const speed = thresholds.run_threshold_pace;
   const hr = lthr ? zoneHrText(zone, false, thresholds) : null;
   if (t.metric === "pace") return { main: targetText(s, zone, thresholds), second: hr };
   return speed ? { main: zonePaceText(zone, speed), second: hr } : { main: targetText(s, zone, thresholds), second: null };
+}
+
+/** A step's pace is a share of the threshold pace, so the screen needs one; a pace in m/s needs none. */
+export function needsThresholdPace(w: Workout): boolean {
+  const steps = w.steps.flatMap((n) => (n.type === "repeat" ? n.steps : [n]));
+  return steps.some((s) => [mainTarget(s), s.target2, s.outdoor].some((t) => t?.metric === "pace" && t.anchor === "threshold_pace"));
 }
 
 // ── Planned numbers ──────────────────────────────────────────────────────────
@@ -255,7 +268,8 @@ export function runChart(plan: RidePlan): RideChart {
       bars.push({ key: s.key, x, w, kind: "none", y: y(1), y2: y(1), capY: null, zone: 1, label: null });
       return;
     }
-    const text = targetText(s, zone, th);
+    // The chart says what the list says: outdoors the outdoor target of its surface.
+    const text = plan.mode === "outdoor" ? runOutdoorText(s, th, plan.surface ?? "road").main : targetText(s, zone, th);
     const label = w >= 80 ? `Z${zone}${text ? ` · ${text}` : ""}` : null;
     if (isCap(s.step, zone, s.seconds ?? s.estSeconds)) bars.push({ key: s.key, x, w, kind: "under", y: y(zone - 0.5), y2: y(zone - 0.5), capY: y(zone), zone, label });
     else bars.push({ key: s.key, x, w, kind: "range", y: y(zone - 1), y2: y(zone - 1), capY: y(zone), zone, label });

@@ -2,9 +2,9 @@
 import { RunExercise } from "@/components/features/run/RunExercise";
 import type { RunExerciseData } from "@/lib/run-exercise-view";
 import { buildRunPlan } from "@/lib/utils/run-plan";
-import { plannedRunNumbers, runChart, runStepRows } from "@/lib/utils/run-view";
+import { needsThresholdPace, plannedRunNumbers, runChart, runStepRows } from "@/lib/utils/run-view";
 import { flattenWorkout } from "@/lib/utils/workout-player";
-import { parseWorkout, type ThresholdValues } from "@/lib/utils/workout-steps";
+import { parseWorkout, type ThresholdValues, type Workout } from "@/lib/utils/workout-steps";
 import { BASE_RUN, OWNER } from "@/__tests__/fixtures/base-run";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -23,10 +23,10 @@ vi.mock("@/lib/wake-lock", () => ({ wakeLockSupported: () => true, requestWakeLo
 
 const parsed = parseWorkout(BASE_RUN);
 if (!parsed.ok) throw new Error(JSON.stringify(parsed.errors));
-const workout = parsed.workout;
-const ids = flattenWorkout(workout).map((_, i) => i + 1);
+const baseWorkout = parsed.workout;
 
-function data(thresholds: ThresholdValues, p: Partial<RunExerciseData> = {}): RunExerciseData {
+function data(thresholds: ThresholdValues, p: Partial<RunExerciseData> = {}, workout: Workout = baseWorkout): RunExerciseData {
+  const ids = flattenWorkout(workout).map((_, i) => i + 1);
   const view = (mode: "indoor" | "outdoor", surface: "road" | "trail" = "road") => {
     const plan = buildRunPlan(workout, ids, thresholds, mode, { surface });
     return { numbers: plannedRunNumbers(plan), chart: runChart(plan), rows: runStepRows(plan, surface) };
@@ -38,7 +38,7 @@ function data(thresholds: ThresholdValues, p: Partial<RunExerciseData> = {}): Ru
     trail: view("outdoor", "trail"),
     thresholdPace: thresholds.run_threshold_pace ?? null,
     lthr: thresholds.lthr_run ?? null,
-    paceSteps: false,
+    paceSteps: needsThresholdPace(workout),
     liveRun: false,
     otherLive: null,
     ...p,
@@ -122,8 +122,16 @@ describe("RunExercise", () => {
       const { unmount } = screenOf(data({ lthr_run: 180 }, { defaultMode: "outdoor" }));
       expect(screen.queryByTestId("no-threshold-pace")).toBeNull();
       unmount();
-      screenOf(data({ lthr_run: 180 }, { defaultMode: "outdoor", paceSteps: true }));
+      const pct = parseWorkout({ v: 2, sport: "run", name: "Tempo", steps: [{ type: "work", end: { type: "time", seconds: 1200 }, target: { metric: "pace", anchor: "threshold_pace", low: 95, high: 100 } }] });
+      screenOf(data({ lthr_run: 180 }, { defaultMode: "outdoor" }, pct.ok ? pct.workout : baseWorkout));
       expect(screen.getByTestId("no-threshold-pace").textContent).toContain("Set your threshold pace to see paces");
+    });
+
+    it("outdoors a pace written in min/km needs no threshold pace", () => {
+      const abs = parseWorkout({ v: 2, sport: "run", name: "Steady", steps: [{ type: "work", end: { type: "time", seconds: 1200 }, target: { metric: "pace", anchor: "absolute", low: 2.9, high: 3.0 } }] });
+      if (!abs.ok) throw new Error("bad workout");
+      screenOf(data({ lthr_run: 180 }, { defaultMode: "outdoor" }, abs.workout));
+      expect(screen.queryByTestId("no-threshold-pace")).toBeNull();
     });
   });
 

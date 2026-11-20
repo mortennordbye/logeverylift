@@ -106,6 +106,28 @@ describe("outdoor targets (4.2)", () => {
     expect(noPace.steps.slice(0, 2).map((s) => runOutdoorText(s, { lthr_run: 180 }, "road").main)).toEqual(["HR 171-178", "98-102% threshold pace"]);
   });
 
+  it("caps easy and long steps with heart rate, never pace, on both surfaces when there is an LTHR (R13, R14)", () => {
+    const w = {
+      v: 2,
+      sport: "run",
+      name: "Pace written",
+      steps: [
+        { type: "warmup", end: { type: "time", seconds: 600 }, target: { metric: "pace", anchor: "threshold_pace", low: 75, high: 80 } },
+        { type: "work", end: { type: "time", seconds: 1800 }, target: { metric: "pace", anchor: "threshold_pace", low: 88, high: 92 } },
+      ],
+    };
+    for (const surface of ["road", "trail"] as const) {
+      const p = plan(w, OWNER, "outdoor", surface);
+      const rows = runStepRows(p, surface);
+      // 75-80% of threshold speed is 129% of its pace time at the midpoint: Z1 (over 129%).
+      expect(rows.map((r) => r.detail)).toEqual(["HR under 151", "HR under 169"]);
+      expect(runChart(p).bars.map((b) => b.label).join(" ")).not.toContain("/km");
+    }
+    // With no LTHR: on Trail or snow an effort, on Road the pace as written.
+    expect(runStepRows(plan(w, { run_threshold_pace: OWNER.run_threshold_pace }, "outdoor", "trail"), "trail").map((r) => r.detail)).toEqual(["Effort 2", "Effort 5"]);
+    expect(runStepRows(plan(w, { run_threshold_pace: OWNER.run_threshold_pace }, "outdoor"), "road").map((r) => r.detail)).toEqual(["7:04-7:32 /km", "6:08-6:25 /km"]);
+  });
+
   it("an outdoor distance step shows its estimate", () => {
     const w = { v: 2, sport: "run", name: "Km", steps: [{ type: "work", end: { type: "distance", meters: 1000 }, target: { metric: "pace", anchor: "threshold_pace", low: 98, high: 102 } }] };
     const [row] = runStepRows(plan(w, OWNER, "outdoor"));
