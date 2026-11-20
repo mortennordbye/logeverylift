@@ -6,6 +6,8 @@ import { testDb } from "./fixtures/reset";
 import { insertStepProgram } from "./fixtures/step-program";
 import { expect, test } from "./fixtures/test";
 import { waitForLiveSession } from "./helpers";
+import { runTestWorkout } from "../src/lib/utils/run-test";
+import { minSec } from "../src/lib/utils/thresholds";
 
 /**
  * Run mode (docs/plans/run-logger.md, step 3, section 7 e2e 1 to 4): a run
@@ -455,6 +457,89 @@ test("4: the ride of a brick that ended early hands over to its run, which shows
   const [run] = await db.select().from(rides).where(and(eq(rides.userId, userId), eq(rides.sport, "run")));
   expect(ride.status).toBe("ended_early");
   expect(run.brickRideId).toBe(ride.id);
+});
+
+test("8: the treadmill run test carries the raised belt into the 20 min, Save stores LTHR and pace, and the run screen shows the new belt speeds", async ({ page }, testInfo) => {
+  test.setTimeout(180_000);
+  const userId = await userOf(testInfo.parallelIndex);
+  const db = testDb();
+  // Threshold pace 5:20 /km and LTHR 180 before the test.
+  await db.delete(athleteThresholds).where(eq(athleteThresholds.userId, userId));
+  await db.insert(athleteThresholds).values([
+    { userId, kind: "run_threshold_pace", value: 1000 / 320, measuredOn: "2026-01-05", source: "manual" },
+    { userId, kind: "lthr_run", value: 180, measuredOn: "2026-01-05", source: "manual" },
+  ]);
+  const s = await program(userId, { ...runTestWorkout("treadmill"), name: "Run test e2e" });
+  await page.goto(`/programs/${s.programId}/workout/exercises/${s.peId}`);
+  await expect(visible(page, "run-test-checks")).toHaveText("No hard session in the last 48 hoursStop for chest pain, dizziness or unusual breathlessness");
+  await startRun(page, s, "Treadmill", { open: false });
+
+  // After the 15 min warm-up the test starts at 10.0 km/h; the runner raises it to 11.5.
+  await advance(page, s.userId, 900);
+  await expect(page.getByTestId("ride-header")).toContainText("step 8 of 10");
+  await expect(page.getByTestId("run-belt")).toHaveText("10.0");
+  for (let i = 0; i < 3; i++) await page.getByRole("button", { name: "Belt up 0.5 km/h" }).click();
+  await expect(page.getByTestId("run-belt")).toHaveText("11.5");
+  await advance(page, s.userId, 2.1);
+  await expect.poll(async () => (await beltEvents(s.userId)).map((e) => e.value)).toEqual([115]);
+
+  // The 20 min keeps the belt the first 10 min ended on.
+  await advance(page, s.userId, 598);
+  await expect(page.getByTestId("ride-header")).toContainText("step 9 of 10");
+  await expect(page.getByTestId("run-belt")).toHaveText("11.5");
+  await advance(page, s.userId, 1200);
+  await expect(page.getByTestId("ride-header")).toContainText("step 10 of 10");
+  await advance(page, s.userId, 600);
+  await page.clock.resume();
+
+  // The results: the 20 min heart rate and the effort.
+  await expect(visible(page, "run-results")).toBeVisible();
+  await expect.poll(async () => (await savedSteps(s.userId)).length).toBe(10);
+  await page.getByTestId("result-avgHr-9").fill("176");
+  await page.getByRole("group", { name: "Effort of the run" }).getByRole("button", { name: "9" }).click();
+  await page.getByTestId("results-done").click();
+
+  // New threshold pace from the whole 30 min (about 11.5 km/h, from the belt meters of the two test steps) and LTHR from the 20 min.
+  await expect(visible(page, "run-summary-screen")).toContainText("Run done");
+  const testSteps = (await savedSteps(s.userId)).slice(7, 9);
+  expect(testSteps.map((r) => [r.durationSeconds, r.sources?.distanceMeters])).toEqual([
+    [600, "belt"],
+    [1200, "belt"],
+  ]);
+  const meters30 = testSteps[0].distanceMeters! + testSteps[1].distanceMeters!;
+  expect(testSteps[1].distanceMeters).toBe(Math.round((1200 * 11.5) / 3.6));
+  const pace = `${minSec(1000 / (meters30 / 1800))} /km`;
+  expect(["5:13 /km", "5:14 /km"]).toContain(pace);
+  const line = page.getByTestId("summary-threshold");
+  await expect(line).toHaveText(`New threshold pace ${pace} · LTHR 176Save`);
+  await line.getByRole("button", { name: "Save" }).click();
+  await expect(line).toHaveText(`New threshold pace ${pace} · LTHR 176Saved`);
+  // Measured on the day the run started, in the runner's time zone.
+  const [ran] = await db.select({ startedAt: rides.startedAt }).from(rides).where(and(eq(rides.userId, userId), eq(rides.sport, "run")));
+  const runDay = `${ran.startedAt.getFullYear()}-${pad(ran.startedAt.getMonth() + 1)}-${pad(ran.startedAt.getDate())}`;
+  const saved = await db.select().from(athleteThresholds).where(and(eq(athleteThresholds.userId, userId), eq(athleteThresholds.source, "test")));
+  expect(saved.map((r) => [r.kind, r.protocol, r.measuredOn]).sort()).toEqual([
+    ["lthr_run", "run_30min", runDay],
+    ["run_threshold_pace", "run_30min", runDay],
+  ]);
+  expect(saved.find((r) => r.kind === "lthr_run")!.testData).toEqual({ avgHrLast20: 176 });
+  expect(saved.find((r) => r.kind === "run_threshold_pace")!.testData).toEqual({ distance30Meters: meters30 });
+
+  // Another run at 130% of threshold speed now shows the new belt: 15.0 km/h, not 14.5.
+  const other = await program(userId, {
+    v: 2,
+    sport: "run",
+    name: "Fast e2e",
+    steps: [{ type: "work", end: { type: "time", seconds: 600 }, target: { metric: "pace", anchor: "threshold_pace", low: 130, high: 130 } }],
+  });
+  await page.goto(`/programs/${other.programId}/workout/exercises/${other.peId}`);
+  await expect(visible(page, "run-exercise")).toBeVisible();
+  if ((await visible(page, "run-mode").textContent()) !== "Treadmill") {
+    await page.getByRole("button", { name: "Change" }).click();
+    await page.getByTestId("run-mode-sheet").getByRole("button", { name: "Treadmill" }).click();
+  }
+  await expect(visible(page, "run-summary")).toContainText(`threshold ${pace}`);
+  await expect(visible(page, "run-step-detail").first()).toHaveText("Belt 15.0 km/h");
 });
 
 test("R16: the play address of a run-only program opens its run exercise", async ({ page }, testInfo) => {
