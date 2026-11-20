@@ -257,14 +257,18 @@ export async function sendRideEvent(data: unknown): Promise<ActionResult<RideVie
       // the last step, or an offline extend or pause from before its end.
       if (!isLive(view.ride.status)) {
         const withIt = rideTimeline(view.plan, [...view.events, { seq, kind, value: value ?? null, at, stepKey: stepKey ?? null }], now, { heartbeatAt });
-        if (!isLive(withIt.status)) return { success: false, error: "The ride has ended" };
-        // Never once a later session has started (docs/plans/run-logger.md, 4.3): the queue drops it.
-        const [later] = await tx
-          .select({ id: rides.id })
-          .from(rides)
-          .where(and(eq(rides.userId, userId), ne(rides.id, rideId), gt(rides.startedAt, ride.startedAt)))
-          .limit(1);
-        if (later) return { success: false, error: "The ride has ended" };
+        // A late offline belt or incline from inside the run is kept: the steps' meters recompute from it (4.7).
+        const lateBelt = view.ride.sport === "run" && (kind === "belt" || kind === "incline") && view.ride.endedAt !== null && at < view.ride.endedAt;
+        if (!isLive(withIt.status) && !lateBelt) return { success: false, error: "The ride has ended" };
+        if (isLive(withIt.status)) {
+          // Never once a later session has started (docs/plans/run-logger.md, 4.3): the queue drops it.
+          const [later] = await tx
+            .select({ id: rides.id })
+            .from(rides)
+            .where(and(eq(rides.userId, userId), ne(rides.id, rideId), gt(rides.startedAt, ride.startedAt)))
+            .limit(1);
+          if (later) return { success: false, error: "The ride has ended" };
+        }
       }
       await tx.insert(rideEvents).values({
         rideId,
