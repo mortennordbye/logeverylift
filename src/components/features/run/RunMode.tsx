@@ -49,6 +49,8 @@ type Toast = { id: number; text: string; index: number; undo: RideTap | Knob | n
 
 /** Controls used while running are 64 px or more (section 5). */
 const RUN_BTN = `${BTN} min-h-16`;
+/** The belt's − and +: big glyphs, 64 px square. */
+const BELT_BTN = "h-16 min-h-16 rounded-2xl bg-background text-4xl font-semibold leading-none active:opacity-70 select-none touch-manipulation";
 
 function Dots({ block }: { block: NonNullable<RunScreen["block"]> }) {
   return (
@@ -295,16 +297,24 @@ export function RunMode({
 
   if (!ready) return <div data-ride-mode className="fixed inset-0 z-50 bg-background" aria-busy="true" />;
 
-  const headerRight = offline ? "Saved on this phone" : timeline.status === "paused" ? "Paused" : (s?.total ?? "");
+  const headerRight = timeline.status === "paused" ? "Paused" : (s?.total ?? "");
+  // Offline is its own line under the header: at 320 px it does not fit beside the step.
   const header = (title?: string) => (
-    <div className="flex items-center justify-between gap-3 text-sm text-muted-foreground tabular-nums" data-testid="ride-header">
-      <span className="truncate">
-        {s?.header ?? RUN_MODE_NAME[plan.mode]}
-        {title ? ` · ${title}` : ""}
-      </span>
-      <span className="shrink-0" data-testid={offline ? "ride-offline" : "ride-total"}>
-        {headerRight}
-      </span>
+    <div data-testid="ride-header">
+      <div className="flex items-center justify-between gap-3 text-sm text-muted-foreground tabular-nums">
+        <span className="truncate">
+          {s?.header ?? RUN_MODE_NAME[plan.mode]}
+          {title ? ` · ${title}` : ""}
+        </span>
+        <span className="shrink-0" data-testid="ride-total">
+          {headerRight}
+        </span>
+      </div>
+      {offline && (
+        <p className="mt-1 text-sm font-semibold" data-testid="ride-offline">
+          Saved on this phone
+        </p>
+      )}
     </div>
   );
 
@@ -419,7 +429,7 @@ export function RunMode({
   const beltCard = treadmill && (
     <div className="rounded-2xl bg-muted px-2 py-2" data-testid="run-belt-card">
       <div className="grid grid-cols-[64px_1fr_64px] items-center gap-2">
-        <button type="button" onClick={() => knob("belt", -1)} aria-label="Belt down 0.5 km/h" className={`${RUN_BTN} h-16 bg-background text-3xl`}>
+        <button type="button" onClick={() => knob("belt", -1)} aria-label="Belt down 0.5 km/h" className={BELT_BTN}>
           −
         </button>
         <div className="text-center">
@@ -434,7 +444,7 @@ export function RunMode({
             </p>
           )}
         </div>
-        <button type="button" onClick={() => knob("belt", 1)} aria-label="Belt up 0.5 km/h" className={`${RUN_BTN} h-16 bg-background text-3xl`}>
+        <button type="button" onClick={() => knob("belt", 1)} aria-label="Belt up 0.5 km/h" className={BELT_BTN}>
           +
         </button>
       </div>
@@ -443,7 +453,7 @@ export function RunMode({
           −
         </button>
         <p className="text-center text-base tabular-nums" data-testid="run-incline">
-          Incline {inclineShown !== null ? `${+(inclineShown / 10).toFixed(1)}%` : "not set"}
+          Incline {+((inclineShown ?? 0) / 10).toFixed(1)}%
         </p>
         <button type="button" onClick={() => knob("incline", 1)} aria-label="Incline up 0.5%" className="min-h-12 rounded-xl bg-background text-xl font-semibold active:opacity-70">
           +
@@ -492,13 +502,16 @@ export function RunMode({
       {s.lapHint && <p className="text-center text-sm text-muted-foreground">{s.lapHint}</p>}
     </>
   );
+  const extendBtn = s.canExtend && (
+    <button type="button" onClick={extend} aria-label="Add 1 min" className={`${RUN_BTN} bg-muted`}>
+      +1 min
+    </button>
+  );
+  // Four in a row cut "Hold to skip" on a phone: with Lap, +1 min gets a row of its own above (portrait).
+  const extendAbove = !landscape && !!extendBtn && s.lap;
   const controls = (
     <>
-      {s.canExtend && (
-        <button type="button" onClick={extend} aria-label="Add 1 min" className={`${RUN_BTN} bg-muted`}>
-          +1 min
-        </button>
-      )}
+      {!extendAbove && extendBtn}
       <HoldToSkip step={s.stepNumber} onSkip={skip} className="min-h-16" />
       <button type="button" onClick={pause} className={`${RUN_BTN} bg-brand-fill text-white`}>
         Pause
@@ -567,6 +580,12 @@ export function RunMode({
       {sub}
       {beltCard || targetCard}
       {treadmill && <Second s={s} />}
+      {extendAbove && (
+        <div className="relative grid">
+          {extendBtn}
+          {locked && <div className="absolute inset-0 z-10 rounded-2xl bg-background/80" aria-hidden />}
+        </div>
+      )}
       {nextCard}
       {soundHint}
       {/* A console ledge covers the last 40 px on a treadmill: the controls sit above it. */}
