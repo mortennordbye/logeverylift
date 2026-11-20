@@ -275,20 +275,62 @@ test("1: a treadmill run counts in, saves belt taps with an Undo, resumes after 
   await expect(page.getByTestId("ride-screen")).toBeVisible();
   await expect(page.getByTestId("ride-step-title")).toHaveText("Steady");
 
-  // The run ends: the steady step saves 2 min at 8.0 km/h, and the exercise shows the run as done, with no Start run.
+  // The run ends: the steady step saves 2 min at 8.0 km/h, and the results table opens (R12), with no Start run.
   await freeze(page);
   await advance(page, s.userId, 95);
   await page.clock.resume();
-  await expect(visible(page, "run-done")).toBeVisible();
-  await expect(visible(page, "run-done")).toContainText("Run done");
+  await expect(visible(page, "run-results")).toBeVisible();
   await expect(page.getByRole("button", { name: "Start run" })).toHaveCount(0);
   await expect.poll(async () => (await savedSteps(s.userId)).map((r) => [r.programSetId, r.stepStatus, r.durationSeconds, r.distanceMeters])).toEqual([
     [s.setIds[0], "done", 60, warm.distanceMeters],
     [s.setIds[1], "done", 120, 267],
   ]);
+  // The table shows each step's belt; the runner sets the steady one to 8.2 km/h and gives the effort.
+  await expect(page.getByTestId("result-belt-2")).toHaveText("8.0km/h");
+  await page.getByRole("button", { name: "Belt up 0.1 km/h step 2" }).click();
+  await page.getByRole("button", { name: "Belt up 0.1 km/h step 2" }).click();
+  await page.getByRole("group", { name: "Effort of the run" }).getByRole("button", { name: "5" }).click();
+  await page.getByTestId("results-done").click();
+
+  // The summary: the steady step saved its typed belt, and the distance names its sources.
+  await expect(visible(page, "run-summary-screen")).toContainText("Run done");
+  await expect.poll(async () => (await savedSteps(s.userId)).map((r) => [r.distanceMeters, r.rpe, r.sources?.distanceMeters])).toEqual([
+    [warm.distanceMeters, 5, "belt"],
+    [273, 5, "typed"],
+  ]);
+  await expect(page.getByTestId("tile-Time")).toContainText("3:00");
+  await expect(page.getByTestId("summary-distance-source")).toHaveText("Distance from the belt and typed numbers");
+  await expect(page.getByTestId("summary-row").nth(1)).toContainText("8.2");
   await page.reload();
-  await expect(visible(page, "run-kept")).toHaveText("Steps 1 and 2 are saved");
+  await expect(visible(page, "run-summary-screen")).toBeVisible();
   await expect(page.getByRole("button", { name: "Start run" })).toHaveCount(0);
+});
+
+test("1c: a run ended early shows its results, then the summary asks why, and Run again starts a new run on the same workout", async ({ page }, testInfo) => {
+  test.setTimeout(90_000);
+  const s = await program(await userOf(testInfo.parallelIndex), treadmillRun);
+  await startRun(page, s, "Treadmill");
+  await advance(page, s.userId, 70);
+  await page.getByRole("button", { name: "Pause" }).click();
+  await expect(page.getByTestId("ride-paused")).toBeVisible();
+  await page.clock.resume();
+  await page.getByRole("button", { name: "End run" }).click();
+
+  await expect(visible(page, "run-results")).toBeVisible();
+  await expect(page.getByTestId("result-time-2")).toHaveText(/^0:[01]\d$/);
+  await page.getByTestId("results-done").click();
+  await expect(visible(page, "run-summary-screen")).toContainText("Run ended early");
+  await expect(page.getByTestId("run-kept")).toHaveText("Steps 1 and 2 are saved");
+  await page.getByRole("button", { name: "Time" }).click();
+  await expect.poll(async () => (await testDb().select().from(rides).where(eq(rides.userId, s.userId)))[0]?.endReason).toBe("time");
+
+  await page.getByTestId("summary-run-again").click();
+  await expect(page.getByTestId("run-count")).toBeVisible();
+  const all = await testDb().select().from(rides).where(eq(rides.userId, s.userId)).orderBy(asc(rides.id));
+  expect(all.map((r) => [r.status, r.sessionId])).toEqual([
+    ["ended_early", all[0].sessionId],
+    ["running", all[0].sessionId],
+  ]);
 });
 
 test("1b: a strides block cues the belt, counts its reps, and hold to skip skips the rest of it", async ({ page }, testInfo) => {

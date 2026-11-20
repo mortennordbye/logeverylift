@@ -9,7 +9,7 @@ import { athleteThresholds, plannedSessions, rides, trainingCycles, users, worko
 import { getRide, sendRideEvent, setRideEndReason, startRide } from "@/lib/actions/rides";
 import { logWorkoutSet } from "@/lib/actions/workout-sets";
 import { brickRideView, brickRunOf } from "@/lib/run-brick";
-import { runDoneView } from "@/lib/run-exercise-view";
+import { runAfterView } from "@/lib/run-exercise-view";
 import { rideTimeline, type RideStepResult } from "@/lib/utils/ride-timeline";
 import { beltResults } from "@/lib/utils/run-screen";
 import { and, eq } from "drizzle-orm";
@@ -176,18 +176,22 @@ describe("the end reason (R15)", () => {
 });
 
 describe("a run that has ended", () => {
-  it("shows its done screen, not Start run: runDoneView gives it once the run ended, and null while it runs", async () => {
+  it("shows its summary, not Start run: runAfterView gives it once the run ended, and null while it runs", async () => {
     const s = await runSetup();
     const { ride: r } = ok(await startRide({ ...s, mode: "indoor", clientId: cid() }));
     later(30 * 1000);
-    expect(await runDoneView(me, s.programExerciseId)).toBeNull();
+    expect(await runAfterView(me, s.programExerciseId)).toBeNull();
     ok(await sendRideEvent({ rideId: r.id, clientId: cid(), kind: "end", expectedSeq: 1 }));
-    expect(await runDoneView(me, s.programExerciseId)).toEqual({
+    expect(await runAfterView(me, s.programExerciseId)).toMatchObject({
       rideId: r.id,
       status: "ended_early",
       doneLine: "Ended early 18:00 · Treadmill",
       kept: "Step 1 is saved",
       endReason: null,
+      // The step the app has not saved yet shows its belt numbers from the timeline.
+      logs: { [s.setIds[0]]: { status: "partial", durationSeconds: 30, distanceMeters: 67, inclinePercent: 1, sources: { distanceMeters: "belt", avgSpeed: "belt" } } },
+      beltEvents: false,
+      brick: null,
     });
   });
 });

@@ -424,7 +424,7 @@ before building (rule 3 of section 0).
 | 1 One run model | done |
 | 2 Run exercise screen | done |
 | 3 Run mode | done |
-| 4 Results and numbers | todo |
+| 4 Results and numbers | done |
 | 5 AI tools | todo |
 | 6 Alerts | todo |
 | 7 Garmin fill and stream numbers | todo |
@@ -638,3 +638,12 @@ before building (rule 3 of section 0).
 - Step 4, pace shown: a pace is cut to the whole second, as a watch shows it (`paceText`), so the mockup run reads 7:39 /km (459.7 s per km).
 - Step 4, a run's pace load: per step hours x IF^2 x 100 with IF = GAP speed / threshold speed, summed, only when steps with a distance cover 90% of the run's time (as power does for a ride, `DISTANCE_COVERAGE_MIN`) and the run passes the existing floors (400 m, 5 min); steps without a distance count at the mean IF^2 of the others. An IF outside 0.3 to 1.5 falls back to effort, as `runPaceLoad` does.
 - Step 4, GAP on a treadmill: per step, from its average belt speed and its time-weighted incline (`gapSpeed` in `src/lib/utils/run-gap.ts`). A negative incline counts as it is; only 0 to 1% is flat. `runPaceLoad` grade-adjusts its incline the same way, so a 1% treadmill run gets a pace load (section 3 fact).
+- Step 4, after a run: run mode opens the results table (`?results=1`) when the run ends, as ride mode does; its Done opens the summary. The done screen of step 3 is now the summary's head, and its reason chips are `RunEndReason`. Log by hand stays today's set list (step 2 choice).
+- Step 4, results table: a strides block is one row with its reps run and takes no numbers; the effort still saves on its steps. The belt stepper shows under each run step on a treadmill and starts from the saved belt, else the plan's, else 8.0 km/h; a belt stepped back to the saved one sends nothing.
+- Step 4, one total distance outdoors: shown while no step holds a Garmin distance; it is typed distance on each step run, by its share of the time (the last step takes the rest, so the sum is exact). Clearing it clears only the steps that hold a distance.
+- Step 4, plan against done: on a treadmill the plan column is the frozen belt and the heart rate target (a cap as "HR 160", the footnote says under a cap passes) or the zone; outdoors the target of 4.2. Done is the belt (treadmill) or the pace (outdoors) and the avg HR. Without a stream a heart rate judges by the step's average: over the cap or the range is ↑, under a range ↓. A treadmill pace target judges the belt with 0.25 km/h each side (a pace belt rounds to 0.5 km/h). Outdoors only heart rate is judged until step 7 brings the stream.
+- Step 4, tiles: Time, Distance, Pace (with "GAP 7:20" under it only when GAP differs), Avg HR, Load est., Effort. Drift waits for the stream (step 7). The distance line names its sources: "Distance from the belt", "from the plan · no belt changes" with no belt or incline tap, or a list such as "the belt and typed numbers".
+- Step 4, belt history (4.2 rule 3): done treadmill steps of 6 weeks whose belt is from the belt or typed and whose average heart rate is Garmin's. Recent easy pace (4.3): done outdoor Road steps of 6 weeks, 10 min or more, with a distance and an average heart rate in zone 1 or 2 (any source), median speed of 2 or more, as the belt history needs 2. The run screen reads the same history, so it shows the run startRide freezes.
+- Step 4, run load in appSessionLoads: method `run_gap` (the Garmin series takes it as `run_pace`). A run from run mode with no pace load (Trail or snow, too little distance) takes the effort load, not the plain session pace.
+- Step 4, planned numbers: step 2 already gives them (`plannedRunNumbers`); step 4 adds none.
+- Step 4, demo accounts: `steps-rundone`, `steps-runearly` and `steps-runbrick` (`scripts/seed-steps-demo.ts`), with journeys in `scripts/journeys/runresults.journeys.ts`.

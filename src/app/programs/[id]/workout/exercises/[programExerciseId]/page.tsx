@@ -7,9 +7,10 @@ import { RideMode } from "@/components/features/bike/RideMode";
 import { RideResults } from "@/components/features/bike/RideResults";
 import { RideSummary } from "@/components/features/bike/RideSummary";
 import { BrickRideDone } from "@/components/features/run/BrickRideDone";
-import { RunDone } from "@/components/features/run/RunDone";
 import { RunExercise } from "@/components/features/run/RunExercise";
 import { RunMode } from "@/components/features/run/RunMode";
+import { RunResults } from "@/components/features/run/RunResults";
+import { RunSummary } from "@/components/features/run/RunSummary";
 import { WorkoutSetsClient } from "@/components/features/WorkoutSetsClient";
 import { bikeExerciseView, handResultsView, rideAfterView, rideOfExercise } from "@/lib/bike-exercise-view";
 import { enduranceEnabledFor } from "@/lib/endurance";
@@ -21,7 +22,8 @@ import type { StepRow } from "@/lib/utils/program-steps";
 import { offersSaveTheRide, resultSteps, rideSummary } from "@/lib/utils/ride-results";
 import { pushPublicKey } from "@/lib/push";
 import { brickRideView, brickRunOf } from "@/lib/run-brick";
-import { runDoneView, runExerciseView } from "@/lib/run-exercise-view";
+import { runAfterView, runExerciseView } from "@/lib/run-exercise-view";
+import { brickText, runResultRows, runSummary } from "@/lib/utils/run-results";
 import { getUserSettings } from "@/lib/user-settings";
 import { requireSession } from "@/lib/utils/session";
 import { rideTestOf } from "@/lib/utils/workout-steps";
@@ -146,10 +148,10 @@ export default async function WorkoutExerciseSetsPage({ params, searchParams }: 
   }
 
   // A run exercise of an endurance user is a run (docs/plans/run-logger.md,
-  // steps 2 and 3). Run mode (?ride=1) runs the user's run of this exercise;
+  // steps 2 to 4). Run mode (?ride=1) runs the user's run of this exercise;
   // with none, the run screen shows, with Resume while its run runs. After a
-  // run the screen is its done screen. "Log by hand" (?hand=1) keeps today's
-  // set list.
+  // run the screen is its summary, and ?results=1 its results table. "Log by
+  // hand" (?hand=1) keeps today's set list.
   if (pe.exercise.discipline === "run" && (await enduranceEnabledFor(user.id))) {
     const onlyExercise = program.programExercises.length === 1;
     const found = ride === "1" ? await rideOfExercise(user.id, peId, "run") : null;
@@ -169,8 +171,44 @@ export default async function WorkoutExerciseSetsPage({ params, searchParams }: 
     }
     const sets = pe.programSets as (StepRow & { id: number })[];
     const run = await runExerciseView(user.id, peId, pe.exercise.name, sets, pe.rideTest === "30min" ? "30min" : null);
-    const done = run && !run.liveRun && hand !== "1" ? await runDoneView(user.id, peId) : null;
-    if (done) return <RunDone programId={programId} exerciseName={pe.exercise.name} data={done} doneHref={onlyExercise ? "/" : `/programs/${programId}/workout`} />;
+    const after = run && !run.liveRun && hand !== "1" ? await runAfterView(user.id, peId) : null;
+    if (after) {
+      const doneHref = onlyExercise ? "/" : `/programs/${programId}/workout`;
+      // Later and Done leave for home or the workout; a workout the run could not finish yet goes back to the summary's Save the run.
+      const saveTheRun = offersSaveTheRide(after, onlyExercise);
+      const setNumbers = Object.fromEntries(pe.programSets.map((s) => [s.id, s.setNumber]));
+      if (results === "1") {
+        const { steps, rows } = runResultRows(after.plan, after.logs);
+        return (
+          <RunResults
+            programId={programId}
+            exerciseId={pe.exercise.id}
+            steps={steps}
+            rows={rows}
+            mode={after.plan.mode}
+            setNumbers={setNumbers}
+            sessionId={after.sessionId}
+            garminWaiting={after.garminWaiting}
+            laterHref={saveTheRun ? `/programs/${programId}/workout/exercises/${peId}` : doneHref}
+          />
+        );
+      }
+      const summary = runSummary(after.plan, after.logs, { beltEvents: after.beltEvents });
+      return (
+        <RunSummary
+          programId={programId}
+          exerciseName={pe.exercise.name}
+          doneLine={after.doneLine}
+          summary={summary}
+          rideId={after.rideId}
+          early={after.status === "ended_early" ? { kept: after.kept, endReason: after.endReason } : null}
+          brickLine={after.brick ? brickText(after.brick, summary.numbers.seconds) : null}
+          doneHref={doneHref}
+          saveTheRun={saveTheRun}
+          runAgain={after.status === "ended_early" && !saveTheRun ? { sessionId: after.sessionId, programExerciseId: peId, mode: after.plan.mode, surface: after.surface } : null}
+        />
+      );
+    }
     if (run && !(hand === "1" && !run.liveRun)) {
       const brick = run.liveRun ? null : await brickRideView(user.id, programId);
       return <RunExercise programId={programId} programExerciseId={peId} exerciseName={pe.exercise.name} data={run} pushPublicKey={pushPublicKey()} brick={brick} />;

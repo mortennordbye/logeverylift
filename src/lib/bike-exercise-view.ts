@@ -19,7 +19,8 @@ import { toDateStr } from "@/lib/utils/cycle-position";
 import { rideFtpTest, type RideFtpTest } from "@/lib/ride-ftp";
 import { buildWorkout, type StepRow } from "@/lib/utils/program-steps";
 import type { StepLog } from "@/lib/utils/ride-results";
-import { buildRidePlan, rideTimeline, type RideEventInput, type RidePlan } from "@/lib/utils/ride-timeline";
+import { buildRidePlan, planSport, rideTimeline, type RideEventInput, type RidePlan } from "@/lib/utils/ride-timeline";
+import { beltResults } from "@/lib/utils/run-screen";
 import { parseWorkout, type RideTest } from "@/lib/utils/workout-steps";
 import { and, desc, eq, gt, inArray, sql } from "drizzle-orm";
 
@@ -174,6 +175,8 @@ async function stepLogs(userId: string, sessionId: number, programSetIds: number
       climbM: workoutSets.climbM,
       rpe: workoutSets.rpe,
       sources: workoutSets.sources,
+      // A treadmill run step's incline (docs/plans/run-logger.md, 4.7); the run summary reads it.
+      inclinePercent: workoutSets.inclinePercent,
     })
     .from(workoutSets)
     .innerJoin(workoutSessions, eq(workoutSessions.id, workoutSets.sessionId))
@@ -199,9 +202,12 @@ export async function rideStepLogs(
   const logs = await stepLogs(userId, view.ride.sessionId, view.plan.steps.map((s) => s.programSetId));
   const timeline = rideTimeline(view.plan, view.events, view.serverNow, { heartbeatAt: view.ride.heartbeatAt });
   let unsaved = false;
+  // A treadmill run's step not saved yet shows its belt numbers (docs/plans/run-logger.md, 4.7).
+  const belt = planSport(view.plan) === "run" && view.plan.mode === "indoor";
   for (const t of timeline.steps) {
     if (logs[t.programSetId]) continue;
     unsaved = true;
+    const b = belt ? beltResults(t) : {};
     logs[t.programSetId] = {
       status: t.status,
       durationSeconds: t.activeSeconds,
@@ -216,6 +222,8 @@ export async function rideStepLogs(
       climbM: null,
       rpe: null,
       sources: null,
+      ...(b.distanceMeters !== undefined && { distanceMeters: b.distanceMeters, avgSpeed: b.avgSpeed ?? null, sources: { distanceMeters: "belt" as const, avgSpeed: "belt" as const } }),
+      ...(b.inclinePercent !== undefined && { inclinePercent: b.inclinePercent }),
     };
   }
   return { logs, timeline, unsaved };

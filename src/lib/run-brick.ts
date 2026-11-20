@@ -135,3 +135,19 @@ export async function brickRunOf(userId: string, rideId: number): Promise<{ href
     .limit(1);
   return { href: `/programs/${child.programId}/workout/exercises/${pe.id}`, started: !!run };
 }
+
+/**
+ * The ride of a run's brick as the run summary shows it (section 5 "Summary",
+ * 4.7): the ride's run time, and T2 from its end to the run's start when it
+ * shows (60 min or less, and the ride did not auto end).
+ */
+export async function brickSummaryOf(userId: string, brickRideId: number, runStartedAt: number): Promise<{ rideSeconds: number; t2Seconds: number | null } | null> {
+  const [ride] = await db.select().from(rides).where(and(eq(rides.id, brickRideId), eq(rides.userId, userId), eq(rides.sport, "bike")));
+  if (!ride) return null;
+  const v = await settle(db, ride, Date.now());
+  const t = rideTimeline(v.plan, v.events, v.serverNow, { heartbeatAt: v.ride.heartbeatAt });
+  const rideSeconds = t.steps.reduce((a, s) => a + s.activeSeconds, 0);
+  const endedAt = v.ride.endedAt;
+  const gap = endedAt !== null ? runStartedAt - endedAt : null;
+  return { rideSeconds, t2Seconds: gap !== null && gap >= 0 && gap <= T2_MAX_MS && !t.autoEnded ? Math.round(gap / 1000) : null };
+}

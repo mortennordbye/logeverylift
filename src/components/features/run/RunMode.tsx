@@ -14,7 +14,7 @@
  * its round and a dot per rep; hold to skip skips the rest of it (4.5). Each
  * step saves when it ends, with its belt meters on a treadmill (4.7). When
  * the run ends, the workout is finished (a program of this exercise only)
- * and the exercise shows the run's done screen.
+ * and the results table opens.
  */
 
 import { BTN, HoldToSkip, UNDO_MS, useLandscape } from "@/components/features/bike/RideMode";
@@ -291,8 +291,8 @@ export function RunMode({
         if (failedInTransit(r)) enqueue({ kind: "completeWorkoutSession", payload });
         if (workoutSession?.sessionId === initial.ride.sessionId) workoutSession.clearActiveWorkout();
       }
-      // The exercise shows the run's done screen (the results table comes with step 4).
-      router.replace(pathname);
+      // The results table, as after a ride (R12); its Done opens the summary.
+      router.replace(`${pathname}?results=1`);
       router.refresh();
     })();
   }, [ready, ended, queued, online, undoPending, onlyExercise, sessionCompleted, initial.ride.sessionId, timeline.endedAt, timeline.steps, plan.steps, setNumbers, enqueue, workoutSession, router, pathname]);

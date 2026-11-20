@@ -29,6 +29,7 @@ import {
   rideTimeline,
 } from "@/lib/utils/ride-timeline";
 import { buildRunPlan } from "@/lib/utils/run-plan";
+import { runPlanHistory } from "@/lib/run-history";
 import { requireSession } from "@/lib/utils/session";
 import { parseWorkout } from "@/lib/utils/workout-steps";
 import type { ActionResult } from "@/types/workout";
@@ -124,8 +125,11 @@ export async function startRide(data: unknown): Promise<ActionResult<RideView>> 
     if (!tree?.ok) return { success: false, error: sport === "run" ? "This exercise has no steps to run" : "This exercise has no steps to ride" };
     const ids = rows.map((r) => r.id);
     const thresholds = await thresholdValues(userId);
-    // A run's belt from history and its easy pace come with the results of step 4 (docs/plans/run-logger.md, section 10).
-    const plan = sport === "run" ? buildRunPlan(tree.workout, ids, thresholds, mode, { surface }) : buildRidePlan(tree.workout, ids, thresholds, mode);
+    // A run reads the belts and easy pace of the runner's own runs (docs/plans/run-logger.md, 4.2 and 4.3).
+    const plan =
+      sport === "run"
+        ? buildRunPlan(tree.workout, ids, thresholds, mode, { surface, ...(await runPlanHistory(userId, thresholds.lthr_run)) })
+        : buildRidePlan(tree.workout, ids, thresholds, mode);
 
     const now = Date.now();
     // The run of a brick links to its ride from the planned pair (4.7).

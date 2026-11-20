@@ -9,11 +9,14 @@
  */
 
 import { db } from "@/db";
-import { garminActivities, rides, workoutSessions, type EndReason, type RideMode, type RideSport } from "@/db/schema";
+import { garminActivities, rides, workoutSessions, type EndReason, type RideMode, type RideSport, type RunSurface } from "@/db/schema";
 import { getRide } from "@/lib/actions/rides";
-import { recentRide } from "@/lib/bike-exercise-view";
+import { recentRide, rideStepLogs } from "@/lib/bike-exercise-view";
+import { runPlanHistory } from "@/lib/run-history";
 import { getUserSettings } from "@/lib/user-settings";
-import { rideTimeline } from "@/lib/utils/ride-timeline";
+import type { RidePlan } from "@/lib/utils/ride-timeline";
+import type { RunStepLog } from "@/lib/utils/run-results";
+import { brickSummaryOf } from "@/lib/run-brick";
 import { runKeptText } from "@/lib/utils/run-screen";
 import { garminAllowedFor } from "@/lib/garmin/access";
 import { isIndoor, sportOf } from "@/lib/garmin/analytics/sport";
@@ -99,9 +102,11 @@ export async function runExerciseView(
 
   // getRide settles the active ride first, so one whose last step ran out is not live.
   const [thresholds, defaultMode, active] = await Promise.all([thresholdValues(userId), defaultRunModeFor(userId, programExerciseId), getRide({})]);
+  // The belts and easy pace startRide reads too, so the screen shows the run it starts.
+  const history = await runPlanHistory(userId, thresholds.lthr_run);
   const ids = rows.map((r) => r.id);
   const view = (mode: RideMode, surface: "road" | "trail" = "road"): RunModeView => {
-    const plan = buildRunPlan(tree.workout, ids, thresholds, mode, { surface });
+    const plan = buildRunPlan(tree.workout, ids, thresholds, mode, { surface, ...history });
     return { numbers: plannedRunNumbers(plan), chart: runChart(plan), rows: runStepRows(plan, surface) };
   };
   const live = active.success ? active.data : null;
@@ -127,40 +132,69 @@ export async function runExerciseView(
   };
 }
 
-// ── After the run ────────────────────────────────────────────────────────────
+// ── After the run (step 4): the results table and the summary ───────────────
 
-export type RunDoneData = {
+export type RunAfterData = {
   rideId: number;
+  sessionId: number;
+  /** The workout is still open: a one-exercise program's "Save the run" finishes it in run mode. */
+  sessionOpen: boolean;
+  /** A step the timeline ended has no row yet (the app was closed when the run ended). */
+  unsaved: boolean;
   status: "finished" | "ended_early";
+  plan: RidePlan;
+  /** Per program set: the logged step, else what the run's timeline says of it. */
+  logs: Record<number, RunStepLog>;
   /** "Done 17:12 · Treadmill", "Ended early 16:40 · Outdoor". */
   doneLine: string;
   /** "Steps 1 and 2 are saved". */
   kept: string;
   endReason: EndReason | null;
+  /** The user has Garmin and no step holds a Garmin value yet: "Waiting for your Garmin run". */
+  garminWaiting: boolean;
+  /** The runner tapped the belt or incline; else a treadmill distance is the plan's (4.4). */
+  beltEvents: boolean;
+  /** The ride of the run's brick: its time and T2 (section 5 "Summary"). */
+  brick: { rideSeconds: number; t2Seconds: number | null } | null;
+  surface: RunSurface | null;
 };
 
 /**
  * The user's run of this program exercise that ended in the last 12 hours,
- * as its done screen shows it (section 5 "Run done / Run ended early"). The
- * exercise then shows this, not Start run, as the bike shows its summary.
+ * with its logged steps: the results table and the summary read it. A step
+ * whose save has not reached the server yet shows what the timeline says.
  */
-export async function runDoneView(userId: string, programExerciseId: number): Promise<RunDoneData | null> {
+export async function runAfterView(userId: string, programExerciseId: number): Promise<RunAfterData | null> {
   const recent = await recentRide(userId, programExerciseId, "run");
   if (!recent || (recent.status !== "finished" && recent.status !== "ended_early")) return null;
-  const [r, { timeZone }] = await Promise.all([getRide({ rideId: recent.id }), getUserSettings(userId)]);
+  const r = await getRide({ rideId: recent.id });
   if (!r.success || !r.data) return null;
   const v = r.data;
   const status = v.ride.status === "ended_early" ? "ended_early" : "finished";
-  const t = rideTimeline(v.plan, v.events, v.serverNow, { heartbeatAt: v.ride.heartbeatAt });
-  const endedAt = v.ride.endedAt ?? t.endedAt;
+  const [{ logs, timeline, unsaved }, garmin, { timeZone }, brick] = await Promise.all([
+    rideStepLogs(userId, v),
+    garminAllowedFor(userId),
+    getUserSettings(userId),
+    v.ride.brickRideId !== null ? brickSummaryOf(userId, v.ride.brickRideId, v.ride.startedAt) : null,
+  ]);
+  const endedAt = v.ride.endedAt ?? timeline.endedAt;
   const at = endedAt
     ? new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", ...(timeZone && { timeZone }) }).format(new Date(endedAt))
     : null;
   return {
     rideId: v.ride.id,
+    sessionId: v.ride.sessionId,
+    sessionOpen: recent.sessionOpen,
+    unsaved,
     status,
+    plan: v.plan,
+    logs,
     doneLine: [`${status === "ended_early" ? "Ended early" : "Done"}${at ? ` ${at}` : ""}`, RUN_MODE_NAME[v.plan.mode]].join(" · "),
-    kept: runKeptText(v.plan, t),
+    kept: runKeptText(v.plan, timeline),
     endReason: v.ride.endReason,
+    garminWaiting: garmin && !Object.values(logs).some((l) => Object.values(l.sources ?? {}).includes("garmin")),
+    beltEvents: v.events.some((e) => e.kind === "belt" || e.kind === "incline"),
+    brick,
+    surface: v.ride.surface,
   };
 }

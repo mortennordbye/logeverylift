@@ -11,7 +11,7 @@
  */
 
 import { db } from "@/db";
-import { exercises, garminDailyMetrics, workoutSessions, workoutSets } from "@/db/schema";
+import { exercises, garminDailyMetrics, rides, workoutSessions, workoutSets } from "@/db/schema";
 import { garminAllowedFor } from "@/lib/garmin/access";
 import { strengthLoad } from "@/lib/garmin/analytics/load";
 import { rampBand, type PmcPoint, type RampBand, type Track } from "@/lib/garmin/analytics/pmc";
@@ -21,9 +21,10 @@ import { userToday } from "@/lib/user-settings";
 import { toDateStr } from "@/lib/utils/cycle-position";
 import { addDaysStr } from "@/lib/utils/seasons";
 import { doneRideNumbers } from "@/lib/utils/ride-numbers";
+import { doneRunNumbers } from "@/lib/utils/run-numbers";
 import { loadAnchors } from "@/lib/utils/step-results";
 import { appPmc, loadSource, sessionLoad, weightedRpe, type AppSessionLoad, type EnduranceSport, type LoadMethod } from "@/lib/utils/training-load";
-import { and, asc, eq, gte, inArray, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 
 /** As the Garmin worker: a strength session counts at most this long. */
 const MAX_STRENGTH_MINUTES = 180;
@@ -84,6 +85,17 @@ export async function appSessionLoads(userId: string, from: string | null, to: s
     if (complete) moving.set(sessionId, swum.reduce((a, r) => a + (r.durationSeconds ?? 0), 0));
   }
   const anchors = loadAnchors(await thresholdValues(userId));
+  // The mode and surface of each session's run (docs/plans/run-logger.md, 4.9): the latest run of the session.
+  const runIds = [...new Set(rows.filter((r) => r.discipline === "run" && r.plannedStep != null).map((r) => r.id))];
+  const runOf = new Map<number, { mode: string; surface: string | null }>();
+  if (runIds.length) {
+    const list = await db
+      .select({ sessionId: rides.sessionId, mode: rides.mode, surface: rides.surface })
+      .from(rides)
+      .where(and(eq(rides.userId, userId), eq(rides.sport, "run"), inArray(rides.sessionId, runIds)))
+      .orderBy(desc(rides.startedAt));
+    for (const r of list) if (!runOf.has(r.sessionId)) runOf.set(r.sessionId, r);
+  }
 
   const bySession = new Map<number, typeof rows>();
   for (const r of rows) bySession.set(r.id, [...(bySession.get(r.id) ?? []), r]);
@@ -113,10 +125,19 @@ export async function appSessionLoads(userId: string, from: string | null, to: s
         out.push({ id, date: first.date, sport: "bike", load: power, method: "bike_power", durationS: seconds });
         continue;
       }
+      // A run's steps with distance on 90% of the time and a threshold pace: the
+      // pace load per step from GAP (docs/plans/run-logger.md, 4.9).
+      const runMode = sport === "run" ? (runOf.get(id) ?? null) : null;
+      const pace = runMode ? runStepLoad(g, runMode, anchors.runThresholdSpeed ?? null) : null;
+      if (pace !== null) {
+        out.push({ id, date: first.date, sport: "run", load: pace, method: "run_gap", durationS: seconds });
+        continue;
+      }
       // "other" (cardio with no discipline) can only use session RPE.
       const l = sessionLoad(
         { sport: (ENDURANCE.includes(sport) ? sport : "bike") as EnduranceSport, seconds, meters, inclinePercent: incline, rpe, movingSeconds: sport === "swim" ? (moving.get(id) ?? null) : null },
-        sport === "other" ? {} : anchors,
+        // A run from run mode with no pace load (Trail or snow, too little distance) takes the effort load, not the plain pace.
+        sport === "other" ? {} : runMode ? { ...anchors, runThresholdSpeed: null } : anchors,
       );
       out.push({ id, date: first.date, sport: sport as Sport, load: l.load, method: l.method, ...(l.reason && { reason: l.reason }), durationS: seconds });
     }
@@ -144,6 +165,28 @@ function ridePowerLoad(
     { ftp: planned ?? currentFtp, rpe: null },
   );
   return n.load?.method === "power" ? n.load.value : null;
+}
+
+/**
+ * The pace load of a run's logged steps (4.9), or null when it does not apply:
+ * no run of the session, Trail or snow, distance on under 90% of the time, or
+ * no threshold pace. Skipped steps count with their run time (4.7). The
+ * threshold is the one the run was planned with.
+ */
+function runStepLoad(
+  sets: { plannedStep: unknown; stepStatus: string | null; durationSeconds: number | null; distanceMeters: number | null; inclinePercent: number | null }[],
+  run: { mode: string; surface: string | null } | null,
+  currentThreshold: number | null,
+): number | null {
+  const steps = sets.filter((s) => s.plannedStep != null && s.stepStatus !== "not_done");
+  if (!run || !steps.length) return null;
+  const planned = (steps[0].plannedStep as { thresholds?: { run_threshold_pace?: number } }).thresholds?.run_threshold_pace;
+  const treadmill = run.mode === "indoor";
+  const n = doneRunNumbers(
+    steps.map((s) => ({ seconds: s.durationSeconds ?? 0, meters: s.distanceMeters, inclinePct: treadmill ? s.inclinePercent : null, avgHr: null })),
+    { thresholdSpeed: planned ?? currentThreshold, lthr: null, rpe: null, treadmill, surface: run.surface === "trail" ? "trail" : null },
+  );
+  return n.load?.method === "pace" ? n.load.value : null;
 }
 
 export type LoadDayView = { date: string; calibrating: boolean; tracks: Record<Track, PmcPoint> };

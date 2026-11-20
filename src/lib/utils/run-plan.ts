@@ -43,6 +43,21 @@ export const BLOCK_WORK_UNDER_S = 60;
 /** A done treadmill step of the last 6 weeks: its belt (km/h), Garmin average heart rate and seconds. */
 export type BeltHistoryStep = { beltKmh: number; avgHr: number; seconds: number };
 
+/** A done outdoor run step of the last 6 weeks: its meters, seconds and average heart rate. */
+export type EasyHistoryStep = { meters: number; seconds: number; avgHr: number };
+
+/**
+ * The runner's recent easy pace (4.3), as a speed in m/s: the median speed of
+ * 2 or more done outdoor steps of 10 min or more whose average heart rate was
+ * in zone 1 or 2 (run LTHR). Null without an LTHR or enough steps; an outdoor
+ * distance step then runs on the zone 2 pace.
+ */
+export function recentEasySpeed(steps: EasyHistoryStep[], lthr: number | null | undefined): number | null {
+  if (!lthr) return null;
+  const easy = steps.filter((s) => s.seconds >= BELT_HISTORY_MIN_S && s.meters > 0 && runHrZoneOf((s.avgHr / lthr) * 100) <= 2);
+  return easy.length >= BELT_HISTORY_MIN_STEPS ? median(easy.map((s) => s.meters / s.seconds)) : null;
+}
+
 /** km/h of a speed in m/s, to the nearest `step` km/h. */
 const kmh = (ms: number, step: number) => Math.round(Math.round((ms * 3.6) / step) * step * 10) / 10;
 const tenth = (n: number) => Math.round(n * 10) / 10;
