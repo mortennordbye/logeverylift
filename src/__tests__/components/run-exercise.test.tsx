@@ -156,9 +156,18 @@ describe("RunExercise", () => {
     expect(screen.queryByTestId("step-alerts")).toBeNull();
   });
 
-  it("with a ride running elsewhere: A ride is running, and Resume opens it", () => {
-    screenOf(data(OWNER, { otherLive: { sport: "bike", href: "/programs/9/workout/exercises/8?ride=1" } }));
+  it("with a ride running elsewhere: End ride and start run, with the mode still to choose and the way back to the ride", () => {
+    screenOf(data(OWNER, { otherLive: { sport: "bike", href: "/programs/9/workout/exercises/8?ride=1", rideId: 8 } }));
     expect(screen.getByTestId("run-running").textContent).toBe("A ride is running");
-    expect(screen.getByRole("link", { name: "Resume" }).getAttribute("href")).toBe("/programs/9/workout/exercises/8?ride=1");
+    expect(screen.getByRole("button", { name: "End ride and start run" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Change" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Back to the ride" }).getAttribute("href")).toBe("/programs/9/workout/exercises/8?ride=1");
+    expect(screen.queryByRole("button", { name: "Start run" })).toBeNull();
+  });
+
+  it("with another run running: Resume opens it", () => {
+    screenOf(data(OWNER, { otherLive: { sport: "run", href: "/programs/9/workout/exercises/7?ride=1", rideId: 7 } }));
+    expect(screen.getByTestId("run-running").textContent).toBe("Another run is running");
+    expect(screen.getByRole("link", { name: "Resume" }).getAttribute("href")).toBe("/programs/9/workout/exercises/7?ride=1");
   });
 });

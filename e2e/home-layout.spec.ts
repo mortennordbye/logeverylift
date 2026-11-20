@@ -188,7 +188,8 @@ test("E3: Endurance today below Week still starts the guided player", async ({ p
   const go = page.getByTestId("endurance-today-row").filter({ hasText: "Tempo" }).getByRole("link", { name: "Start guided" });
   await expect(go).toHaveAttribute("href", `/planned/${row.id}/play`);
   await go.click();
-  await expect(page).toHaveURL(new RegExp(`/planned/${row.id}/play`));
+  // A run-only program opens run mode in its run exercise (R16, docs/plans/run-logger.md).
+  await expect(page).toHaveURL(new RegExp(`/workout/exercises/\\d+\\?ride=1&planned=${row.id}$`));
 });
 
 test("E4: offline, Done keeps the draft and says so; back online it saves", async ({ page, context }, testInfo) => {

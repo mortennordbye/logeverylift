@@ -10,7 +10,9 @@ import { expect, test } from "./fixtures/test";
  * The guided player on a program with structured steps
  * (docs/plans/one-program-model.md, step 3): today's planned session runs a
  * program whose run is stored as program sets (a bike-only program opens ride
- * mode instead, D14 in docs/plans/bike-ride-logger.md). The workout screen shows the
+ * mode instead, D14 in docs/plans/bike-ride-logger.md). A short spin after
+ * the run keeps it a two-sport program, which keeps the player: a run-only
+ * one opens run mode (R16, docs/plans/run-logger.md). The workout screen shows the
  * totals and "Start guided", the player runs the steps, and the results save
  * as one logged set per step, each with its status and a copy of its plan.
  */
@@ -34,6 +36,9 @@ const run: Workout = {
   ],
 };
 
+/** The spin after the run: one step that waits for Lap. */
+const spin: Workout = { v: 2, sport: "bike", name: "Spin", steps: [{ type: "cooldown", end: { type: "lap" } }] };
+
 async function setup(parallelIndex: number) {
   const db = testDb();
   const user = await db.query.users.findFirst({ where: eq(users.email, e2eUser(parallelIndex).email) });
@@ -47,6 +52,9 @@ async function setup(parallelIndex: number) {
   const [program] = await db.insert(programs).values({ userId, name: "Steps run" }).returning();
   const [pe] = await db.insert(programExercises).values({ programId: program.id, exerciseId: runEx.id, orderIndex: 0, progressionAdvance: "manual" }).returning();
   await db.insert(programSets).values(workoutToRows(run).map((r) => ({ ...r, programExerciseId: pe.id, restTimeSeconds: 0 })));
+  const [bikeEx] = await db.select({ id: exercises.id }).from(exercises).where(and(eq(exercises.discipline, "bike"), isNull(exercises.userId))).orderBy(asc(exercises.id)).limit(1);
+  const [pe2] = await db.insert(programExercises).values({ programId: program.id, exerciseId: bikeEx.id, orderIndex: 1, progressionAdvance: "manual" }).returning();
+  await db.insert(programSets).values(workoutToRows(spin).map((r) => ({ ...r, programExerciseId: pe2.id, restTimeSeconds: 0 })));
   const [cycle] = await db
     .insert(trainingCycles)
     .values({ userId, name: "Tri block", durationWeeks: 4, status: "active", startDate: today(), sessionsGeneratedAt: new Date() })
@@ -90,17 +98,19 @@ test("a program with steps: the workout screen starts the player, and each step 
 
   await expect(page.getByTestId("player-ready")).toBeVisible();
   await page.getByRole("button", { name: "Start", exact: true }).click();
-  await expect(page.getByTestId("player-step-count")).toHaveText("Step 1 of 4");
+  await expect(page.getByTestId("player-step-count")).toHaveText("Step 1 of 5");
   await expect(page.getByTestId("player-target")).toHaveText("125-145 bpm");
   await page.clock.runFor(5_500);
-  await expect(page.getByTestId("player-step-count")).toHaveText("Step 2 of 4");
+  await expect(page.getByTestId("player-step-count")).toHaveText("Step 2 of 5");
   await page.clock.runFor(6_500);
-  await expect(page.getByTestId("player-step-count")).toHaveText("Step 3 of 4");
+  await expect(page.getByTestId("player-step-count")).toHaveText("Step 3 of 5");
   await page.getByRole("button", { name: "Skip" }).click();
+  await page.getByRole("button", { name: "Lap" }).click();
+  await expect(page.getByTestId("player-step-count")).toHaveText("Step 5 of 5");
   await page.getByRole("button", { name: "Lap" }).click();
 
   await expect(page).toHaveURL(new RegExp(`/planned/${plannedId}/results`));
-  await expect(page.getByTestId("result-step")).toHaveCount(4);
+  await expect(page.getByTestId("result-step")).toHaveCount(5);
   await page.getByRole("button", { name: "7", exact: true }).click();
   await page.getByRole("button", { name: "Save" }).click();
   await expect(page).toHaveURL(new RegExp(`/planned/${plannedId}$`));
@@ -110,14 +120,16 @@ test("a program with steps: the workout screen starts the player, and each step 
     .poll(async () => (await db.select().from(workoutSessions).where(eq(workoutSessions.userId, userId))).map((s) => [s.plannedSessionId, s.programId, s.isCompleted]))
     .toEqual([[plannedId, programId, true]]);
   const [session] = await db.select().from(workoutSessions).where(eq(workoutSessions.userId, userId));
-  const sets = await db.select().from(workoutSets).where(eq(workoutSets.sessionId, session.id)).orderBy(asc(workoutSets.setNumber));
-  expect(sets.map((s) => s.stepStatus)).toEqual(["done", "done", "skipped", "done"]);
+  // In plan order: the spin's set 1 sorts after the run's sets.
+  const sets = await db.select().from(workoutSets).where(eq(workoutSets.sessionId, session.id)).orderBy(asc(workoutSets.programSetId));
+  expect(sets.map((s) => s.stepStatus)).toEqual(["done", "done", "skipped", "done", "done"]);
   expect(sets.every((s) => s.plannedStep != null)).toBe(true);
   expect(sets[0].rpe).toBe(7);
 
   await page.goto("/week");
   const week = page.getByTestId("week-session").filter({ hasText: "Steps run" });
-  await expect(week).toContainText("done 00:1");
+  // A two-sport session shows done with no time of one sport.
+  await expect(week).toContainText("done");
 });
 
 test("home: Start Today's Workout asks guided or by hand on a day with steps", async ({ page }, testInfo) => {

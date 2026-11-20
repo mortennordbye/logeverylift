@@ -1,5 +1,6 @@
-import { asc, eq } from "drizzle-orm";
-import { athleteThresholds, plannedSessions, trainingCycles, users, workoutSessions, workoutSets } from "../src/db/schema";
+import { and, asc, eq, isNull } from "drizzle-orm";
+import { athleteThresholds, exercises, plannedSessions, programExercises, programSets, trainingCycles, users, workoutSessions, workoutSets } from "../src/db/schema";
+import { workoutToRows } from "../src/lib/utils/program-steps";
 import type { Workout } from "../src/lib/utils/workout-steps";
 import { e2eUser } from "./fixtures/env";
 import { testDb } from "./fixtures/reset";
@@ -38,6 +39,7 @@ const run: Workout = {
     { type: "cooldown", end: { type: "lap" } },
   ],
 };
+const spin: Workout = { v: 2, sport: "bike", name: "Spin", steps: [{ type: "cooldown", end: { type: "lap" } }] };
 const swim: Workout = {
   v: 2,
   sport: "swim",
@@ -67,6 +69,12 @@ async function setup(parallelIndex: number, workout: Workout) {
     .values({ userId, name: "Tri block", durationWeeks: 4, status: "active", startDate: today(), sessionsGeneratedAt: new Date() })
     .returning();
   const programId = await insertStepProgram(db, userId, workout);
+  // A short spin after a run keeps it a two-sport program, which keeps the player: a run-only one opens run mode (R16, docs/plans/run-logger.md).
+  if (workout.sport === "run") {
+    const [bikeEx] = await db.select({ id: exercises.id }).from(exercises).where(and(eq(exercises.discipline, "bike"), isNull(exercises.userId))).orderBy(asc(exercises.id)).limit(1);
+    const [pe] = await db.insert(programExercises).values({ programId, exerciseId: bikeEx.id, orderIndex: 1, progressionAdvance: "manual" }).returning();
+    await db.insert(programSets).values(workoutToRows(spin).map((r) => ({ ...r, programExerciseId: pe.id, restTimeSeconds: 0 })));
+  }
   const [row] = await db.insert(plannedSessions).values({ userId, cycleId: cycle.id, date: today(), programId }).returning({ id: plannedSessions.id });
   return { userId, plannedId: row.id };
 }
@@ -104,30 +112,32 @@ test("a guided run from home: steps change on time, pause, skip, lap, results sa
 
   await expect(page.getByTestId("player-ready")).toBeVisible();
   await page.getByRole("button", { name: "Start", exact: true }).click();
-  await expect(page.getByTestId("player-step-count")).toHaveText("Step 1 of 4");
+  await expect(page.getByTestId("player-step-count")).toHaveText("Step 1 of 5");
   await expect(page.getByTestId("player-target")).toHaveText("125-145 bpm");
 
   // The 5 s warm-up ends by itself.
   await page.clock.runFor(5_500);
-  await expect(page.getByTestId("player-step-count")).toHaveText("Step 2 of 4");
+  await expect(page.getByTestId("player-step-count")).toHaveText("Step 2 of 5");
   await expect(page.getByTestId("player-target")).toHaveText("150-160 bpm");
 
   await page.getByRole("button", { name: "Pause" }).click();
   const frozen = await page.getByTestId("player-time").textContent();
   await page.clock.runFor(60_000);
   await expect(page.getByTestId("player-time")).toHaveText(frozen!);
-  await expect(page.getByTestId("player-step-count")).toHaveText("Step 2 of 4");
+  await expect(page.getByTestId("player-step-count")).toHaveText("Step 2 of 5");
   await page.getByRole("button", { name: "Resume" }).click();
 
   // The 6 s work step ends by itself; skip the long one.
   await page.clock.runFor(6_500);
-  await expect(page.getByTestId("player-step-count")).toHaveText("Step 3 of 4");
+  await expect(page.getByTestId("player-step-count")).toHaveText("Step 3 of 5");
   await page.getByRole("button", { name: "Skip" }).click();
-  await expect(page.getByTestId("player-step-count")).toHaveText("Step 4 of 4");
+  await expect(page.getByTestId("player-step-count")).toHaveText("Step 4 of 5");
+  await page.getByRole("button", { name: "Lap" }).click();
+  await expect(page.getByTestId("player-step-count")).toHaveText("Step 5 of 5");
   await page.getByRole("button", { name: "Lap" }).click();
 
   await expect(page).toHaveURL(new RegExp(`/planned/${plannedId}/results`));
-  await expect(page.getByTestId("result-step")).toHaveCount(4);
+  await expect(page.getByTestId("result-step")).toHaveCount(5);
   await page.getByRole("button", { name: "7", exact: true }).click();
   await page.getByRole("button", { name: "Save" }).click();
   await expect(page).toHaveURL(new RegExp(`/planned/${plannedId}$`));
@@ -138,14 +148,15 @@ test("a guided run from home: steps change on time, pause, skip, lap, results sa
     .toEqual([[plannedId, true, "app"]]);
   const [session] = await db.select().from(workoutSessions).where(eq(workoutSessions.userId, userId));
   expect(session.clientKey).not.toBeNull(); // a player save
-  const sets = await db.select().from(workoutSets).where(eq(workoutSets.sessionId, session.id)).orderBy(asc(workoutSets.setNumber));
-  expect(sets.map((s) => s.stepStatus)).toEqual(["done", "done", "skipped", "done"]);
+  // In plan order: the spin's set 1 sorts after the run's sets.
+  const sets = await db.select().from(workoutSets).where(eq(workoutSets.sessionId, session.id)).orderBy(asc(workoutSets.programSetId));
+  expect(sets.map((s) => s.stepStatus)).toEqual(["done", "done", "skipped", "done", "done"]);
 
   await page.goto("/week");
   await expect(page.getByTestId("load-card")).toBeVisible();
-  // Done and linked, with the logged time. The lap step leaves the plan's time open, so the band is "done".
+  // Done and linked. The lap step leaves the plan's time open, so the band is "done"; a two-sport session shows no time of one sport.
   const week = page.getByTestId("week-session").filter({ hasText: "Quick run" });
-  await expect(week).toContainText("done 00:1");
+  await expect(week).toContainText("done");
   await expect(week).not.toContainText("planned");
 });
 

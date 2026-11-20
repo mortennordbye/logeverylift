@@ -15,13 +15,15 @@
 
 import { RideProfileChart, RideZoneBar } from "@/components/features/bike/RideProfileChart";
 import { StepAlertsRow, useStepAlerts } from "@/components/features/bike/StepAlerts";
-import { armRide, disarmRide } from "@/components/features/bike/useRide";
+import { armRide, disarmRide, sendQueuedEvents } from "@/components/features/bike/useRide";
 import { BackLink } from "@/components/ui/BackLink";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { useWorkoutSession } from "@/contexts/workout-session-context";
 import type { RideMode, RunSurface } from "@/db/schema/rides";
 import { startRide } from "@/lib/actions/rides";
 import type { RunExerciseData } from "@/lib/run-exercise-view";
+import type { BrickRide } from "@/lib/run-brick";
+import { rideClock } from "@/lib/utils/ride-screen";
 import { rideLengthText } from "@/lib/utils/bike-ride-view";
 import { loadText } from "@/lib/utils/format";
 import { RUN_MODE_NAME, runAnchorText } from "@/lib/utils/run-view";
@@ -29,7 +31,7 @@ import { callAction } from "@/lib/utils/stale-bundle";
 import { Check } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const SURFACE_NAME: Record<RunSurface, string> = { road: "Road", trail: "Trail or snow" };
 
@@ -39,6 +41,7 @@ export function RunExercise({
   exerciseName,
   data,
   pushPublicKey,
+  brick = null,
 }: {
   programId: number;
   programExerciseId: number;
@@ -46,6 +49,8 @@ export function RunExercise({
   data: RunExerciseData;
   /** The server's VAPID public key; null when push is off on the server. */
   pushPublicKey: string | null;
+  /** The ride this run follows in today's brick (section 5 "Brick"): T2 since its end, or "End ride and start run". */
+  brick?: BrickRide | null;
 }) {
   const [mode, setMode] = useState<RideMode>(data.defaultMode);
   const [surface, setSurface] = useState<RunSurface>("road");
@@ -59,12 +64,27 @@ export function RunExercise({
   const treadmill = mode === "indoor";
   const view = treadmill ? data.treadmill : data[surface];
   const n = view.numbers;
-  const running = data.liveRun || data.otherLive !== null;
+  // A run of the user runs: Resume. A ride runs: "End ride and start run", with the mode still to choose.
+  const running = data.liveRun || (data.otherLive !== null && data.otherLive.sport !== "bike");
   const thresholds = { run_threshold_pace: data.thresholdPace ?? undefined, lthr_run: data.lthr ?? undefined };
 
   const sub = [rideLengthText(n), n.load.load > 0 ? loadText(n.load) : null, runAnchorText(thresholds, mode)].filter(Boolean).join(" · ");
 
-  async function start() {
+  // T2 counts from the ride's end (4.7), after the first render so the server HTML and the client agree.
+  const [t2, setT2] = useState<number | null>(null);
+  useEffect(() => {
+    const from = brick?.t2From;
+    if (from == null) return;
+    const tick = () => setT2(Math.max(0, Math.floor((Date.now() - from) / 1000)));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [brick?.t2From]);
+
+  // A ride runs: "End ride and start run" ends it and starts this run in one action (4.3).
+  const rideRunning = data.otherLive?.sport === "bike";
+
+  async function start(endActive = false) {
     if (starting) return;
     // The workout layout makes the session; read it at the tap, not in the
     // render, so the server HTML and the first client render agree.
@@ -76,8 +96,24 @@ export function RunExercise({
     setError(null);
     // Inside the tap: sound and the screen wake lock need a user gesture (iOS).
     armRide();
+    // The ride's taps still on this phone go first; when they cannot, the run waits.
+    if (endActive && data.otherLive && !(await sendQueuedEvents(data.otherLive.rideId))) {
+      disarmRide();
+      setError("The ride's taps are still on this phone. Go online to end the ride.");
+      setStarting(false);
+      return;
+    }
     const res = await callAction(
-      startRide({ sessionId: session.sessionId, programExerciseId, mode, ...(!treadmill && { surface }), clientId: crypto.randomUUID() }),
+      startRide({
+        sessionId: session.sessionId,
+        programExerciseId,
+        mode,
+        ...(!treadmill && { surface }),
+        // On a treadmill the clock runs after a 5 s "Step on" count (4.3).
+        ...(treadmill && { countIn: true }),
+        ...(endActive && { endActive: true }),
+        clientId: crypto.randomUUID(),
+      }),
     );
     if (res.success) router.replace(`${pathname}?ride=1`);
     else {
@@ -143,6 +179,13 @@ export function RunExercise({
           </div>
         )}
 
+        {t2 !== null && !running && (
+          <div className="flex items-center justify-between rounded-xl bg-muted px-4 min-h-12 text-sm" data-testid="run-t2">
+            <span className="text-muted-foreground">Since the ride</span>
+            <span className="font-semibold tabular-nums">T2 {rideClock(t2)}</span>
+          </div>
+        )}
+
         <div className="rounded-2xl bg-muted px-3 pt-3 pb-2.5">
           <RideProfileChart chart={view.chart} label={`Planned run profile, ${view.rows.map((r) => `${r.title} ${r.chip ?? ""} ${r.time}`).join(", ")}`} />
           {stats.length > 0 && (
@@ -200,7 +243,24 @@ export function RunExercise({
             {error}
           </p>
         )}
-        {running ? (
+        {rideRunning ? (
+          <>
+            <p className="text-sm text-center text-muted-foreground" data-testid="run-running">
+              A ride is running
+            </p>
+            <button
+              type="button"
+              onClick={() => start(true)}
+              disabled={starting}
+              className="min-h-12 rounded-2xl bg-brand-fill px-4 text-base font-semibold text-white active:opacity-80 disabled:opacity-50"
+            >
+              End ride and start run
+            </button>
+            <Link href={data.otherLive!.href} onClick={() => armRide()} className="min-h-11 inline-flex items-center justify-center text-sm font-medium text-primary active:opacity-70">
+              Back to the ride
+            </Link>
+          </>
+        ) : running ? (
           <>
             <p className="text-sm text-center text-muted-foreground" data-testid="run-running">
               {data.liveRun ? "Run running" : data.otherLive!.sport === "run" ? "Another run is running" : "A ride is running"}
@@ -217,7 +277,7 @@ export function RunExercise({
           <>
             <button
               type="button"
-              onClick={start}
+              onClick={() => start()}
               disabled={starting}
               className="min-h-12 rounded-2xl bg-brand-fill px-4 text-base font-semibold text-white active:opacity-80 disabled:opacity-50"
             >

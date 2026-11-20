@@ -86,6 +86,43 @@ function writeQueue(rideId: number, mine: QueuedRideEvent[], gone: Set<string>):
   return merged;
 }
 
+/**
+ * Send a ride's taps still waiting on this phone, in order, from outside ride
+ * mode: "End ride and start run" (docs/plans/run-logger.md, 4.3) sends them
+ * before the ride ends. True when none is left on this phone.
+ */
+export async function sendQueuedEvents(rideId: number): Promise<boolean> {
+  if (!readQueuedEvents(rideId).length) return true;
+  const read = async () => {
+    const r = await callAction(getRide({ rideId }));
+    return r.success && r.data ? r.data : null;
+  };
+  let view = await read();
+  if (!view) return false;
+  const gone = new Set<string>();
+  for (const q of readQueuedEvents(rideId)) {
+    if (view.events.some((e) => e.clientId === q.clientId)) {
+      gone.add(q.clientId);
+      continue;
+    }
+    const send = (seq: number) =>
+      callAction(sendRideEvent({ rideId, clientId: q.clientId, kind: q.kind, value: q.value, clientAt: q.clientAt, stepKey: q.stepKey, expectedSeq: seq }));
+    let res = await send(view.ride.seq);
+    // Another device sent an event first: read the ride and send again.
+    if (!res.success && !failedInTransit(res) && res.error === RIDE_CONFLICT) {
+      const again = await read();
+      if (again) {
+        view = again;
+        res = await send(view.ride.seq);
+      }
+    }
+    if (res.success) view = res.data;
+    else if (failedInTransit(res) || !REFUSED_FOR_GOOD.has(res.error)) break;
+    gone.add(q.clientId);
+  }
+  return writeQueue(rideId, [], gone).length === 0;
+}
+
 // ── Taps that arm the ride: audio and the wake lock need a user gesture ─────
 
 let armedAt = 0;
@@ -467,8 +504,8 @@ export function useRide(opts: { initial: RideView; saveStep: (r: RideStepResult)
       },
       unskip: () => tap("unskip"),
       /** A run on a treadmill (4.4): the new belt in tenths of km/h, the new incline in tenths of %. */
-      belt: (tenths: number) => tap("belt", tenths),
-      incline: (tenths: number) => tap("incline", tenths),
+      belt: (tenths: number, clientAt?: number) => tap("belt", tenths, clientAt),
+      incline: (tenths: number, clientAt?: number) => tap("incline", tenths, clientAt),
       extend: (seconds: 60 | -60) => tap("extend", seconds),
       nudge: (watts: 5 | -5) => tap("nudge", watts),
       lap: () => tap("lap"),

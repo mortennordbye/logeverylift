@@ -6,7 +6,10 @@ import { BikeExercise } from "@/components/features/bike/BikeExercise";
 import { RideMode } from "@/components/features/bike/RideMode";
 import { RideResults } from "@/components/features/bike/RideResults";
 import { RideSummary } from "@/components/features/bike/RideSummary";
+import { BrickRideDone } from "@/components/features/run/BrickRideDone";
+import { RunDone } from "@/components/features/run/RunDone";
 import { RunExercise } from "@/components/features/run/RunExercise";
+import { RunMode } from "@/components/features/run/RunMode";
 import { WorkoutSetsClient } from "@/components/features/WorkoutSetsClient";
 import { bikeExerciseView, handResultsView, rideAfterView, rideOfExercise } from "@/lib/bike-exercise-view";
 import { enduranceEnabledFor } from "@/lib/endurance";
@@ -17,7 +20,8 @@ import { stepLabels } from "@/lib/program-steps-view";
 import type { StepRow } from "@/lib/utils/program-steps";
 import { offersSaveTheRide, resultSteps, rideSummary } from "@/lib/utils/ride-results";
 import { pushPublicKey } from "@/lib/push";
-import { runExerciseView } from "@/lib/run-exercise-view";
+import { brickRideView, brickRunOf } from "@/lib/run-brick";
+import { runDoneView, runExerciseView } from "@/lib/run-exercise-view";
 import { getUserSettings } from "@/lib/user-settings";
 import { requireSession } from "@/lib/utils/session";
 import { rideTestOf } from "@/lib/utils/workout-steps";
@@ -97,6 +101,11 @@ export default async function WorkoutExerciseSetsPage({ params, searchParams }: 
       }
     }
     const after = bike?.doneRide ? await rideAfterView(user.id, peId) : null;
+    // The ride of a brick hands over to its run; its results and summary wait until the run has started (docs/plans/run-logger.md, section 5 "Brick").
+    const brickRun = after ? await brickRunOf(user.id, after.rideId) : null;
+    if (after && brickRun && !brickRun.started) {
+      return <BrickRideDone programId={programId} exerciseName={pe.exercise.name} doneLine={after.doneLine} runHref={brickRun.href} />;
+    }
     if (after) {
       // Later and Done leave for home or the workout; a workout the ride could not finish yet goes back to the summary's Save the ride.
       const saveTheRide = offersSaveTheRide(after, onlyExercise);
@@ -137,13 +146,34 @@ export default async function WorkoutExerciseSetsPage({ params, searchParams }: 
   }
 
   // A run exercise of an endurance user is a run (docs/plans/run-logger.md,
-  // step 2): the run screen, with Resume while its run runs. "Log by hand"
-  // (?hand=1) keeps today's set list.
+  // steps 2 and 3). Run mode (?ride=1) runs the user's run of this exercise;
+  // with none, the run screen shows, with Resume while its run runs. After a
+  // run the screen is its done screen. "Log by hand" (?hand=1) keeps today's
+  // set list.
   if (pe.exercise.discipline === "run" && (await enduranceEnabledFor(user.id))) {
+    const onlyExercise = program.programExercises.length === 1;
+    const found = ride === "1" ? await rideOfExercise(user.id, peId, "run") : null;
+    if (found) {
+      return (
+        <RunMode
+          key={found.view.ride.id}
+          exerciseId={pe.exercise.id}
+          initial={found.view}
+          setNumbers={Object.fromEntries(pe.programSets.map((s) => [s.id, s.setNumber]))}
+          onlyExercise={onlyExercise}
+          sessionCompleted={found.sessionCompleted}
+          workoutHref={`/programs/${programId}/workout`}
+          brick={found.view.ride.brickRideId !== null}
+        />
+      );
+    }
     const sets = pe.programSets as (StepRow & { id: number })[];
     const run = await runExerciseView(user.id, peId, pe.exercise.name, sets, pe.rideTest === "30min" ? "30min" : null);
+    const done = run && !run.liveRun && hand !== "1" ? await runDoneView(user.id, peId) : null;
+    if (done) return <RunDone programId={programId} exerciseName={pe.exercise.name} data={done} doneHref={onlyExercise ? "/" : `/programs/${programId}/workout`} />;
     if (run && !(hand === "1" && !run.liveRun)) {
-      return <RunExercise programId={programId} programExerciseId={peId} exerciseName={pe.exercise.name} data={run} pushPublicKey={pushPublicKey()} />;
+      const brick = run.liveRun ? null : await brickRideView(user.id, programId);
+      return <RunExercise programId={programId} programExerciseId={peId} exerciseName={pe.exercise.name} data={run} pushPublicKey={pushPublicKey()} brick={brick} />;
     }
   }
 
