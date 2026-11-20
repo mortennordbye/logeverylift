@@ -423,7 +423,7 @@ before building (rule 3 of section 0).
 | 0 Groundwork | done |
 | 1 One run model | done |
 | 2 Run exercise screen | done |
-| 3 Run mode | todo |
+| 3 Run mode | done |
 | 4 Results and numbers | todo |
 | 5 AI tools | todo |
 | 6 Alerts | todo |
@@ -621,3 +621,17 @@ before building (rule 3 of section 0).
 - Step 2, alerts row: outdoors only, before the start, with the 4.6 hint after "Step alerts are off"; the treadmill phone sits on the console with the screen on.
 - Step 2, planned day card: the home Today card on a day whose program is one run exercise with steps says "Run · Treadmill · 75 min" (endurance users only), in place of the counts.
 - Step 1, step editor save over plain run sets: the rest of each plain set stays with its place as a rest step after it (also after the last set), and the sets keep their ids; the bike keeps its own rule (its save drops the row rest).
+- Step 3, the count: `startRide` takes `countIn` on a treadmill and puts the run's start 5 s after the tap, so the timeline needs no new state; run mode shows "Step on · Set belt 7.5 km/h" until then. Outdoors there is no count.
+- Step 3, belt bursts: each tap stores the time of that tap, and the burst sends the last value at the time of its last tap. A burst still open when its step ends is not sent (the belt never carries over); Pause sends open bursts first. The first tap on a step with no belt (by feel) gives 8.0 km/h; an unknown incline shows and starts at 0%.
+- Step 3, the end reason: chosen on the ended-early screen after the end (section 5), with `setRideEndReason`; a second tap on a chip clears it. Pain shows "Log an injury", which opens Account, Body and health, where Injuries and limits is.
+- Step 3, after the run: until step 4 builds the results table and the summary, the run exercise shows "Run done" or "Run ended early" with the steps saved for 12 hours after the start, as the bike does, and no Start run.
+- Step 3, short outdoor work: a work step under 3 min shows effort ("Hard") outdoors also when it holds a pace, as the 4.2 table says; e2e 3 runs its 400 m rep that way.
+- Step 3, brick run: outdoors the first 10 min show "Effort 4-5" big with "Short quick steps" and the Z2 cap as the second line; on a treadmill the belt stays the main target and "Effort 4-5" and "Short quick steps" go first on the second line.
+- Step 3, brick link: a run links to the user's latest bike ride of the last 12 hours on today's planned brick parent (the workout opened from it, else a workout of its program).
+- Step 3, End ride and start run: offered whenever a ride runs, not only in a brick, with "Back to the ride"; the run's mode and surface can still be chosen. The ride's taps on this phone are sent first; when they cannot be, the run does not start and the screen says so.
+- Step 3, brick ride done: "Ride numbers later" is a line under Start run, not a button; the ride's results table and summary show once the run has started.
+- Step 3, late belts on the server: `sendRideEvent` writes the belt fields of the ended steps again after each belt or incline event, only where the field's source is still `belt`; `settle` does not.
+- Step 3, step numbers: the header, Hold to skip and the saved-steps line count a strides block as one step, as the step list does.
+- Step 3, controls: outdoors with Lap, +1 min gets its own row above the Next card, so the bottom row holds Hold to skip, Pause and Lap at 320 px. The controls lock covers them all. "Saved on this phone" is a line under the header.
+- Step 3, R16 and the guided player specs: the guided player e2e runs got a short spin after the run, so they stay two-sport programs and keep the player.
+- Step 3, push: the run's alert text is step 6; the alerts row shows before an outdoor start as in step 2.
