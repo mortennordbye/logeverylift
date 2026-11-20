@@ -310,17 +310,19 @@ test("1c: a run ended early shows its results, then the summary asks why, and Ru
   test.setTimeout(90_000);
   const s = await program(await userOf(testInfo.parallelIndex), treadmillRun);
   await startRun(page, s, "Treadmill");
-  await advance(page, s.userId, 70);
+  // End in the warm-up: an end on the last step is a finished run (as for a ride).
+  await advance(page, s.userId, 30);
   await page.getByRole("button", { name: "Pause" }).click();
   await expect(page.getByTestId("ride-paused")).toBeVisible();
   await page.clock.resume();
   await page.getByRole("button", { name: "End run" }).click();
 
   await expect(visible(page, "run-results")).toBeVisible();
-  await expect(page.getByTestId("result-time-2")).toHaveText(/^0:[01]\d$/);
+  await expect(page.getByTestId("result-time-1")).toHaveText(/^0:3\d$/);
+  await expect(page.getByTestId("result-time-2")).toHaveText("Not run");
   await page.getByTestId("results-done").click();
   await expect(visible(page, "run-summary-screen")).toContainText("Run ended early");
-  await expect(page.getByTestId("run-kept")).toHaveText("Steps 1 and 2 are saved");
+  await expect(page.getByTestId("run-kept")).toHaveText("Step 1 is saved");
   await page.getByRole("button", { name: "Time" }).click();
   await expect.poll(async () => (await testDb().select().from(rides).where(eq(rides.userId, s.userId)))[0]?.endReason).toBe("time");
 
