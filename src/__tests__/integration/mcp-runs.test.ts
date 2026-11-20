@@ -6,7 +6,7 @@
  * sources. Clock: Fri 2026-11-20 17:00 UTC.
  */
 import { db } from "@/db";
-import { athleteThresholds, programSets, workoutSets } from "@/db/schema";
+import { athleteThresholds, plannedSessions, programSets, trainingCycles, workoutSets } from "@/db/schema";
 import { sendRideEvent, setRideEndReason, startRide } from "@/lib/actions/rides";
 import { logWorkoutSet } from "@/lib/actions/workout-sets";
 import { registerEnduranceAppTools } from "@/lib/mcp/tools/endurance-app";
@@ -259,7 +259,7 @@ async function brickSession() {
 }
 
 describe("log_step_results and get_step_results on a run", () => {
-  it("write a belt and an incline where the belt gave none, keep the belt's numbers, and read them back with their sources", async () => {
+  it("write a belt where the belt gave none, keep the belt's numbers and inclines, and read them back with their sources", async () => {
     const r = await treadmillDone();
     const call = mcpTools(registerEnduranceAppTools, me);
     const w = await call("log_step_results", {
@@ -274,6 +274,8 @@ describe("log_step_results and get_step_results on a run", () => {
     });
     expect(w.isError, w.raw).toBe(false);
     expect(w.data.kept).toEqual([
+      // The cool-down's 1% is the belt's, carried from the warm-up.
+      { key: "s6", fields: [{ field: "inclinePercent", by: "belt" }] },
       {
         key: "s1",
         fields: [
@@ -285,7 +287,7 @@ describe("log_step_results and get_step_results on a run", () => {
     ]);
     const [cool] = await db.select().from(workoutSets).where(and(eq(workoutSets.sessionId, r.sessionId), eq(workoutSets.programSetId, r.setIds.at(-1)!)));
     // 5 min at 6 km/h is 500 m.
-    expect(cool).toMatchObject({ distanceMeters: 500, inclinePercent: 0.5, avgHr: 140, sources: { durationSeconds: "clock", distanceMeters: "assistant", avgSpeed: "assistant", avgHr: "assistant" } });
+    expect(cool).toMatchObject({ distanceMeters: 500, inclinePercent: 1, avgHr: 140, sources: { durationSeconds: "clock", distanceMeters: "assistant", avgSpeed: "assistant", avgHr: "assistant" } });
     expect(cool.avgSpeed).toBeCloseTo(6 / 3.6, 4);
 
     const got = await call("get_step_results", { workoutSessionId: r.sessionId });
@@ -296,12 +298,12 @@ describe("log_step_results and get_step_results on a run", () => {
       result: { beltKmh: 8.9, inclinePercent: 1, distanceMeters: 1483 },
       sources: { distanceMeters: "belt", avgSpeed: "belt" },
     });
-    expect(byKey.get("s6")).toMatchObject({ planned: { belt: { kmh: null, inclinePercent: null } }, result: { beltKmh: 6, inclinePercent: 0.5 }, sources: { avgSpeed: "assistant" } });
+    expect(byKey.get("s6")).toMatchObject({ planned: { belt: { kmh: null, inclinePercent: null } }, result: { beltKmh: 6, inclinePercent: 1 }, sources: { avgSpeed: "assistant" } });
 
     // With the cool-down's distance, the run has a pace load.
     const ride = (await mcpTools(registerEnduranceAppTools, me)("get_ride", { workoutSessionId: r.sessionId })).data.ride;
     expect(ride.numbers).toMatchObject({ distanceSource: "Distance from the belt and the assistant", load: { method: "run_gap", estimated: true } });
-    expect(ride.steps.at(-1).done).toMatchObject({ beltKmh: 6, inclinePercent: 0.5, distanceMeters: 500 });
+    expect(ride.steps.at(-1).done).toMatchObject({ beltKmh: 6, inclinePercent: 1, distanceMeters: 500 });
   });
 
   it("refuses a belt on an outdoor run and a belt with a speed", async () => {
@@ -329,5 +331,126 @@ describe("log_step_results and get_step_results on a run", () => {
     expect(placed.isError, placed.raw).toBe(false);
     const got = (await call("get_step_results", { workoutSessionId: s.sessionId })).data;
     expect(got.steps.find((x: { key: string }) => x.key === "e2:s1")).toMatchObject({ planned: { belt: { kmh: 9 } }, result: { beltKmh: 9.5, distanceMeters: 317 } });
+  });
+});
+
+/** Save one step the way run or ride mode does when it ends. */
+async function clockSave(sessionId: number, exerciseId: number, setNumber: number, r: { programSetId: number; activeSeconds: number; status: string }) {
+  ok(
+    await logWorkoutSet({
+      sessionId,
+      exerciseId,
+      setNumber,
+      programSetId: r.programSetId,
+      actualReps: 0,
+      weightKg: 0,
+      durationSeconds: r.activeSeconds,
+      restTimeSeconds: 0,
+      isCompleted: r.status !== "skipped",
+      stepStatus: r.status,
+      targetOffsetW: 0,
+      extendedSeconds: 0,
+      sources: { durationSeconds: "clock" },
+    }),
+  );
+}
+
+describe("review fixes (step 5)", () => {
+  const twoSteps = (sport: "run" | "bike") => ({
+    v: 2,
+    sport,
+    name: "Two",
+    steps: [
+      { type: "work", end: { type: "time", seconds: 600 }, ...(sport === "run" ? { belt: 8 } : { target: { metric: "power", anchor: "ftp", zone: 2 } }) },
+      { type: "work", end: { type: "time", seconds: 600 }, ...(sport === "run" ? { belt: 9 } : { target: { metric: "power", anchor: "ftp", zone: 3 } }) },
+    ],
+  });
+
+  async function startTwo(sport: "run" | "bike") {
+    if (sport === "bike") await db.insert(athleteThresholds).values({ userId: me, kind: "ftp", value: 180, measuredOn: "2026-11-01", source: "manual" });
+    const { program, slots } = await createStepProgram(me, sport === "run" ? run : bike, twoSteps(sport));
+    const session = await createSession(me, program.id);
+    const view = ok(await startRide({ sessionId: session.id, programExerciseId: slots[0].programExerciseId, mode: "outdoor", clientId: cid() }));
+    const start = rideTimeline(view.plan, view.events, Date.now()).startedAt ?? T0.getTime();
+    return { programId: program.id, sessionId: session.id, view, start, setIds: slots[0].setIds, exerciseId: sport === "run" ? run : bike };
+  }
+
+  it.each(["run", "bike"] as const)("(1) a %s step the phone never saved, logged by the assistant with no time, shows its numbers in get_ride", async (sport) => {
+    const s = await startTwo(sport);
+    vi.setSystemTime(new Date(s.start + 700_000));
+    const ended = ok(await sendRideEvent({ rideId: s.view.ride.id, clientId: cid(), kind: "end", expectedSeq: s.view.ride.seq }));
+    const t = rideTimeline(ended.plan, ended.events, Date.now());
+    // The first step saved; the second (100 s, partial) never reached the server.
+    await clockSave(s.sessionId, s.exerciseId, 1, t.steps[0]);
+    const call = mcpTools(registerEnduranceAppTools, me);
+    const numbers = sport === "run" ? { avgHr: 150 } : { avgPower: 150 };
+    const w = await call("log_step_results", { workoutSessionId: s.sessionId, steps: [{ key: "s2", status: "partial", ...numbers }], reason: "From the athlete" });
+    expect(w.isError, w.raw).toBe(false);
+    const ride = (await call("get_ride", { workoutSessionId: s.sessionId })).data.ride;
+    expect(ride.steps[1].done).toMatchObject({ status: "partial", seconds: 100, ...numbers });
+  });
+
+  it.each(["run", "bike"] as const)("(1) a skipped %s step the assistant logs as done shows as done", async (sport) => {
+    const s = await startTwo(sport);
+    vi.setSystemTime(new Date(s.start + 60_000));
+    ok(await sendRideEvent({ rideId: s.view.ride.id, clientId: cid(), kind: "skip", stepKey: "s1", expectedSeq: s.view.ride.seq }));
+    vi.setSystemTime(new Date(s.start + 400_000));
+    const ended = ok(await sendRideEvent({ rideId: s.view.ride.id, clientId: cid(), kind: "end", expectedSeq: s.view.ride.seq + 1 }));
+    const t = rideTimeline(ended.plan, ended.events, Date.now());
+    expect(t.steps[0]).toMatchObject({ status: "skipped", activeSeconds: 60 });
+    for (const [i, r] of t.steps.entries()) await clockSave(s.sessionId, s.exerciseId, i + 1, r);
+    const call = mcpTools(registerEnduranceAppTools, me);
+    const numbers = sport === "run" ? { avgHr: 160 } : { avgPower: 160 };
+    const w = await call("log_step_results", { workoutSessionId: s.sessionId, steps: [{ key: "s1", status: "done", ...numbers }], reason: "It was not skipped" });
+    expect(w.isError, w.raw).toBe(false);
+    const ride = (await call("get_ride", { workoutSessionId: s.sessionId })).data.ride;
+    expect(ride.steps[0].done).toMatchObject({ status: "done", seconds: 60, ...numbers });
+  });
+
+  it("(4) refuses a belt by planned session, and any results while the treadmill run runs", async () => {
+    const { program, slots } = await createStepProgram(me, run, treadmillRun);
+    const [c] = await db.insert(trainingCycles).values({ userId: me, name: "Block", durationWeeks: 4, status: "active", startDate: "2026-11-16" }).returning();
+    const [p] = await db.insert(plannedSessions).values({ userId: me, cycleId: c.id, date: "2026-11-20", position: 1, programId: program.id }).returning();
+    const call = mcpTools(registerEnduranceAppTools, me);
+    const byPlanned = await call("log_step_results", { plannedSessionId: p.id, steps: [{ key: "s1", status: "done", activeSeconds: 600, beltKmh: 9 }], reason: "x" });
+    expect(byPlanned.isError).toBe(true);
+    expect(byPlanned.raw).toMatch(/only for the steps of a treadmill run from run mode: send the run's workoutSessionId/);
+
+    const session = await createSession(me, program.id);
+    const view = ok(await startRide({ sessionId: session.id, programExerciseId: slots[0].programExerciseId, mode: "indoor", clientId: cid() }));
+    vi.setSystemTime(new Date(T0.getTime() + 2 * 60_000));
+    const live = await call("log_step_results", { workoutSessionId: session.id, steps: [{ key: "s1", status: "done", beltKmh: 9 }], reason: "x" });
+    expect(live.isError).toBe(true);
+    expect(live.raw).toContain(`Ride ${view.ride.id} is still running`);
+    expect(await db.select().from(workoutSets).where(eq(workoutSets.sessionId, session.id))).toHaveLength(0);
+  });
+
+  it("(4) in a session with a ride and a run, no results reach either while the run runs", async () => {
+    const ride = { v: 2, sport: "bike", name: "Ride", steps: [{ type: "work", end: { type: "time", seconds: 600 }, target: { metric: "power", anchor: "ftp", zone: 2 } }] };
+    const runW = { v: 2, sport: "run", name: "Run", steps: [{ type: "work", end: { type: "time", seconds: 1200 }, belt: 9 }] };
+    const rows = (w: unknown) => {
+      const p = parseWorkout(w);
+      if (!p.ok) throw new Error("bad workout");
+      return workoutToRows(p.workout as Workout).map((x) => ({ ...x, targetReps: null, weightKg: null, restTimeSeconds: 0 }));
+    };
+    await db.insert(athleteThresholds).values({ userId: me, kind: "ftp", value: 180, measuredOn: "2026-11-01", source: "manual" });
+    const { program, slots } = await createProgram(me, [
+      { exerciseId: bike, sets: rows(ride) },
+      { exerciseId: run, sets: rows(runW) },
+    ]);
+    const session = await createSession(me, program.id);
+    const b = ok(await startRide({ sessionId: session.id, programExerciseId: slots[0].programExerciseId, mode: "indoor", clientId: cid() }));
+    vi.setSystemTime(new Date(T0.getTime() + 60_000));
+    ok(await sendRideEvent({ rideId: b.ride.id, clientId: cid(), kind: "end", expectedSeq: b.ride.seq }));
+    vi.setSystemTime(new Date(T0.getTime() + 2 * 60_000));
+    const r = ok(await startRide({ sessionId: session.id, programExerciseId: slots[1].programExerciseId, mode: "indoor", clientId: cid() }));
+    vi.setSystemTime(new Date(T0.getTime() + 4 * 60_000));
+    const call = mcpTools(registerEnduranceAppTools, me);
+    for (const key of ["e1:s1", "e2:s1"]) {
+      const w = await call("log_step_results", { workoutSessionId: session.id, steps: [{ key, status: "done", avgHr: 140 }], reason: "x" });
+      expect(w.isError, key).toBe(true);
+      expect(w.raw).toContain(`Ride ${r.ride.id} is still running`);
+    }
+    expect(await db.select().from(workoutSets).where(eq(workoutSets.sessionId, session.id))).toHaveLength(0);
   });
 });

@@ -231,12 +231,16 @@ export function assistantStepWrite(stored: StoredStep, given: SentStep): { set: 
     set[f] = v;
     sources[f] = "assistant";
   }
-  // A treadmill incline has no source of its own: it is the belt's while the step's distance is.
+  // A treadmill step's stored incline is the belt's (run mode's taps), whoever wrote its distance;
+  // the assistant fills an empty one and changes only its own.
   if (sent.inclinePercent !== undefined) {
     const old = stored.inclinePercent ?? null;
-    if (old !== null && stored.sources?.distanceMeters === "belt") {
+    if (old !== null && stored.sources?.inclinePercent !== "assistant") {
       if (old !== sent.inclinePercent) kept.push({ field: "inclinePercent", by: "belt" });
-    } else set.inclinePercent = sent.inclinePercent;
+    } else {
+      set.inclinePercent = sent.inclinePercent;
+      sources.inclinePercent = "assistant";
+    }
   }
   for (const f of ["rpe", "notes"] as const) {
     const v = sent[f];

@@ -208,9 +208,14 @@ export async function rideStepLogs(
   const belt = planSport(view.plan) === "run" && view.plan.mode === "indoor";
   for (const t of timeline.steps) {
     const row = logs[t.programSetId];
-    // A clock-timed row whose time or status is not this ride's is the earlier ride's (Ride again): this ride's step is not saved yet.
-    const earlier = row && (row.sources?.durationSeconds ?? "clock") === "clock" && (row.durationSeconds !== t.activeSeconds || row.status !== t.status);
-    if (row && !earlier) continue;
+    // A row whose time the clock saved but not this ride's time is the earlier ride's (Ride again): this ride's step is not saved yet.
+    // A row with no clock time (the assistant's, logged with no time) is this ride's, as is a status the assistant changed.
+    const earlier = row && row.sources?.durationSeconds === "clock" && row.durationSeconds !== t.activeSeconds;
+    if (row && !earlier) {
+      // Its time is the ride's clock when the row has none.
+      if (row.durationSeconds === null) logs[t.programSetId] = { ...row, durationSeconds: t.activeSeconds };
+      continue;
+    }
     unsaved = true;
     const b = belt ? beltResults(t) : {};
     logs[t.programSetId] = {

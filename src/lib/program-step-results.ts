@@ -153,7 +153,9 @@ function stepEntry(
   const done = r.status === "done" || r.status === "partial";
   const rpe = r.rpe ?? sessionRpe ?? null;
   const sent = sentStep(r, sessionRpe);
-  const sources = Object.fromEntries(RESULT_FIELDS.filter((f) => sent[f] !== undefined).map((f) => [f, "assistant" as const]));
+  const sources: Record<string, "assistant"> = Object.fromEntries(RESULT_FIELDS.filter((f) => sent[f] !== undefined).map((f) => [f, "assistant" as const]));
+  // A treadmill incline the assistant gives is its own, so a later write may change it (assistantStepWrite).
+  if (sent.inclinePercent !== undefined) sources.inclinePercent = "assistant";
   // The ride numbers only when given: a save that does not send one leaves the stored value. A belt gives the speed.
   const rideNumbers = Object.fromEntries((["avgHr", "avgPower", "maxHr", "avgCadence", "avgSpeed", "climbM"] as const).filter((f) => sent[f] !== undefined).map((f) => [f, sent[f]]));
   return {
