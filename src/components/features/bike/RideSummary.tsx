@@ -15,8 +15,8 @@
  */
 
 import { RideDoneChart, RideZoneBar } from "@/components/features/bike/RideProfileChart";
+import { GarminFill } from "@/components/features/bike/GarminFill";
 import { BackLink } from "@/components/ui/BackLink";
-import { pickRideGarminActivity, undoRideGarminFill } from "@/lib/actions/ride-garmin";
 import { saveRideFtp } from "@/lib/actions/ride-ftp";
 import { startRide } from "@/lib/actions/rides";
 import { armRide, disarmRide } from "@/components/features/bike/useRide";
@@ -28,14 +28,6 @@ import { callAction } from "@/lib/utils/stale-bundle";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
-
-const COUNT_WORD = ["", "One", "Two", "Three", "Four", "Five"];
-
-/** "17:02 · 65 min" for a Garmin ride to pick. */
-function candidateText(c: RideGarminView["candidates"][number], timeZone: string | null) {
-  const at = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", ...(timeZone && { timeZone }) }).format(new Date(c.startMs));
-  return `${at} · ${Math.round(c.seconds / 60)} min`;
-}
 
 export function RideSummary({
   programId,
@@ -66,8 +58,6 @@ export function RideSummary({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [picking, setPicking] = useState(false);
-  const [confirmUndo, setConfirmUndo] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const run = async (call: () => Promise<{ success: boolean; error?: string }>) => {
@@ -79,8 +69,6 @@ export function RideSummary({
       setError("error" in r && r.error ? r.error : "Failed");
       return;
     }
-    setPicking(false);
-    setConfirmUndo(false);
     router.refresh();
   };
   const again = async () => {
@@ -211,79 +199,7 @@ export function RideSummary({
           </ol>
         </div>
 
-        {rideId !== undefined && garmin?.state === "filled" && (
-          <div className="flex items-center justify-between gap-2 rounded-xl border border-dashed border-border pl-4 pr-2 min-h-12 text-sm" data-testid="summary-garmin">
-            {confirmUndo ? (
-              <>
-                <span className="text-muted-foreground">Remove the Garmin numbers?</span>
-                <span className="flex">
-                  <button type="button" onClick={() => setConfirmUndo(false)} className="min-h-11 px-3 text-muted-foreground whitespace-nowrap active:opacity-70">
-                    Keep
-                  </button>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => run(() => undoRideGarminFill({ rideId }))}
-                    className="min-h-11 px-3 font-semibold text-primary whitespace-nowrap active:opacity-70 disabled:opacity-50"
-                  >
-                    Remove
-                  </button>
-                </span>
-              </>
-            ) : (
-              <>
-                <span className="text-muted-foreground">Steps filled from Garmin</span>
-                <button type="button" onClick={() => setConfirmUndo(true)} className="min-h-11 px-3 font-semibold text-primary whitespace-nowrap active:opacity-70">
-                  Undo
-                </button>
-              </>
-            )}
-          </div>
-        )}
-        {rideId !== undefined && garmin?.state === "refill" && garmin.candidates[0] && (
-          <div className="flex items-center justify-between gap-2 rounded-xl border border-dashed border-border pl-4 pr-2 min-h-12 text-sm" data-testid="summary-garmin-refill">
-            <span className="text-muted-foreground">Garmin numbers removed</span>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => run(() => pickRideGarminActivity({ rideId, garminActivityId: garmin.candidates[0].garminActivityId }))}
-              className="min-h-11 px-3 font-semibold text-primary whitespace-nowrap active:opacity-70 disabled:opacity-50"
-            >
-              Fill from Garmin
-            </button>
-          </div>
-        )}
-        {rideId !== undefined && garmin?.state === "pick" && (
-          <div className="rounded-xl border border-dashed border-border text-sm" data-testid="summary-garmin-pick">
-            <div className="flex items-center justify-between gap-2 pl-4 pr-2 min-h-12">
-              <span className="text-muted-foreground">{COUNT_WORD[garmin.candidates.length] ?? garmin.candidates.length} Garmin rides match</span>
-              <button
-                type="button"
-                aria-expanded={picking}
-                onClick={() => setPicking((p) => !p)}
-                className="min-h-11 px-3 font-semibold text-primary whitespace-nowrap active:opacity-70"
-              >
-                Pick
-              </button>
-            </div>
-            {picking && (
-              <ul className="divide-y divide-border border-t border-border">
-                {garmin.candidates.map((c) => (
-                  <li key={c.garminActivityId}>
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => run(() => pickRideGarminActivity({ rideId, garminActivityId: c.garminActivityId }))}
-                      className="w-full min-h-11 px-4 text-left tabular-nums active:bg-background disabled:opacity-50"
-                    >
-                      {candidateText(c, timeZone)}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        )}
+        {rideId !== undefined && garmin && <GarminFill rideId={rideId} garmin={garmin} timeZone={timeZone} noun="rides" />}
         {error && (
           <p role="alert" className="text-sm text-destructive">
             {error}

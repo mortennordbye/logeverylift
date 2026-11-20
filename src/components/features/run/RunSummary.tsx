@@ -8,14 +8,18 @@
  * same units, with ↑ over a cap or above a range and ↓ under a range (4.2).
  * A run that ended early says which steps are saved and asks why (R15), and
  * offers "Run again". A brick run shows the ride, T2 and the run. With
- * nothing but times, "Plan only" offers Add numbers.
+ * nothing but times, "Plan only" offers Add numbers. With a Garmin fill
+ * (step 7): drift, the plan against done chart, zones from the stream, time
+ * on target per step, and the Garmin controls (Undo, Fill from Garmin, Pick).
  */
 
-import { RideZoneBar } from "@/components/features/bike/RideProfileChart";
+import { GarminFill } from "@/components/features/bike/GarminFill";
+import { RideDoneChart, RideZoneBar } from "@/components/features/bike/RideProfileChart";
 import { armRide, disarmRide } from "@/components/features/bike/useRide";
 import { RunEndReason } from "@/components/features/run/RunEndReason";
 import { BackLink } from "@/components/ui/BackLink";
 import type { EndReason, RideMode, RunSurface } from "@/db/schema/rides";
+import type { RideGarminView } from "@/lib/ride-garmin";
 import { startRide } from "@/lib/actions/rides";
 import type { RunSummary as Summary } from "@/lib/utils/run-results";
 import { callAction } from "@/lib/utils/stale-bundle";
@@ -34,6 +38,8 @@ export function RunSummary({
   doneHref,
   saveTheRun,
   runAgain = null,
+  garmin,
+  timeZone = null,
 }: {
   programId: number;
   exerciseName: string;
@@ -49,6 +55,8 @@ export function RunSummary({
   saveTheRun: boolean;
   /** A run that ended early: "Run again" starts a new run of this exercise on the same workout. */
   runAgain?: { sessionId: number; programExerciseId: number; mode: RideMode; surface: RunSurface | null } | null;
+  garmin?: Pick<RideGarminView, "state" | "candidates">;
+  timeZone?: string | null;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -121,6 +129,11 @@ export function RunSummary({
               {s.distanceLine}
             </p>
           )}
+          {s.chart && (
+            <div className="mt-3">
+              <RideDoneChart chart={s.chart} lineName={s.treadmill ? "Belt" : "Pace"} />
+            </div>
+          )}
           <RideZoneBar zones={s.zones} label="Time in heart rate zones" testId="summary-hr-zones" />
         </div>
 
@@ -157,6 +170,11 @@ export function RunSummary({
                         {r.mark}
                       </span>
                     )}
+                    {r.onTarget !== null && (
+                      <small className="block text-[11px] font-normal text-muted-foreground" data-testid="row-on-target">
+                        {r.onTarget}% on target
+                      </small>
+                    )}
                   </span>
                 </li>
               ))}
@@ -166,6 +184,8 @@ export function RunSummary({
             {s.footnote}
           </p>
         </div>
+
+        {garmin && <GarminFill rideId={rideId} garmin={garmin} timeZone={timeZone} noun="runs" />}
 
         {error && (
           <p role="alert" className="text-sm text-destructive">

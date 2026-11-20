@@ -193,7 +193,8 @@ export default async function WorkoutExerciseSetsPage({ params, searchParams }: 
           />
         );
       }
-      const summary = runSummary(after.plan, after.logs, { beltEvents: after.beltEvents });
+      const summary = runSummary(after.plan, after.logs, { beltEvents: after.beltEvents, stream: after.garmin.stream });
+      const { timeZone } = await getUserSettings(user.id);
       return (
         <RunSummary
           programId={programId}
@@ -201,6 +202,8 @@ export default async function WorkoutExerciseSetsPage({ params, searchParams }: 
           doneLine={after.doneLine}
           summary={summary}
           rideId={after.rideId}
+          garmin={{ state: after.garmin.state, candidates: after.garmin.candidates }}
+          timeZone={timeZone}
           early={after.status === "ended_early" ? { kept: after.kept, endReason: after.endReason } : null}
           brickLine={after.brick ? brickText(after.brick, summary.numbers.seconds) : null}
           doneHref={doneHref}

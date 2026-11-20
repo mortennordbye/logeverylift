@@ -110,9 +110,9 @@ export function RideZoneBar({ zones, label, testId }: { zones: { zone: number; m
  * line on its own scale. The layout comes from `rideDoneChart`
  * (src/lib/utils/ride-stream.ts).
  */
-export function RideDoneChart({ chart }: { chart: DoneChart }) {
+export function RideDoneChart({ chart, lineName = "Power" }: { chart: DoneChart; /** The done line's name: Power on a ride, Belt or Pace on a run. */ lineName?: string }) {
   const { left, right, base, width, height } = CHART;
-  const label = `Done against plan${chart.power ? ", power line over the target bands" : ""}${chart.hr ? ", heart rate dashed" : ""}`;
+  const label = `Done against plan${chart.power ? `, ${lineName.toLowerCase()} line over the target bands` : ""}${chart.hr ? ", heart rate dashed" : ""}`;
   return (
     <div data-testid="summary-chart">
       <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={label} className="block w-full h-auto">
@@ -159,7 +159,7 @@ export function RideDoneChart({ chart }: { chart: DoneChart }) {
         {chart.power && (
           <span className="inline-flex items-center gap-1">
             <i className="inline-block w-3 border-t-2 border-brand" />
-            Power
+            {lineName}
           </span>
         )}
         {chart.hr && (

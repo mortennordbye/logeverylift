@@ -5,7 +5,7 @@ import type { StepLog } from "@/lib/utils/ride-results";
 import { buildRunPlan } from "@/lib/utils/run-plan";
 import { runResultRows, runSummary } from "@/lib/utils/run-results";
 import { parseWorkout } from "@/lib/utils/workout-steps";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /** The run results table and the summary (docs/plans/run-logger.md, section 5, step 4). */
@@ -17,6 +17,9 @@ vi.mock("@/components/ui/BackLink", () => ({ BackLink: () => <span>Workout</span
 const startRide = vi.fn();
 vi.mock("@/lib/actions/rides", () => ({ startRide: (d: unknown) => startRide(d), setRideEndReason: vi.fn() }));
 vi.mock("@/components/features/bike/useRide", () => ({ armRide: vi.fn(), disarmRide: vi.fn() }));
+const pickRideGarminActivity = vi.fn();
+const undoRideGarminFill = vi.fn();
+vi.mock("@/lib/actions/ride-garmin", () => ({ pickRideGarminActivity: (d: unknown) => pickRideGarminActivity(d), undoRideGarminFill: (d: unknown) => undoRideGarminFill(d) }));
 const logWithRetry = vi.fn();
 vi.mock("@/contexts/pending-queue-context", () => ({ useWorkoutSetWriter: () => ({ logWithRetry, unlogWithRetry: vi.fn() }) }));
 
@@ -130,5 +133,63 @@ describe("RunSummary", () => {
     expect(screen.queryByTestId("run-end-reason")).toBeNull();
     expect(screen.queryByTestId("summary-run-again")).toBeNull();
     expect(screen.getByTestId("summary-done").getAttribute("href")).toBe("/programs/1/workout/exercises/2?ride=1");
+  });
+});
+
+describe("RunSummary with Garmin (step 7)", () => {
+  const stream = {
+    numbers: { seconds: 1800, gapSPerKm: null, intensityFactor: null, load: null, hrZoneMinutes: [10, 20, 0, 0, 0], drift: { pct: 3.2, steady: true, efFirst: 0.016, efSecond: 0.0155 }, onTarget: { 2: 92 } },
+    chart: { bands: [], power: "24,50 246,50", hr: "24,60 246,58", hrLabel: null, ftpY: null, yTicks: [], xTicks: [{ x: 246, label: "30 min" }] },
+  };
+  const garminLog = (seconds: number, kmh: number, hr: number): StepLog => ({ ...log(seconds, kmh), avgHr: hr, sources: { durationSeconds: "clock", distanceMeters: "belt", avgSpeed: "belt", avgHr: "garmin" } });
+
+  it("shows drift as a tile, the chart with the belt line, time on target per step, and Undo", () => {
+    render(
+      <RunSummary
+        programId={1}
+        exerciseName="Run"
+        doneLine="Done 18:00 · Treadmill · from Garmin"
+        summary={runSummary(plan("indoor"), { 1: garminLog(600, 7.5, 125), 2: garminLog(1200, 8.2, 150) }, { beltEvents: true, stream })}
+        rideId={5}
+        early={null}
+        doneHref="/"
+        saveTheRun={false}
+        garmin={{ state: "filled", candidates: [] }}
+      />,
+    );
+    expect(screen.getByTestId("tile-Drift").textContent).toBe("Drift3%steady");
+    expect(screen.getByTestId("summary-chart").textContent).toContain("Belt");
+    expect(screen.getAllByTestId("row-on-target").map((r) => r.textContent)).toEqual(["92% on target"]);
+    expect(screen.getByTestId("summary-garmin").textContent).toContain("Steps filled from Garmin");
+  });
+
+  it("two Garmin runs match: Pick lists start, time and distance, and sends the part of a multisport file", async () => {
+    pickRideGarminActivity.mockResolvedValue({ success: true, data: null });
+    render(
+      <RunSummary
+        programId={1}
+        exerciseName="Run"
+        doneLine="Done 18:00 · Outdoor"
+        summary={runSummary(plan("outdoor"), { 1: log(600, null), 2: log(1200, null) }, { beltEvents: false })}
+        rideId={5}
+        early={null}
+        doneHref="/"
+        saveTheRun={false}
+        timeZone="UTC"
+        garmin={{
+          state: "pick",
+          candidates: [
+            { garminActivityId: 11, segment: 0, startMs: Date.parse("2026-11-18T16:00:00Z"), seconds: 1800, meters: 5200 },
+            { garminActivityId: 12, segment: 2, startMs: Date.parse("2026-11-18T16:01:00Z"), seconds: 1740, meters: 5100 },
+          ],
+        }}
+      />,
+    );
+    const box = screen.getByTestId("summary-garmin-pick");
+    expect(box.textContent).toContain("Two Garmin runs match");
+    fireEvent.click(within(box).getByRole("button", { name: "Pick" }));
+    fireEvent.click(within(box).getByRole("button", { name: "16:01 · 29 min · 5.1 km" }));
+    await waitFor(() => expect(refresh).toHaveBeenCalled());
+    expect(pickRideGarminActivity).toHaveBeenCalledWith({ rideId: 5, garminActivityId: 12, segment: 2 });
   });
 });
