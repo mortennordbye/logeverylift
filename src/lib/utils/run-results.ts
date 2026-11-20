@@ -114,7 +114,8 @@ export function runResultPayloads(
   }
   const total = totalKm === undefined ? undefined : parseField("distanceMeters", totalKm);
   if (total !== undefined) {
-    const run = steps.filter((s) => done(s.log));
+    // Every step that ran, a skipped one too: it was still run (4.7), so the pace is total time over total distance.
+    const run = steps.filter((s) => ran(s.log));
     const seconds = run.reduce((a, s) => a + (s.log!.durationSeconds ?? 0), 0);
     let left = total ?? 0;
     run.forEach((s, k) => {
@@ -125,12 +126,37 @@ export function runResultPayloads(
       all[s.programSetId] = { ...all[s.programSetId], distanceMeters: m === null ? "" : (m / 1000).toFixed(3) };
     });
   }
-  return resultPayloads(steps, all, effort, ctx, false);
+  const out = resultPayloads(steps, all, effort, ctx, false);
+  // The table saves skipped steps only for a distance spread onto them; their status and time stay.
+  for (const s of steps) {
+    const text = all[s.programSetId]?.distanceMeters;
+    if (s.log?.status !== "skipped" || !ran(s.log) || text === undefined) continue;
+    const meters = parseField("distanceMeters", text);
+    if (meters === undefined) continue;
+    out.push({
+      sessionId: ctx.sessionId,
+      exerciseId: ctx.exerciseId,
+      setNumber: ctx.setNumbers[s.programSetId] ?? 1,
+      programSetId: s.programSetId,
+      actualReps: 0,
+      weightKg: 0,
+      restTimeSeconds: 0,
+      durationSeconds: s.log.durationSeconds ?? 0,
+      isCompleted: false,
+      stepStatus: "skipped",
+      ...(s.log.targetOffsetW != null && { targetOffsetW: s.log.targetOffsetW }),
+      ...(s.log.extendedSeconds != null && { extendedSeconds: s.log.extendedSeconds }),
+      distanceMeters: meters,
+      sources: meters !== null ? { distanceMeters: "typed" as const } : {},
+    });
+  }
+  const order = new Map(steps.map((s, i) => [s.programSetId, i]));
+  return out.sort((a, b) => (order.get(a.programSetId) ?? 0) - (order.get(b.programSetId) ?? 0));
 }
 
 /** The total distance a table's outdoor run shows: the sum of its steps' distances, in km. */
 export function totalKmText(steps: ResultStep[]): string {
-  const m = steps.filter((s) => done(s.log)).reduce((a, s) => a + (s.log!.distanceMeters ?? 0), 0);
+  const m = steps.filter((s) => ran(s.log)).reduce((a, s) => a + (s.log!.distanceMeters ?? 0), 0);
   return m > 0 ? `${+(m / 1000).toFixed(2)}` : "";
 }
 

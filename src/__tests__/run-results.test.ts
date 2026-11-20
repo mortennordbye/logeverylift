@@ -181,3 +181,25 @@ describe("the brick line", () => {
     expect(brickText({ rideSeconds: 3600, t2Seconds: null }, 2400)).toBe("Brick · ride 60:00 · run 40:00");
   });
 });
+
+describe("step 4 review (2): a typed total over a skipped step that ran", () => {
+  it("spreads over every step that ran, skipped ones too, so the pace is total time over total distance", () => {
+    const three = tree({ v: 2, sport: "run", name: "Three", steps: [
+      { type: "warmup", end: { type: "time", seconds: 600 }, target: { metric: "hr", anchor: "lthr", zone: 1 } },
+      { type: "work", end: { type: "time", seconds: 1800 }, target: { metric: "hr", anchor: "lthr", zone: 2 } },
+      { type: "cooldown", end: { type: "time", seconds: 300 }, target: { metric: "hr", anchor: "lthr", zone: 1 } },
+    ] });
+    const p = buildRunPlan(three, [1, 2, 3], OWNER, "outdoor");
+    const logs: Record<number, RunStepLog> = { 1: log(600, null), 2: log(720, null, { status: "skipped" }), 3: log(300, null) };
+    const { steps } = runResultRows(p, logs);
+    const saved = runResultPayloads(steps, {}, {}, "6", null, { sessionId: 1, exerciseId: 2, setNumbers: { 1: 1, 2: 2, 3: 3 } });
+    const meters = Object.fromEntries(saved.map((x) => [x.programSetId, (x as { distanceMeters?: number }).distanceMeters]));
+    expect(meters).toEqual({ 1: Math.round((6000 * 600) / 1620), 2: Math.round((6000 * 720) / 1620), 3: 6000 - Math.round((6000 * 600) / 1620) - Math.round((6000 * 720) / 1620) });
+    expect(saved.find((x) => x.programSetId === 2)).toMatchObject({ stepStatus: "skipped", durationSeconds: 720 });
+    for (const x of saved) Object.assign(logs[x.programSetId], { distanceMeters: (x as { distanceMeters: number }).distanceMeters, sources: { distanceMeters: "typed" } });
+    const s = runSummary(p, logs, { beltEvents: false });
+    // 27 min over 6 km.
+    expect(s.tiles.find((x) => x.label === "Pace")?.value).toBe("4:30 /km");
+    expect(s.numbers.load?.method).toBe("pace");
+  });
+});
