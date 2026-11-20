@@ -420,7 +420,7 @@ before building (rule 3 of section 0).
 
 | Step | Status |
 |---|---|
-| 0 Groundwork | todo |
+| 0 Groundwork | done |
 | 1 One run model | todo |
 | 2 Run exercise screen | todo |
 | 3 Run mode | todo |
@@ -586,3 +586,19 @@ before building (rule 3 of section 0).
 ## 10. Choices made during the build
 
 (Add one line per choice: step, what was open, what you chose, why.)
+
+- Step 0, belt storage: a step's written belt is a new column `program_sets.belt_kmh` (real), next to `incline_percent`, so `workoutToRows` and `buildWorkout` map both like the other step fields.
+- Step 0, step key storage: a new column `ride_events.step_key` (text, null on bike events), so the server and every device read the same key the client sent.
+- Step 0, run test: `test` on a run is `"30min"` (`RUN_TESTS`), stored in `program_exercises.ride_test`; a bike keeps `ramp` and `20min`.
+- Step 0, incline and belt on a non-run row: `buildWorkout` reads incline and belt only for a run, so a bike row's incline never makes its step fail the check.
+- Step 0, zone pace: a pace zone stands for its slow end (Z2 is 7:17 /km, 8.2 km/h, as 4.2 says). Z1 has no slow end, so it stands at 140% of threshold pace time (7:55 /km, 7.6 km/h), slower than Z2.
+- Step 0, rounding: a pace target's belt rounds to 0.5 km/h (4.2); a belt from a zone, an effort or history rounds to 0.1 km/h, as the 8.2 km/h example of 4.2 shows.
+- Step 0, effort belt: the effort is the midpoint of the step's RPE range, rounded.
+- Step 0, last recovery: a run keeps the recovery after a repeat's last round (a ride drops it), because the mockup numbers (9.8 km in 75 min) count all six stride recoveries.
+- Step 0, belt with no history: `startRide` passes no belt history and no easy pace yet; the query comes in step 4, when results store belt values with source `belt`. Until then rule 3 of 4.2 and the easy pace of 4.3 fall through to the zone pace.
+- Step 0, outdoor targets: the run plan keeps a written `outdoor` target only; the derived outdoor targets of 4.2 (caps, effort for strides, trail rules, the brick run's first 10 min) come with the run mode screen in step 3.
+- Step 0, brick link: `rides.brick_ride_id` exists, but `startRide` sets it from the planned brick pair in step 3, with the brick hand-off.
+- Step 0, step key check: belt, incline, extend, skip and lap are ignored when their step key is another step's; pause, resume and end always apply. A lap whose key is the step that just ran out still counts as a late lap.
+- Step 0, session ride mode: a run does not write `workout_sessions.ride_mode` (the bike screen's default); a run keeps its mode on its ride.
+- Step 0, readers by sport: the Garmin fill loop and Pick, the ride report (`get_ride`), the push alerts and the bike exercise view read bike rides only until steps 5 to 7 give runs their own; `log_step_results` on a session with a ride and a run still takes the latest one, which step 5 settles.
+- Step 0, privacy page: the inventory lists the new columns now; the policy text and the `LEGAL_VERSION` bump go with step 3, the first step whose screen stores a run. The end reason Pain is covered by the injuries already named as health data, so `CONSENT_VERSION` stays.
