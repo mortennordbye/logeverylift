@@ -26,7 +26,7 @@ import { completeWorkoutSession } from "@/lib/actions/workout-sessions";
 import { playCue } from "@/lib/audio-cues";
 import { pausedSince, pausedText, stepLogPayload } from "@/lib/utils/ride-screen";
 import { BELT_RANGE, EXTEND_STEP_S, INCLINE_RANGE, type RideStepResult } from "@/lib/utils/ride-timeline";
-import { beltResults, beltToastText, resumeBeltText, runKeptText, runScreen, stepOnText, type RunScreen } from "@/lib/utils/run-screen";
+import { beltPace, beltResults, beltToastText, resumeBeltText, runKeptText, runScreen, stepOnText, type RunScreen } from "@/lib/utils/run-screen";
 import { RUN_MODE_NAME } from "@/lib/utils/run-view";
 import { callAction, failedInTransit } from "@/lib/utils/stale-bundle";
 import Link from "next/link";
@@ -62,11 +62,13 @@ function Dots({ block }: { block: NonNullable<RunScreen["block"]> }) {
   );
 }
 
-function Second({ s }: { s: RunScreen }) {
-  if (!s.second.length) return null;
+function Second({ s, belt }: { s: RunScreen; belt?: number | null }) {
+  // On a treadmill the pace follows the belt on screen, a burst still open included.
+  const second = belt != null ? s.second.map((x) => (x.label === "Pace" ? { ...x, value: beltPace(belt) ?? x.value } : x)) : s.second;
+  if (!second.length) return null;
   return (
     <p className="flex flex-wrap justify-center gap-x-4 text-base tabular-nums" data-testid="run-second">
-      {s.second.map((x) => (
+      {second.map((x) => (
         <span key={x.label + x.value}>
           {x.label && <span className={x.value ? "text-muted-foreground" : ""}>{x.label}</span>}
           {x.value && ` ${x.value}`}
@@ -346,7 +348,7 @@ export function RunMode({
 
   const clock = (
     <p
-      className={`font-bold tabular-nums tracking-tight leading-none ${landscape ? "text-[96px]" : "text-[88px]"} ${timeline.status === "paused" ? "text-muted-foreground" : ""}`}
+      className={`font-bold tabular-nums tracking-tight leading-none ${landscape ? "text-[96px]" : "text-[clamp(56px,13vh,88px)]"} ${timeline.status === "paused" ? "text-muted-foreground" : ""}`}
       data-testid="ride-clock"
     >
       {s.clock}
@@ -433,29 +435,29 @@ export function RunMode({
           −
         </button>
         <div className="text-center">
-          <p className="text-xs text-muted-foreground">Belt</p>
+          <p className="text-xs text-muted-foreground">
+            Belt
+            {planBelt !== null && beltShown !== Math.round(planBelt * 10) && (
+              <span data-testid="run-plan-belt"> · Plan {planBelt.toFixed(1)}</span>
+            )}
+          </p>
           <p className="whitespace-nowrap text-[min(3rem,11.5vw)] font-bold leading-tight tabular-nums">
             <span data-testid="run-belt">{beltShown !== null ? (beltShown / 10).toFixed(1) : "By feel"}</span>
             {beltShown !== null && <small className="ml-1 text-lg font-semibold text-muted-foreground">km/h</small>}
           </p>
-          {planBelt !== null && beltShown !== Math.round(planBelt * 10) && (
-            <p className="text-sm text-muted-foreground tabular-nums" data-testid="run-plan-belt">
-              Plan {planBelt.toFixed(1)}
-            </p>
-          )}
         </div>
         <button type="button" onClick={() => knob("belt", 1)} aria-label="Belt up 0.5 km/h" className={BELT_BTN}>
           +
         </button>
       </div>
       <div className="mt-1 grid grid-cols-[64px_1fr_64px] items-center gap-2">
-        <button type="button" onClick={() => knob("incline", -1)} aria-label="Incline down 0.5%" className="min-h-12 rounded-xl bg-background text-xl font-semibold active:opacity-70">
+        <button type="button" onClick={() => knob("incline", -1)} aria-label="Incline down 0.5%" className="min-h-16 rounded-2xl bg-background text-2xl font-semibold active:opacity-70 select-none touch-manipulation">
           −
         </button>
         <p className="text-center text-base tabular-nums" data-testid="run-incline">
           Incline {+((inclineShown ?? 0) / 10).toFixed(1)}%
         </p>
-        <button type="button" onClick={() => knob("incline", 1)} aria-label="Incline up 0.5%" className="min-h-12 rounded-xl bg-background text-xl font-semibold active:opacity-70">
+        <button type="button" onClick={() => knob("incline", 1)} aria-label="Incline up 0.5%" className="min-h-16 rounded-2xl bg-background text-2xl font-semibold active:opacity-70 select-none touch-manipulation">
           +
         </button>
       </div>
@@ -478,7 +480,7 @@ export function RunMode({
   // The Next card turns into the cue (accent) and gives its place to the undo toast.
   const nextCard = toastRow || (
     <div
-      className={`flex items-center justify-between gap-3 rounded-2xl px-4 min-h-12 text-sm min-[360px]:text-base ${s.cue ? "bg-brand-fill font-semibold text-white" : s.lastMinute ? "bg-brand/25" : "bg-muted"}`}
+      className={`flex items-center justify-between gap-3 rounded-2xl px-4 min-h-12 text-sm min-[360px]:text-base ${s.cue ? "bg-brand-fill font-semibold text-white" : "bg-muted"}`}
       data-testid={s.cue ? "run-cue" : "ride-next"}
     >
       {s.cue ? (
@@ -513,7 +515,7 @@ export function RunMode({
   const controls = (
     <>
       {!extendAbove && extendBtn}
-      <HoldToSkip step={s.stepNumber} onSkip={skip} className="min-h-16" />
+      <HoldToSkip step={s.stepNumber} onSkip={skip} className="min-h-16" sub={s.inBlock ? "strides" : `step ${s.stepNumber}`} ariaLabel={s.inBlock ? "Hold to skip the strides" : `Hold to skip step ${s.stepNumber}`} />
       <button type="button" onClick={pause} className={`${RUN_BTN} bg-brand-fill text-white`}>
         Pause
       </button>
@@ -543,7 +545,7 @@ export function RunMode({
 
   if (landscape) {
     return (
-      <div data-ride-mode className="fixed inset-0 z-50 flex flex-col gap-3 bg-background px-4 pt-3 pb-3" data-testid="ride-screen" data-layout="landscape">
+      <div data-ride-mode className={`fixed inset-0 z-50 flex flex-col gap-3 bg-background px-4 pt-3 ${treadmill ? "pb-10" : "pb-3"}`} data-testid="ride-screen" data-layout="landscape">
         {header(s.title)}
         <div className="grid min-h-0 flex-1 grid-cols-2 items-center gap-3">
           <div className="flex flex-col items-center gap-1">
@@ -553,7 +555,7 @@ export function RunMode({
           </div>
           <div className="flex flex-col gap-2">
             {beltCard || targetCard}
-            {treadmill && <Second s={s} />}
+            {treadmill && <Second s={s} belt={beltShown !== null ? beltShown / 10 : null} />}
             {nextCard}
           </div>
         </div>
@@ -570,7 +572,7 @@ export function RunMode({
   return (
     <div
       data-ride-mode
-      className={`fixed inset-0 z-50 flex flex-col gap-3 overflow-y-auto bg-background px-4 pt-6 ${treadmill ? "pb-10" : "pb-6"}`}
+      className={`fixed inset-0 z-50 flex flex-col gap-3 overflow-y-auto bg-background px-4 pt-6 [@media(max-height:620px)]:gap-2 [@media(max-height:620px)]:pt-3 ${treadmill ? "pb-10" : "pb-6"}`}
       data-testid="ride-screen"
       data-layout="portrait"
     >
@@ -580,7 +582,7 @@ export function RunMode({
       {s.block && <Dots block={s.block} />}
       {sub}
       {beltCard || targetCard}
-      {treadmill && <Second s={s} />}
+      {treadmill && <Second s={s} belt={beltShown !== null ? beltShown / 10 : null} />}
       {extendAbove && (
         <div className="relative grid">
           {extendBtn}

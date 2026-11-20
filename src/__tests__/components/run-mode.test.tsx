@@ -120,6 +120,28 @@ describe("run mode on a treadmill", () => {
     expect(screen.getByTestId("run-belt").textContent).toBe("8.5");
   });
 
+  it("the pace follows the belt on screen while a burst is still open", async () => {
+    serve(buildRunPlan(treadmillRun, [11, 12], OWNER, "indoor"));
+    await open();
+    expect(screen.getByTestId("run-second").textContent).toContain("8:00 /km");
+    fireEvent.click(screen.getByRole("button", { name: "Belt up 0.5 km/h" }));
+    fireEvent.click(screen.getByRole("button", { name: "Belt up 0.5 km/h" }));
+    expect(screen.getByTestId("run-second").textContent).toContain("7:04 /km");
+  });
+
+  it("the incline buttons are 64 px controls, as the belt's are", async () => {
+    serve(buildRunPlan(treadmillRun, [11, 12], OWNER, "indoor"));
+    await open();
+    for (const name of ["Incline down 0.5%", "Incline up 0.5%", "Belt down 0.5 km/h", "Belt up 0.5 km/h"]) expect(screen.getByRole("button", { name }).className).toContain("min-h-16");
+  });
+
+  it("the Next card keeps its grey in the last minute: the accent is for the cue only", async () => {
+    serve(buildRunPlan(treadmillRun, [11, 12], OWNER, "indoor"));
+    vi.setSystemTime(T0 + 560_000);
+    await open();
+    expect(screen.getByTestId("ride-next").className).not.toContain("bg-brand");
+  });
+
   it("a step with no incline shows Incline 0%, not a blank", async () => {
     serve(buildRunPlan(treadmillRun, [11, 12], OWNER, "indoor"));
     await open();
@@ -132,6 +154,16 @@ describe("run mode on a treadmill", () => {
     await open();
     expect(screen.getByTestId("ride-offline").textContent).toBe("Saved on this phone");
     expect(screen.getByTestId("ride-total").textContent).toMatch(/^0:30 of 20:00$/);
+  });
+});
+
+describe("run mode in a strides block", () => {
+  it("hold to skip names the strides, as it skips the rest of the block", async () => {
+    const strides = workout([{ type: "repeat", count: 2, steps: [{ type: "work", end: { type: "time", seconds: 20 }, belt: 13 }, { type: "recovery", end: { type: "time", seconds: 40 }, belt: 7 }] }]);
+    serve(buildRunPlan(strides, [11, 12, 13, 14], OWNER, "indoor"));
+    vi.setSystemTime(T0 + 5_000);
+    await open();
+    expect(screen.getByRole("button", { name: "Hold to skip the strides" }).textContent).toBe("Hold to skipstrides");
   });
 });
 

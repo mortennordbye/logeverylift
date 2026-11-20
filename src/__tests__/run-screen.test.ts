@@ -113,6 +113,11 @@ describe("runScreen outdoors", () => {
       { label: "HR", value: "under 160" },
     ]);
     expect(screenAt(outdoor, 700, [], { brick: true }).target).toEqual({ value: "under 160", unit: "bpm" });
+    // On a treadmill the belt stays the main target; the effort and the cue go on the second line.
+    expect(screenAt(treadmill, 30, [], { brick: true }).second.slice(0, 2)).toEqual([
+      { label: "Effort", value: "4-5" },
+      { label: "Short quick steps", value: "" },
+    ]);
   });
 });
 

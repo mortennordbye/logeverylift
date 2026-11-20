@@ -102,7 +102,7 @@ export function runScreen(plan: RidePlan, t: RideTimeline, opts: { brick?: boole
   const second: RunScreen["second"] = [];
   if (treadmill) {
     const hr = s.step.target?.metric === "hr" ? runTargetText(s, th) : null;
-    if (brickEasy) second.push({ label: "Short quick steps", value: "" });
+    if (brickEasy) second.push({ label: "Effort", value: "4-5" }, { label: "Short quick steps", value: "" });
     if (hr) second.push({ label: "HR", value: hr.replace(/^HR /, "") });
     const pace = cur.beltKmh ? beltPace(cur.beltKmh) : null;
     if (pace) second.push({ label: "Pace", value: pace });

@@ -71,7 +71,7 @@ export function RideProfileChart({ chart, label }: { chart: RideChart; label: st
           key={t.label}
           x={t.x}
           y={base + 11}
-          textAnchor={i === 0 ? "start" : i === chart.xTicks.length - 1 ? "end" : "middle"}
+          textAnchor={i === chart.xTicks.length - 1 ? "end" : i === 0 ? "start" : "middle"}
           fontSize={7.5}
           className="fill-muted-foreground"
         >
@@ -147,7 +147,7 @@ export function RideDoneChart({ chart }: { chart: DoneChart }) {
             key={t.label}
             x={t.x}
             y={base + 11}
-            textAnchor={i === 0 ? "start" : i === chart.xTicks.length - 1 ? "end" : "middle"}
+            textAnchor={i === chart.xTicks.length - 1 ? "end" : i === 0 ? "start" : "middle"}
             fontSize={7.5}
             className="fill-muted-foreground"
           >

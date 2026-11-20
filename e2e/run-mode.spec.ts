@@ -227,7 +227,7 @@ test("1: a treadmill run counts in, saves belt taps with an Undo, resumes after 
   await page.getByRole("button", { name: "Belt up 0.5 km/h" }).click();
   await expect(page.getByTestId("ride-toast")).toHaveText("Belt 8.5 km/hUndo");
   await expect(page.getByTestId("run-belt")).toHaveText("8.5");
-  await expect(page.getByTestId("run-plan-belt")).toHaveText("Plan 7.5");
+  await expect(page.getByTestId("run-plan-belt")).toContainText("Plan 7.5");
   await advance(page, s.userId, 2.1);
   await expect.poll(async () => (await beltEvents(s.userId)).map((e) => e.value)).toEqual([85]);
   // One more tap, then Undo: the belt goes back to the value from before that burst.
@@ -305,7 +305,7 @@ test("1b: a strides block cues the belt, counts its reps, and hold to skip skips
   await advance(page, s.userId, 21);
   await expect(page.getByTestId("ride-step-title")).toHaveText("Easy");
   await expect(page.getByTestId("run-belt")).toHaveText("7.0");
-  await hold(page, "Hold to skip step 2");
+  await hold(page, "Hold to skip the strides");
   await expect(page.getByTestId("ride-toast")).toHaveText("Strides skippedUndo");
   await expect(page.getByTestId("ride-step-title")).toHaveText("Cool-down");
   await expect.poll(async () => (await savedSteps(s.userId)).map((r) => [r.programSetId, r.stepStatus])).toEqual([
