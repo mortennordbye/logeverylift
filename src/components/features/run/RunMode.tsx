@@ -213,7 +213,8 @@ export function RunMode({
     const value = Math.max(range.min, Math.min(range.max, base + dir * step));
     if (value === now) return;
     if (before) clearTimeout(before.timer);
-    const from = before ? before.from : now;
+    // What Undo goes back to: the value before the burst. An unknown incline showed as 0%; a belt set by feel has none, so no Undo once sent.
+    const from = before ? before.from : (now ?? (kind === "incline" ? 0 : null));
     bursts.current[kind] = { kind, from, value, at: serverNow, index: cur.index, timer: setTimeout(() => send(kind), BURST_MS) };
     show({ text: beltToastText(kind, value), index: cur.index, undo: kind, from });
     syncPending();
@@ -323,7 +324,7 @@ export function RunMode({
   const toastRow = toastShown && (
     <div className="flex items-center justify-between gap-3 rounded-2xl bg-foreground pl-4 pr-1 min-h-12 text-background" role="status" data-testid="ride-toast">
       <span className="font-semibold tabular-nums">{toastShown.text}</span>
-      {toastShown.undo && (
+      {toastShown.undo && !(toastShown.from === null && (toastShown.undo === "belt" || toastShown.undo === "incline") && !pending[toastShown.undo]) && (
         <button type="button" onClick={undo} className="min-h-11 px-3 font-semibold active:opacity-70">
           Undo
         </button>
@@ -360,6 +361,20 @@ export function RunMode({
     </h1>
   );
 
+  // The 5 s count on a treadmill (4.3): step on and set the belt, then the clock runs.
+  // Before the Resume prompt: an end during the count would come before the start.
+  if (counting) {
+    return (
+      <div data-ride-mode className="fixed inset-0 z-50 flex flex-col gap-4 bg-background px-4 pt-6 pb-10" data-testid="run-count">
+        {header()}
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
+          <p className="text-[120px] font-bold leading-none tabular-nums">{Math.max(1, Math.ceil((view.ride.startedAt - serverNow) / 1000))}</p>
+          <p className="text-xl font-semibold">{stepOnText(plan)}</p>
+        </div>
+      </div>
+    );
+  }
+
   // Opened on a running run without a tap: sound and the wake lock need one.
   if (prompt) {
     return (
@@ -376,19 +391,6 @@ export function RunMode({
         <button type="button" onClick={actions.endAtLastStep} className={`${BTN} bg-muted`}>
           End at the last step
         </button>
-      </div>
-    );
-  }
-
-  // The 5 s count on a treadmill (4.3): step on and set the belt, then the clock runs.
-  if (counting) {
-    return (
-      <div data-ride-mode className="fixed inset-0 z-50 flex flex-col gap-4 bg-background px-4 pt-6 pb-10" data-testid="run-count">
-        {header()}
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
-          <p className="text-[120px] font-bold leading-none tabular-nums">{Math.max(1, Math.ceil((view.ride.startedAt - serverNow) / 1000))}</p>
-          <p className="text-xl font-semibold">{stepOnText(plan)}</p>
-        </div>
       </div>
     );
   }

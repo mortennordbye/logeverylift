@@ -50,12 +50,14 @@ type Ev = RideView["events"][number];
 let events: Ev[];
 let seq: number;
 let plan: RidePlan;
+/** When the run's clock starts: after T0 for a run that is still in its 5 s count. */
+let startAt = T0;
 
 function view(): RideView {
   const now = Date.now();
   const t = rideTimeline(plan, events, now);
   return {
-    ride: { id: 5, sessionId: 7, programExerciseId: 2, sport: "run", mode: plan.mode, surface: null, endReason: null, brickRideId: null, status: t.status, seq, startedAt: T0, endedAt: t.endedAt, heartbeatAt: null },
+    ride: { id: 5, sessionId: 7, programExerciseId: 2, sport: "run", mode: plan.mode, surface: null, endReason: null, brickRideId: null, status: t.status, seq, startedAt: startAt, endedAt: t.endedAt, heartbeatAt: null },
     plan,
     events: [...events],
     serverNow: now,
@@ -65,7 +67,7 @@ function view(): RideView {
 function serve(p: RidePlan) {
   plan = p;
   seq = 1;
-  events = [{ seq: 1, kind: "start", value: null, at: T0, clientId: "start" }];
+  events = [{ seq: 1, kind: "start", value: null, at: startAt, clientId: "start" }];
   sendRideEvent.mockImplementation(async (d: { kind: Ev["kind"] | "heartbeat"; clientId: string; value?: number; clientAt?: number; stepKey?: string }) => {
     if (d.kind !== "heartbeat" && !events.some((e) => e.clientId === d.clientId)) {
       events.push({ seq: ++seq, kind: d.kind as Ev["kind"], value: d.value ?? null, at: Math.min(d.clientAt ?? Date.now(), Date.now()), clientId: d.clientId, stepKey: d.stepKey ?? null });
@@ -75,8 +77,8 @@ function serve(p: RidePlan) {
   getRide.mockImplementation(async () => ({ success: true, data: view() }));
 }
 
-async function open() {
-  armRide();
+async function open(armed = true) {
+  if (armed) armRide();
   render(<RunMode exerciseId={3} initial={view()} setNumbers={{}} onlyExercise={false} sessionCompleted={false} workoutHref="/programs/1/workout" brick={false} />);
   await act(async () => {
     await vi.advanceTimersByTimeAsync(300);
@@ -84,6 +86,7 @@ async function open() {
 }
 
 beforeEach(() => {
+  startAt = T0;
   vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout", "setInterval", "clearInterval"] });
   vi.setSystemTime(T0 + 30_000);
   localStorage.clear();
@@ -140,6 +143,44 @@ describe("run mode on a treadmill", () => {
     vi.setSystemTime(T0 + 560_000);
     await open();
     expect(screen.getByTestId("ride-next").className).not.toContain("bg-brand");
+  });
+
+  it("a belt set by feel has nothing to go back to: its toast has no Undo once the burst is sent", async () => {
+    const byFeel = workout([{ type: "work", end: { type: "time", seconds: 600 } }]);
+    serve(buildRunPlan(byFeel, [11], OWNER, "indoor"));
+    await open();
+    expect(screen.getByTestId("run-belt").textContent).toBe("By feel");
+    fireEvent.click(screen.getByRole("button", { name: "Belt up 0.5 km/h" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_100);
+    });
+    expect(events.filter((e) => e.kind === "belt").map((e) => e.value)).toEqual([80]);
+    expect(screen.getByTestId("ride-toast").textContent).toBe("Belt 8.0 km/h");
+    expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+  });
+
+  it("Undo of an incline that was not known sends 0%, the incline the screen showed", async () => {
+    serve(buildRunPlan(treadmillRun, [11, 12], OWNER, "indoor"));
+    await open();
+    fireEvent.click(screen.getByRole("button", { name: "Incline up 0.5%" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_100);
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+    expect(events.filter((e) => e.kind === "incline").map((e) => e.value)).toEqual([5, 0]);
+    expect(screen.getByTestId("run-incline").textContent).toBe("Incline 0%");
+  });
+
+  it("opened again during the 5 s count: the count shows, not Resume or End at the last step", async () => {
+    vi.setSystemTime(T0 + 10_000_000);
+    startAt = Date.now() + 3_000;
+    serve(buildRunPlan(treadmillRun, [11, 12], OWNER, "indoor"));
+    await open(false);
+    expect(screen.getByTestId("run-count")).toBeTruthy();
+    expect(screen.queryByTestId("ride-prompt")).toBeNull();
   });
 
   it("a step with no incline shows Incline 0%, not a blank", async () => {

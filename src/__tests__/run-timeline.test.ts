@@ -106,6 +106,13 @@ describe("run pace zones and the frozen belt (4.2)", () => {
 });
 
 describe("run timeline", () => {
+  it("an end before the start (End at the last step during the 5 s count) ends the run early with no steps", () => {
+    const plan = runPlan([runStep(1, 60, { rule: "time" }), runStep(2, 60, { rule: "time" })]);
+    const t = rideTimeline(plan, [ev("start", 5), ev("end", 2)], at(30));
+    expect(t).toMatchObject({ status: "ended_early", steps: [], current: null, activeSeconds: 0 });
+    expect(t.endedAt).toBe(at(2));
+  });
+
   // Unit test 2.
   it("a belt distance step ends at the distance built from 2 belt changes", () => {
     const plan = runPlan([runStep(1, null, { rule: "belt_distance", meters: 1000, belt: 80 }), runStep(2, 300, { rule: "time", belt: 70 })]);

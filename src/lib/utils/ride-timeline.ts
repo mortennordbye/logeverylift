@@ -342,6 +342,8 @@ const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(mi
  * - An event whose step key is another step's (an offline replay that lands
  *   later) is ignored: belt, incline, extend, skip and lap.
  * - `skip` with value 1 in a short-step block skips the rest of the block.
+ * - An `end` before the start (during a treadmill's 5 s count) ends the run
+ *   early with no steps.
  */
 export function rideTimeline(
   plan: { steps: TimelineStep[]; test?: WorkoutTest; sport?: RideSport },
@@ -512,6 +514,12 @@ export function rideTimeline(
       status = "running";
       startedAt = t;
       live = begin(0, t, false);
+      continue;
+    }
+    // A run ended before its start (End at the last step during the 5 s count) ends early with no steps.
+    if (run && e.kind === "end" && status === "ready") {
+      status = "ended_early";
+      endedAt = t;
       continue;
     }
     if (!isLive()) continue;
