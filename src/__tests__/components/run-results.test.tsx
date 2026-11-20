@@ -139,7 +139,7 @@ describe("RunSummary", () => {
 
 describe("RunSummary with Garmin (step 7)", () => {
   const stream = {
-    numbers: { seconds: 1800, gapSPerKm: null, intensityFactor: null, load: null, hrZoneMinutes: [10, 20, 0, 0, 0], drift: { pct: 3.2, steady: true, efFirst: 0.016, efSecond: 0.0155 }, onTarget: { 2: 92 } },
+    numbers: { seconds: 1800, gapSPerKm: null, intensityFactor: null, load: null, hrZoneMinutes: [10, 20, 0, 0, 0], drift: { pct: 3.2, steady: true, efFirst: 0.016, efSecond: 0.0155 }, onTarget: { 2: 92 }, timeOnTarget: 92 },
     chart: { bands: [], power: "24,50 246,50", hr: "24,60 246,58", hrLabel: null, ftpY: null, yTicks: [], xTicks: [{ x: 246, label: "30 min" }] },
   };
   const garminLog = (seconds: number, kmh: number, hr: number): StepLog => ({ ...log(seconds, kmh), avgHr: hr, sources: { durationSeconds: "clock", distanceMeters: "belt", avgSpeed: "belt", avgHr: "garmin" } });

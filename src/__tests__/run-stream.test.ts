@@ -175,3 +175,23 @@ describe("the plan against done chart (section 5)", () => {
     for (let i = 1; i < chart.yTicks.length; i++) expect(Math.abs(chart.yTicks[i].y - chart.yTicks[i - 1].y)).toBeGreaterThanOrEqual(12);
   });
 });
+
+describe("step 7 review: time on target of the whole run", () => {
+  it("weighs each step by its seconds in the stream: a step ended early or extended counts as run", () => {
+    // The 50 min steady ended after 10 min over its cap; the 3 min cool-down ran 30 min under it.
+    const steady = plan.steps[0].programSetId;
+    const cool = plan.steps[plan.steps.length - 1].programSetId;
+    const t = Array.from({ length: 2400 }, (_, i) => i);
+    const streams = { t, hr: t.map((i) => (i < 600 ? 170 : 150)), distance: t.map((i) => i * 2.5) };
+    const n = runStreamNumbers({
+      streams,
+      t0Ms: 0,
+      split: { method: "time", windows: [{ programSetId: steady, from: 0, to: 600 }, { programSetId: cool, from: 600, to: 2400 }], pauses: [] },
+      plan,
+      belts: null,
+      bounds: { [steady]: { series: "hr", low: null, high: 160 }, [cool]: { series: "hr", low: null, high: 160 } },
+    });
+    expect(n.onTarget).toEqual({ [steady]: 0, [cool]: 100 });
+    expect(n.timeOnTarget).toBe(75);
+  });
+});

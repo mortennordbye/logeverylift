@@ -47,21 +47,6 @@ async function brickOf(userId: string, brickRideId: number, runStartedAt: number
   return { rideId: ride.id, ...brickTimes(t, t.endedAt, runStartedAt) };
 }
 
-/** The run's time on target in percent: each step's share weighted by its seconds in the stream. */
-function timeOnTargetOf(plan: RidePlan, onTarget: Record<number, number | null> | null, numbers: { seconds: number } | null): number | null {
-  if (!onTarget || !numbers) return null;
-  let inside = 0;
-  let secs = 0;
-  for (const s of plan.steps) {
-    const pct = onTarget[s.programSetId];
-    if (pct === null || pct === undefined) continue;
-    const w = s.seconds ?? s.estSeconds;
-    inside += (pct / 100) * w;
-    secs += w;
-  }
-  return secs > 0 ? Math.round((inside / secs) * 100) : null;
-}
-
 /** The report of one run (a `rides` row of sport run) of the user. */
 export async function runReport(userId: string, ride: typeof rides.$inferSelect) {
   const [events, [session]] = await Promise.all([
@@ -202,8 +187,8 @@ export async function runReport(userId: string, ride: typeof rides.$inferSelect)
       stream: !!stream,
       // Friel Pa:HR over the steady steps (45 min or more), the first 10 min and strides left out; under 5% is steady.
       drift: stream?.numbers.drift ? { pct: stream.numbers.drift.pct, steady: stream.numbers.drift.steady } : null,
-      // The share of the steps' seconds inside their targets, over the steps with a target.
-      timeOnTarget: timeOnTargetOf(plan, stream?.numbers.onTarget ?? null, stream?.numbers ?? null),
+      // The share of the steps' seconds in the stream inside their targets, over the steps with a target.
+      timeOnTarget: stream?.numbers.timeOnTarget ?? null,
     },
     // The run threshold test (4.10): LTHR from the 20 min step's average heart rate, threshold pace from the whole 30 min (Friel).
     thresholdTest: plan.test === "30min"

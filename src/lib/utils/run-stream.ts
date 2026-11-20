@@ -126,6 +126,8 @@ export type RunStreamNumbers = {
   drift: RideDrift | null;
   /** Percent of each step's seconds inside its target, by program set; null when the step has none. */
   onTarget: Record<number, number | null>;
+  /** The share of the run's seconds inside their targets, over the steps with one, each weighed by its seconds in the stream (as run: extended or ended early); null without one. */
+  timeOnTarget: number | null;
 };
 
 export type RunStreamInput = {
@@ -247,6 +249,8 @@ export function runStreamNumbers(input: RunStreamInput): RunStreamNumbers {
   let if2Seconds = 0;
   const zoneSeconds = [0, 0, 0, 0, 0];
   const onTarget: Record<number, number | null> = {};
+  let targetInside = 0;
+  let targetCounted = 0;
   for (const w of split.windows) {
     const idx = sampleIndices(streams.t, w);
     const secs = idx.reduce((a, i) => a + d[i], 0);
@@ -274,6 +278,8 @@ export function runStreamNumbers(input: RunStreamInput): RunStreamNumbers {
       if ((b.low === null || v >= b.low) && (b.high === null || v <= b.high)) inside += d[i];
     }
     onTarget[w.programSetId] = counted > 0 ? Math.round((inside / counted) * 100) : null;
+    targetInside += inside;
+    targetCounted += counted;
   }
 
   let intensityFactor: number | null = null;
@@ -293,6 +299,7 @@ export function runStreamNumbers(input: RunStreamInput): RunStreamNumbers {
     hrZoneMinutes: zoneSeconds.map((z) => Math.round(z / 60)),
     drift: decoupling(input, gap, d),
     onTarget,
+    timeOnTarget: targetCounted > 0 ? Math.round((targetInside / targetCounted) * 100) : null,
   };
 }
 
