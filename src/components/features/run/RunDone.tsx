@@ -23,8 +23,8 @@ const REASONS: { value: EndReason; label: string }[] = [
   { value: "other", label: "Other" },
 ];
 
-/** Where an injury is logged: Injuries and limits on Account. */
-export const INJURY_HREF = "/more/account/injuries";
+/** Where an injury is logged: Injuries and limits, on Account's Body and health page. */
+export const INJURY_HREF = "/more/account/body-and-health";
 
 export function RunDone({ programId, exerciseName, data, doneHref }: { programId: number; exerciseName: string; data: RunDoneData; doneHref: string }) {
   const [reason, setReason] = useState<EndReason | null>(data.endReason);
