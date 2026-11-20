@@ -1,6 +1,6 @@
 import { buildRunPlan } from "@/lib/utils/run-plan";
 import type { RideSplit, RideStreams } from "@/lib/utils/ride-stream";
-import { beltSpans, decoupling, runStreamNumbers, runWindowValues, smoothedSpeedGrade, type RunStreamInput } from "@/lib/utils/run-stream";
+import { beltSpans, decoupling, runDoneChart, runStreamNumbers, runWindowValues, smoothedSpeedGrade, type RunStreamInput } from "@/lib/utils/run-stream";
 import { gapSpeed } from "@/lib/utils/run-gap";
 import { parseWorkout } from "@/lib/utils/workout-steps";
 import { describe, expect, it } from "vitest";
@@ -163,5 +163,15 @@ describe("belt spans of a treadmill run (4.9)", () => {
       [2_500_000, 3_000_000, 8.5, 1],
       [3_000_000, 3_020_000, tp.steps[1].run!.belt! / 10, 1],
     ]);
+  });
+});
+
+describe("the plan against done chart (section 5)", () => {
+  it("outdoors labels whole-minute paces that never crowd each other, slow recoveries too", () => {
+    const s = stream((t) => ({ speed: t >= stridesFrom && t < stridesTo && (t - stridesFrom) % 120 >= 20 ? 1.6 : 3, hr: 150 }));
+    const chart = runDoneChart(input(s))!;
+    expect(chart.power).toBeTruthy();
+    expect(chart.yTicks.length).toBeGreaterThan(1);
+    for (let i = 1; i < chart.yTicks.length; i++) expect(Math.abs(chart.yTicks[i].y - chart.yTicks[i - 1].y)).toBeGreaterThanOrEqual(12);
   });
 });

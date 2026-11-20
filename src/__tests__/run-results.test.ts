@@ -203,3 +203,33 @@ describe("step 4 review (2): a typed total over a skipped step that ran", () => 
     expect(s.numbers.load?.method).toBe("pace");
   });
 });
+
+describe("step 7: outdoors with Garmin's pace", () => {
+  /** A 5 min rep at 98 to 102% of threshold pace (5:32 to 5:46 /km) with heart rate as its second line, then 5 min easy. */
+  const REPS = tree({
+    v: 2,
+    sport: "run",
+    name: "Reps",
+    steps: [
+      { type: "work", end: { type: "time", seconds: 300 }, target: { metric: "pace", anchor: "threshold_pace", low: 98, high: 102 } },
+      { type: "recovery", end: { type: "time", seconds: 300 } },
+    ],
+  });
+  const out = buildRunPlan(REPS, [1, 2], OWNER, "outdoor");
+  const garmin = (seconds: number, speed: number): RunStepLog => ({
+    ...log(seconds, null),
+    distanceMeters: Math.round(speed * seconds),
+    avgSpeed: speed,
+    avgHr: 172,
+    sources: { durationSeconds: "clock", distanceMeters: "garmin", avgSpeed: "garmin", avgHr: "garmin" },
+  });
+
+  it("a rep faster than its pace range shows ↑, slower ↓, inside none; its heart rate line does not judge it", () => {
+    const fast = runSummary(out, { 1: garmin(300, 1000 / 328), 2: garmin(300, 2) }, { beltEvents: false });
+    expect(fast.rows[0]).toMatchObject({ plan: "5:32-5:46", done: "5:27 · HR 172", mark: "↑" });
+    const slow = runSummary(out, { 1: garmin(300, 1000 / 350), 2: garmin(300, 2) }, { beltEvents: false });
+    expect(slow.rows[0].mark).toBe("↓");
+    const inside = runSummary(out, { 1: garmin(300, 1000 / 340), 2: garmin(300, 2) }, { beltEvents: false });
+    expect(inside.rows[0].mark).toBeNull();
+  });
+});

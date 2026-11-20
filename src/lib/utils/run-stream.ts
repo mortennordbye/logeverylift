@@ -297,6 +297,8 @@ export function runStreamNumbers(input: RunStreamInput): RunStreamNumbers {
 // ── Plan against done ────────────────────────────────────────────────────────
 
 const BINS = 120;
+/** Chart units between two scale labels, so they never overlap (7.5 px text). */
+const TICK_GAP = 12;
 
 /**
  * The plan-against-done chart of a run (section 5, "Summary"), in the bike
@@ -394,15 +396,18 @@ export function runDoneChart(input: RunStreamInput): DoneChart | null {
   const avgHr = weightedMean(streams.hr, hrIdx, d, (v) => v > 0);
   const lastHr = [...(hBins ?? [])].reverse().find((v) => v !== null) ?? null;
 
-  // km/h on a treadmill; whole-minute paces outdoors.
+  // km/h on a treadmill; whole-minute paces outdoors, fastest first, leaving out a label that would crowd the one above it.
   const yTicks: DoneChart["yTicks"] = [];
   if (hasSpeed || planBands.length) {
-    if (treadmill) for (let k = Math.ceil(vMin / 2) * 2; k < vMax * 0.95; k += 2) yTicks.push({ y: y(k), label: `${k}` });
-    else
-      for (let m = 3; m <= 12; m++) {
-        const kmh = 60 / m;
-        if (kmh > vMin && kmh < vMax * 0.95) yTicks.push({ y: y(kmh), label: minSec(m * 60) });
-      }
+    const ticks = treadmill
+      ? Array.from({ length: 13 }, (_, k) => 24 - 2 * k).map((kmh) => ({ kmh, label: `${kmh}` }))
+      : Array.from({ length: 10 }, (_, k) => 3 + k).map((m) => ({ kmh: 60 / m, label: minSec(m * 60) }));
+    for (const t of ticks) {
+      if (t.kmh <= vMin || t.kmh >= vMax * 0.95) continue;
+      const ty = y(t.kmh);
+      if (yTicks.length && ty - yTicks[yTicks.length - 1].y < TICK_GAP) continue;
+      yTicks.push({ y: ty, label: t.label });
+    }
   }
   const minutes = total / 60;
   const every = minutes <= 90 ? 15 : minutes <= 180 ? 30 : 60;

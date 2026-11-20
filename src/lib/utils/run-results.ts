@@ -248,6 +248,13 @@ function doneText(log: StepLog | null, mode: RideMode): string {
  */
 function markOf(s: RidePlanStep, log: StepLog | null, plan: RidePlan): RunSummaryRow["mark"] {
   if (!done(log)) return null;
+  // Outdoors a pace that is the step's main target judges Garmin's pace of the step (step 7); its heart rate line is information.
+  const pace = plan.mode !== "indoor" && log.sources?.avgSpeed === "garmin" && log.avgSpeed !== null ? paceBounds(s, plan) : null;
+  if (pace) {
+    if (pace.low !== null && log.avgSpeed! < pace.low) return "↓";
+    if (pace.high !== null && log.avgSpeed! > pace.high) return "↑";
+    return null;
+  }
   const band = hrBand(hrTextOf(s, plan));
   if (band) {
     const seconds = s.seconds ?? log.durationSeconds ?? 0;
@@ -258,13 +265,6 @@ function markOf(s: RidePlanStep, log: StepLog | null, plan: RidePlan): RunSummar
   }
   const t = mainTarget(s.step);
   const belt = beltOfLog(log);
-  // Outdoors a pace judges Garmin's pace of the step (step 7): the clock alone has no pace.
-  if (plan.mode !== "indoor" && log.sources?.avgSpeed === "garmin" && log.avgSpeed !== null) {
-    const b = paceBounds(s, plan);
-    if (b?.low != null && log.avgSpeed < b.low) return "↓";
-    if (b?.high != null && log.avgSpeed > b.high) return "↑";
-    return null;
-  }
   if (plan.mode !== "indoor" || t?.metric !== "pace" || belt === null) return null;
   const r = resolveTarget(t, "run", plan.thresholds);
   if (r.low === null || r.high === null) return null;
