@@ -20,6 +20,10 @@ import { rideStepLogs } from "@/lib/bike-exercise-view";
 import { brickTimes } from "@/lib/run-brick";
 import { garminAllowedFor } from "@/lib/garmin/access";
 import { runGarminView } from "@/lib/run-garmin";
+import { runThresholdTest } from "@/lib/run-test";
+import { getUserSettings } from "@/lib/user-settings";
+import { runTestCheckText, runTestThresholds } from "@/lib/utils/run-test";
+import { minSec } from "@/lib/utils/thresholds";
 import { rideTimeline, type RidePlan } from "@/lib/utils/ride-timeline";
 import { paceText } from "@/lib/utils/run-numbers";
 import { runSummary, type RunStepLog } from "@/lib/utils/run-results";
@@ -86,6 +90,9 @@ export async function runReport(userId: string, ride: typeof rides.$inferSelect)
   const planned = plannedRunNumbers(plan);
   const live = timeline.status === "running" || timeline.status === "paused";
   const brickApp = ride.brickRideId !== null ? await brickOf(userId, ride.brickRideId, ride.startedAt.getTime()) : null;
+  const test = live
+    ? null
+    : await runThresholdTest(userId, { plan, startedAt: ride.startedAt, timeZone: (await getUserSettings(userId)).timeZone }, runLogs, timeline, eventInputs(events));
   // Garmin's transition gives T2 when the run is the part of a multisport file after it (4.8).
   const brick = brickApp && garmin.t2Seconds !== null ? { ...brickApp, t2Seconds: garmin.t2Seconds } : brickApp;
   // The summary's row of each step (a strides block is one row) and its arrow.
@@ -198,6 +205,33 @@ export async function runReport(userId: string, ride: typeof rides.$inferSelect)
       // The share of the steps' seconds inside their targets, over the steps with a target.
       timeOnTarget: timeOnTargetOf(plan, stream?.numbers.onTarget ?? null, stream?.numbers ?? null),
     },
+    // The run threshold test (4.10): LTHR from the 20 min step's average heart rate, threshold pace from the whole 30 min (Friel).
+    thresholdTest: plan.test === "30min"
+      ? {
+          test: plan.test,
+          proposedLthr: test?.result?.lthr ?? null,
+          proposedThresholdSpeed: test?.result?.speed != null ? r2(test.result.speed) : null,
+          proposedThresholdPace: test?.result?.speed != null ? `${minSec(1000 / test.result.speed)} /km` : null,
+          currentLthr: test?.current.lthr ?? null,
+          currentThresholdPace: test?.current.speed ? `${minSec(1000 / test.current.speed)} /km` : null,
+          // save: within 5 bpm and 3% of the current values; choose: 6 to 10 bpm or 3 to 8%; retest: further off ("Run the test again in 4 weeks").
+          band: test?.result?.band ?? null,
+          // A failed check: "Test may be invalid".
+          valid: test?.result?.valid ?? null,
+          failedChecks: test?.result ? runTestCheckText(test.result.checks) : [],
+          saved: test?.saved ?? false,
+          measuredOn: test?.measuredOn ?? null,
+          note: live
+            ? "The test is still running."
+            : test?.result
+              ? test.saved
+                ? "This test's values are stored as test thresholds."
+                : "The runner saves it with Save on the run summary, or you add each row with manage_thresholds (source test, protocol run_30min and the row's testData)."
+              : "The 20 min step was not run to its end, paused more than 60 s, or gave no heart rate or pace in range, so the test gives no threshold.",
+          protocol: "run_30min" as const,
+          rows: test?.result ? runTestThresholds(test.result).map((r) => ({ kind: r.kind, value: r.value, testData: r.testData })) : [],
+        }
+      : null,
     // Null for a user without Garmin access.
     garmin: !garminUser ? null : {
       // filled: Undo; pick: two or more Garmin runs match and none fills; refill: the one match was undone; none.

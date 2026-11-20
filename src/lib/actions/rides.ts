@@ -30,6 +30,10 @@ import {
 } from "@/lib/utils/ride-timeline";
 import { buildRunPlan } from "@/lib/utils/run-plan";
 import { runPlanHistory } from "@/lib/run-history";
+import { listIllness } from "@/lib/illness";
+import { userToday } from "@/lib/user-settings";
+import { toDateStr } from "@/lib/utils/cycle-position";
+import { SICK_TEXT, sickBlocksTest } from "@/lib/utils/run-test";
 import { requireSession } from "@/lib/utils/session";
 import { parseWorkout } from "@/lib/utils/workout-steps";
 import type { ActionResult } from "@/types/workout";
@@ -123,6 +127,10 @@ export async function startRide(data: unknown): Promise<ActionResult<RideView>> 
     const built = rows.length ? buildWorkout(rows as StepRow[], { sport, name: slot.name, test: slot.rideTest }) : null;
     const tree = built && "workout" in built ? parseWorkout(built.workout) : null;
     if (!tree?.ok) return { success: false, error: sport === "run" ? "This exercise has no steps to run" : "This exercise has no steps to ride" };
+    // The run threshold test does not start within 7 days of being sick (docs/plans/run-logger.md, 4.10).
+    if (sport === "run" && tree.workout.test === "30min" && sickBlocksTest(await listIllness(userId), toDateStr(await userToday(userId)))) {
+      return { success: false, error: SICK_TEXT };
+    }
     const ids = rows.map((r) => r.id);
     const thresholds = await thresholdValues(userId);
     // A run reads the belts and easy pace of the runner's own runs (docs/plans/run-logger.md, 4.2 and 4.3).

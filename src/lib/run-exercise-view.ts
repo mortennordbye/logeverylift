@@ -18,6 +18,9 @@ import type { RidePlan } from "@/lib/utils/ride-timeline";
 import type { RunStepLog } from "@/lib/utils/run-results";
 import { brickSummaryOf } from "@/lib/run-brick";
 import { runGarminView, type RunGarminView } from "@/lib/run-garmin";
+import { listIllness } from "@/lib/illness";
+import { sickBlocksTest } from "@/lib/utils/run-test";
+import { runThresholdTest, type RunThresholdTest } from "@/lib/run-test";
 import { runKeptText } from "@/lib/utils/run-screen";
 import { garminAllowedFor } from "@/lib/garmin/access";
 import { isIndoor, sportOf } from "@/lib/garmin/analytics/sport";
@@ -48,6 +51,8 @@ export type RunExerciseData = {
   liveRun: boolean;
   /** Another ride or run of the user is running (one per user, 4.3): its sport, where it opens, and its id ("End ride and start run" sends its queued taps first). */
   otherLive: { sport: RideSport; href: string; rideId: number } | null;
+  /** The run threshold test (4.10): sick says a sick period is open or ended less than 7 days ago, so it does not start. Null for other runs. */
+  test: { sick: boolean } | null;
 };
 
 /** The mode a run's mode default looks back over (R4). */
@@ -102,7 +107,12 @@ export async function runExerciseView(
   if (!tree?.ok) return null;
 
   // getRide settles the active ride first, so one whose last step ran out is not live.
-  const [thresholds, defaultMode, active] = await Promise.all([thresholdValues(userId), defaultRunModeFor(userId, programExerciseId), getRide({})]);
+  const [thresholds, defaultMode, active, sick] = await Promise.all([
+    thresholdValues(userId),
+    defaultRunModeFor(userId, programExerciseId),
+    getRide({}),
+    tree.workout.test === "30min" ? Promise.all([listIllness(userId), userToday(userId)]).then(([p, today]) => sickBlocksTest(p, toDateStr(today))) : null,
+  ]);
   // The belts and easy pace startRide reads too, so the screen shows the run it starts.
   const history = await runPlanHistory(userId, thresholds.lthr_run);
   const ids = rows.map((r) => r.id);
@@ -130,6 +140,7 @@ export async function runExerciseView(
     paceSteps: needsThresholdPace(tree.workout),
     liveRun,
     otherLive,
+    test: sick === null ? null : { sick },
   };
 }
 
@@ -160,6 +171,8 @@ export type RunAfterData = {
   /** The ride of the run's brick: its time and T2 (section 5 "Summary"). */
   brick: { rideSeconds: number; t2Seconds: number | null } | null;
   surface: RunSurface | null;
+  /** A run threshold test's result (4.10), else null. */
+  thresholdTest: RunThresholdTest | null;
 };
 
 /**
@@ -202,5 +215,6 @@ export async function runAfterView(userId: string, programExerciseId: number): P
     // Garmin's transition gives T2 when the run is the part of a multisport file after it (4.8).
     brick: brick && fill.t2Seconds !== null ? { ...brick, t2Seconds: fill.t2Seconds } : brick,
     surface: v.ride.surface,
+    thresholdTest: await runThresholdTest(userId, { plan: v.plan, startedAt: v.ride.startedAt, timeZone }, logs, timeline, v.events),
   };
 }

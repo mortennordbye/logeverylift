@@ -43,6 +43,7 @@ function data(thresholds: ThresholdValues, p: Partial<RunExerciseData> = {}, wor
     paceSteps: needsThresholdPace(workout),
     liveRun: false,
     otherLive: null,
+    test: null,
     ...p,
   };
 }
