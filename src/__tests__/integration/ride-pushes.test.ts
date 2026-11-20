@@ -164,6 +164,94 @@ describe("scheduling", () => {
   });
 });
 
+describe("a run (docs/plans/run-logger.md, step 6)", () => {
+  const strides = {
+    v: 2,
+    sport: "run",
+    name: "Km and strides",
+    steps: [
+      { type: "work", end: { type: "distance", meters: 1000 }, belt: 10 },
+      {
+        type: "repeat",
+        count: 3,
+        steps: [
+          { type: "work", end: { type: "time", seconds: 20 }, belt: 13 },
+          { type: "recovery", end: { type: "time", seconds: 100 }, belt: 7 },
+        ],
+      },
+      { type: "cooldown", end: { type: "time", seconds: 180 }, belt: 6 },
+    ],
+  };
+
+  async function run() {
+    const runId = (await createExercise({ name: `Run ${Math.random()}`, category: "cardio", discipline: "run" })).id;
+    await db.insert(athleteThresholds).values({ userId: me, kind: "lthr_run", value: 180, measuredOn: "2026-11-01", source: "manual" });
+    const { program, slots } = await createStepProgram(me, runId, strides);
+    const session = await createSession(me, program.id);
+    asUser(me);
+    const view = ok(await startRide({ sessionId: session.id, programExerciseId: slots[0].programExerciseId, mode: "indoor", clientId: cid() }));
+    return { view, programId: program.id, programExerciseId: slots[0].programExerciseId };
+  }
+
+  async function runEvent(view: Awaited<ReturnType<typeof run>>["view"], kind: "belt" | "skip" | "unskip" | "pause" | "resume", s: number, value?: number, step?: number) {
+    vi.setSystemTime(at(s));
+    const stepKey = step !== undefined ? view.plan.steps[step].key : undefined;
+    const next = ok(await sendRideEvent({ rideId: view.ride.id, clientId: cid(), kind, value, stepKey, expectedSeq: seq }));
+    seq = next.ride.seq;
+    return next;
+  }
+
+  it("events rewrite the alerts of a run with a strides block; a belt event moves the alert of a belt distance step", async () => {
+    const { view } = await run();
+    // 1 km at 10 km/h ends at 360 s; the block is 3 × 120 s; the cool-down ends at 900 s.
+    expect(await alerts(view.ride.id)).toEqual([
+      [300, "minute_left"],
+      [360, "step"],
+      [620, "step"],
+      [720, "step"],
+      [840, "minute_left"],
+      [900, "done"],
+    ]);
+    const titles = (await db.select().from(ridePushes).where(eq(ridePushes.rideId, view.ride.id)).orderBy(asc(ridePushes.sendAt))).map((r) => r.title);
+    expect(titles).toEqual([
+      "1 min left · next 13.0 km/h · Strides 3 × 20 s",
+      "13.0 km/h · Strides 3 × 20 s · 1 min 40 s easy between",
+      "7.0 km/h · Easy · 1 min 40 s",
+      "6.0 km/h · Cool-down · 3 min",
+      "1 min left · last step",
+      "Run done",
+    ]);
+
+    // At 60 s, 167 m are run; the 833 m left at 12 km/h take 250 s.
+    await runEvent(view, "belt", 60, 120, 0);
+    expect((await alerts(view.ride.id)).map(([s]) => s)).toEqual([250, 310, 570, 670, 790, 850]);
+
+    // Hold to skip in the block skips the rest of it: the cool-down is next, then the end.
+    await runEvent(view, "skip", 400, 1, 2);
+    expect(await alerts(view.ride.id)).toEqual([
+      [520, "minute_left"],
+      [580, "done"],
+    ]);
+    await runEvent(view, "unskip", 410);
+    expect((await alerts(view.ride.id)).map(([s]) => s)).toEqual([570, 670, 790, 850]);
+
+    await runEvent(view, "pause", 420);
+    expect(await alerts(view.ride.id)).toEqual([]);
+  });
+
+  it("the alert goes with the run's title and opens the run exercise in run mode", async () => {
+    const { view, programId, programExerciseId } = await run();
+    expect(await sendDueRidePushes(at(305))).toMatchObject({ claimed: 1, sent: 1 });
+    expect(JSON.parse(sendNotification.mock.calls[0][1])).toEqual({
+      title: "1 min left · next 13.0 km/h · Strides 3 × 20 s",
+      body: "Step 1 of 3 · Work",
+      tag: `ride-${view.ride.id}`,
+      url: `/programs/${programId}/workout/exercises/${programExerciseId}?ride=1`,
+    });
+  });
+});
+
+
 describe("sending", () => {
   it("claims each due alert once, also with two runs at the same time", async () => {
     const { view, programId, programExerciseId } = await ride();

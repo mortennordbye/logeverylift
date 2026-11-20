@@ -27,7 +27,7 @@ export default function PrivacyPage() {
         </li>
         <li>
           <strong>Step alerts, if you turn them on:</strong> your device&apos;s push address and the keys that encrypt
-          alerts for it, and the alerts of a bike ride in progress until they are sent.
+          alerts for it, and the alerts of a bike ride or run in progress until they are sent.
         </li>
         <li>
           <strong>Profile, if you fill it in:</strong> gender, year of birth, height, body weight, training goals and
@@ -186,11 +186,11 @@ export default function PrivacyPage() {
         </li>
         <li>
           <strong>Your device&apos;s push service</strong> (Apple, Google, Mozilla or Microsoft, in the USA), only if you
-          turn on step alerts for bike rides. During a ride our server sends each alert, such as the next step&apos;s
+          turn on step alerts for bike rides and runs. During a ride or run our server sends each alert, such as the next step&apos;s
           target and time, to the push service your browser uses, which passes it to your device. The text is
           encrypted for your device. The push service sees your device&apos;s push address, when each alert is sent and
           its size, how long it may wait (60 seconds) and that it is urgent, and the operator&apos;s contact address.
-          It does not see which ride the alert is about.
+          It does not see which ride or run the alert is about.
         </li>
         <li>
           <strong>Google Drive</strong> stores an off-site copy of the backups. The backups are encrypted before they

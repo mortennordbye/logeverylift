@@ -1,6 +1,7 @@
 /**
- * Web push for ride step alerts (docs/plans/bike-ride-logger.md, 4.7; the
- * design is docs/plans/web-push-and-reminders.md, 3a).
+ * Web push for ride and run step alerts (docs/plans/bike-ride-logger.md, 4.7;
+ * docs/plans/run-logger.md, step 6; the design is
+ * docs/plans/web-push-and-reminders.md, 3a).
  *
  * Push is on only when the three VAPID env vars are set. Then:
  * - every ride event rewrites the ride's `ride_pushes` rows from its timeline
@@ -20,7 +21,7 @@ import { programExercises, pushSubscriptions, ridePushes, rides } from "@/db/sch
 import type { RideView } from "@/lib/ride-settle";
 import { env } from "@/lib/env";
 import { getUserSettings } from "@/lib/user-settings";
-import { ridePushSchedule, ridePushTag, ridePushUrl, type PushPayload } from "@/lib/utils/ride-pushes";
+import { ridePushSchedule, ridePushTag, ridePushUrl, runPushSchedule, type PushPayload } from "@/lib/utils/ride-pushes";
 import { rideTimeline } from "@/lib/utils/ride-timeline";
 import { and, eq, inArray, lte } from "drizzle-orm";
 
@@ -53,13 +54,15 @@ export function pushPublicKey(): string | null {
  */
 export async function scheduleRidePushes(ex: Executor, userId: string, view: RideView): Promise<void> {
   await ex.delete(ridePushes).where(eq(ridePushes.rideId, view.ride.id));
-  // The alert text is a ride's; a run's alerts come with docs/plans/run-logger.md step 6.
-  if (!pushKeys() || view.ride.sport !== "bike") return;
+  if (!pushKeys()) return;
   const [device] = await ex.select({ id: pushSubscriptions.id }).from(pushSubscriptions).where(eq(pushSubscriptions.userId, userId)).limit(1);
   if (!device) return;
   const t = rideTimeline(view.plan, view.events, view.serverNow, { heartbeatAt: view.ride.heartbeatAt });
-  const { units } = await getUserSettings(userId);
-  const rows = ridePushSchedule(view.plan, t, view.serverNow, units);
+  // A run is in km only (docs/plans/run-logger.md, R6), and its alerts name the target first.
+  const rows =
+    view.ride.sport === "run"
+      ? runPushSchedule(view.plan, t, view.serverNow, { brick: view.ride.brickRideId !== null })
+      : ridePushSchedule(view.plan, t, view.serverNow, (await getUserSettings(userId)).units);
   if (!rows.length) return;
   await ex.insert(ridePushes).values(rows.map((r) => ({ ...r, rideId: view.ride.id, userId, sendAt: new Date(r.sendAt) })));
 }
