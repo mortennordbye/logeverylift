@@ -1,6 +1,6 @@
 # LogEveryLift rules for assistants
 
-Version: 2026-11-18
+Version: 2026-11-20
 
 This document is served to connected AI assistants as an MCP resource
 (`logeverylift://docs/app-rules`). It describes the app as it is today. It holds no personal
@@ -116,6 +116,18 @@ what it describes, that package updates this file and the server instructions in
   results by `workoutSessionId`. `get_ride` gives the mode, the status (`ended_early` does not count
   as a done key session), planned against done per step, and the ride's numbers: NP, IF and heart
   rate zones only from a Garmin power stream, else an estimated power load or an effort load.
+- **Runs** (endurance features only). A run exercise with steps is run in run mode, on a
+  treadmill (`indoor`) or outdoors on road or trail. Like a ride, the run keeps its plan as it was
+  at the start and saves each step when it ends. On a treadmill each step starts at a frozen belt
+  speed, and each tap on belt or incline is stored, so distance and pace come from the belt
+  (source `belt`); outdoors they come from Garmin or what the athlete types. `log_step_results`
+  takes `beltKmh` and `inclinePercent` only on a treadmill run's steps and never replaces a
+  number the belt gave (`ASSISTANT_KEEPS`, `src/lib/utils/step-results.ts`): the athlete corrects
+  a belt in the app's results table. `get_ride` reads a run too (`sport` `run`): mode, surface,
+  status, end reason, brick and T2, planned against done per step with belts, and its numbers:
+  distance, moving pace, grade-adjusted pace on a treadmill and an estimated load (`run_gap`, else
+  effort). Numbers from a Garmin stream (drift, time on target) are not built for runs yet. A
+  session with a ride and a run keys each step with its exercise's place (`e1:s1`, `e2:s1`).
 - **Fueling and race plans** (endurance features only). A fuel log belongs to one completed
   session logged in the app (`workoutSessionId`) or one Garmin activity: carbohydrate, fluid,
   sodium, caffeine, the products used and a GI score (0 = no gut symptoms, 10 = worst). Gut

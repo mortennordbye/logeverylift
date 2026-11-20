@@ -425,7 +425,7 @@ before building (rule 3 of section 0).
 | 2 Run exercise screen | done |
 | 3 Run mode | done |
 | 4 Results and numbers | done |
-| 5 AI tools | todo |
+| 5 AI tools | done |
 | 6 Alerts | todo |
 | 7 Garmin fill and stream numbers | todo |
 | 8 Run threshold test | todo |
@@ -652,3 +652,11 @@ before building (rule 3 of section 0).
 - Step 4 review, easy pace (overrides the step 4 line on its sources): only outdoor steps whose distance is their own (Garmin's or the assistant's) count; a typed distance outdoors is one total spread by time.
 - Step 4 review, Ride again and Run again (changes the bike final review line on the summary): the results table and the summary read only the steps the latest ride or run ended (`rideStepLogs`), and a clock-timed row whose time or status differs from its timeline is the earlier one's, so the step shows as not saved yet. The earlier rows stay in the session.
 - Step 4 review, plan against done chart: the bike's chart (`RideDoneChart`) draws from a Garmin 1 s stream only, so the run summary gets it with step 7's stream.
+- Step 5, belt numbers and the assistant: a belt value (source `belt`) is kept like a typed or Garmin one (`ASSISTANT_KEEPS`), so the reply lists it under `kept` with `by: "belt"` and the runner corrects a belt in the results table. A step's incline has no source of its own: it is the belt's while the step's distance is.
+- Step 5, belt from the assistant: `log_step_results` takes `beltKmh` (the step's speed, and with no `distanceMeters` its distance over the step's time, as the results table writes a belt) and `inclinePercent`, written with source `assistant`, only on the steps of a treadmill run by its `workoutSessionId`. An outdoor run, a ride and the `plannedSessionId` path refuse them with the reason; `beltKmh` with `avgSpeed` is refused.
+- Step 5, reads: `get_step_results` gives a treadmill run's frozen belt per step (`planned.belt`) and the result's `beltKmh` and `inclinePercent`. `get_ride` reads a run as `runReport` (`src/lib/run-report.ts`) with `sport` `run`; a ride's report gains `sport` `bike` and is otherwise unchanged.
+- Step 5, which ride: `get_ride` takes `workoutSessionId`, `programExerciseId` or both (that exercise in that session), so the ride of a brick in one program can be read beside its run; the session alone gives the later one.
+- Step 5, room for step 7: `numbers.stream` is false, `drift`, `timeOnTarget` and each step's `timeOnTargetPct` are null, `gapSPerKm` is null outdoors, heart rate zones are by step average (`zonesFrom: "steps"`) and `garmin` is null. Step 7 fills them.
+- Step 5, the brick in `get_ride`: read from the brick ride's timeline without settling it (`brickTimes`, `src/lib/run-brick.ts`), so a read never writes a ride (D9).
+- Step 5, a bug found: `edit_program_exercise` dropped a step's belt (`beltKmh`) on every write, in a set list and a tree. Fixed with a test first.
+- Step 5, privacy: no new data class. The record and the policy now name runs among what `get_ride` reads, and belt and incline among what `log_step_results` writes. `LEGAL_VERSION` stays at the branch's `2026-11-20.1`, which is not released yet and covers this.
