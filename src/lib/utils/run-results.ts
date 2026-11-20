@@ -220,7 +220,7 @@ function planText(s: RidePlanStep, plan: RidePlan): string | null {
   const hr = hrTextOf(s, plan);
   if (plan.mode === "indoor") {
     const zone = runStepZone(s.step, th);
-    const belt = s.run?.belt != null ? (s.run.belt / 10).toFixed(1) : "Feel";
+    const belt = s.run?.belt != null ? (s.run.belt / 10).toFixed(1) : s.run?.carry ? "Same" : "Feel";
     return [belt, hr ? shortHr(hr) : zone !== null ? `Z${zone}` : null].filter(Boolean).join(" · ");
   }
   const main = runOutdoorText(s, th, plan.surface ?? "road").main;

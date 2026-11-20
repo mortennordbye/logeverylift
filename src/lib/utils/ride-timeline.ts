@@ -97,6 +97,8 @@ export type RunStepPlan = {
   incline: number | null;
   /** The repeat id of a short-step block (a repeat whose work step is under 60 s, 4.5), else null. */
   block: string | null;
+  /** The 20 min step of a treadmill run test (4.10): it starts at the belt the step before ended on, and its own belt is null. Absent elsewhere. */
+  carry?: true;
 };
 
 export type RidePlan = {
@@ -380,6 +382,8 @@ export function rideTimeline(
   let lastAt = 0;
   /** Run only: the incline the next step carries when it has none of its own. */
   let carriedIncline: number | null = null;
+  /** Run only: the belt the step before ended on, for a step that carries it (a run test, 4.10). */
+  let carriedBelt: number | null = null;
 
   const activeMs = (l: Live, t: number) => Math.max(0, (l.pausedAt ?? t) - l.startAt - l.pausedMs);
   // Run only: meters per active ms of the belt now, and the meters at `t`.
@@ -411,7 +415,7 @@ export function rideTimeline(
     const l: Live = { index, startAt: t, pausedMs: 0, pausedAt: paused ? t : null, extendS: 0, offsetW: 0 };
     if (!run) return l;
     const r = steps[index].run;
-    const belt = r?.belt ?? null;
+    const belt = r?.carry ? carriedBelt : (r?.belt ?? null);
     const incline = r?.incline ?? carriedIncline;
     return { ...l, belt, distM: 0, distAtMs: 0, beltSeen: belt !== null, incline, inclineSum: 0, inclineMs: 0, inclineAtMs: 0 };
   };
@@ -436,7 +440,10 @@ export function rideTimeline(
         ...runResult(l, t),
       });
     }
-    if (run) carriedIncline = l.incline ?? null;
+    if (run) {
+      carriedIncline = l.incline ?? null;
+      carriedBelt = l.belt ?? null;
+    }
     extendedOver += l.extendS;
     live = null;
     return l;

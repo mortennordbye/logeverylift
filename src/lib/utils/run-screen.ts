@@ -10,7 +10,7 @@
 
 import type { RideStepResult, RidePlan, RideTimeline } from "@/lib/utils/ride-timeline";
 import { rideClock } from "@/lib/utils/ride-screen";
-import { RUN_MODE_NAME, runOutdoorText, runRowOfStep, runStepTitle, runTargetText, runZoneCapText } from "@/lib/utils/run-view";
+import { KEEP_BELT, RUN_MODE_NAME, runOutdoorText, runRowOfStep, runStepTitle, runTargetText, runZoneCapText } from "@/lib/utils/run-view";
 import { minSec } from "@/lib/utils/thresholds";
 
 /** A cue shows this long before a step whose belt differs (4.4). */
@@ -134,7 +134,7 @@ export function runScreen(plan: RidePlan, t: RideTimeline, opts: { brick?: boole
       const work = plan.steps.find((p) => p.run?.block === afterBlock && p.step.type === "work") ?? after;
       nextTitle = `Strides ${work.round?.of ?? 1} × ${work.seconds ?? work.estSeconds} s`;
     } else nextTitle = `${afterBlock && after.step.type === "work" && after.round ? `Stride ${after.round.index}` : runStepTitle(after, th)} · ${len(after)}`;
-    const nextTarget = treadmill ? (after.run?.belt != null ? `${kmh(after.run.belt / 10)} km/h` : null) : runOutdoorText(after, th, surface).main;
+    const nextTarget = treadmill ? (after.run?.belt != null ? `${kmh(after.run.belt / 10)} km/h` : after.run?.carry ? KEEP_BELT : null) : runOutdoorText(after, th, surface).main;
     next = { title: nextTitle, target: nextTarget };
   }
 

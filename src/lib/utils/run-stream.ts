@@ -89,9 +89,10 @@ export type BeltSpan = { from: number; to: number; kmh: number | null; incline: 
 export function beltSpans(plan: RidePlan, steps: Pick<RideStepResult, "index" | "key" | "startedAt" | "endedAt">[], events: RideEventInput[]): BeltSpan[] {
   const out: BeltSpan[] = [];
   let incline: number | null = null;
+  let carried: number | null = null;
   for (const r of steps) {
     const p = plan.steps[r.index]?.run;
-    let kmh = p?.belt != null ? p.belt / 10 : null;
+    let kmh: number | null = p?.carry ? carried : p?.belt != null ? p.belt / 10 : null;
     if (p?.incline != null) incline = p.incline / 10;
     let from = r.startedAt;
     const mine = events
@@ -104,6 +105,7 @@ export function beltSpans(plan: RidePlan, steps: Pick<RideStepResult, "index" | 
       else incline = e.value! / 10;
     }
     if (r.endedAt > from) out.push({ from, to: r.endedAt, kmh, incline });
+    carried = kmh;
   }
   return out;
 }

@@ -17,6 +17,7 @@ import {
   type RidePlanStep,
   type RunStepPlan,
 } from "@/lib/utils/ride-timeline";
+import { runTestSteps } from "@/lib/utils/run-test";
 import { flattenWorkout } from "@/lib/utils/workout-player";
 import {
   mainTarget,
@@ -211,6 +212,11 @@ export function buildRunPlan(
       },
     };
   });
+  // A treadmill run test: the 20 min step keeps the belt the runner raised in the first 10 min (4.10).
+  const test = workout.test === "30min" && treadmill ? runTestSteps(steps) : null;
+  if (test && test.first !== null && steps[test.last].step.belt === undefined) {
+    steps[test.last] = { ...steps[test.last], run: { ...steps[test.last].run!, belt: null, beltFrom: null, carry: true } };
+  }
   return {
     v: 2,
     sport: "run",

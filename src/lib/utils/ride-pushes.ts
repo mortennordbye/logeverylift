@@ -11,7 +11,7 @@ import type { RidePushKind } from "@/db/schema/push";
 import { bikeStepRows } from "@/lib/utils/bike-ride-view";
 import type { RidePlan, RidePlanStep, RideTimeline } from "@/lib/utils/ride-timeline";
 import { BRICK_EASY_S } from "@/lib/utils/run-screen";
-import { runOutdoorText, runRowOfStep, runStepTitle, runTargetText } from "@/lib/utils/run-view";
+import { KEEP_BELT, runOutdoorText, runRowOfStep, runStepTitle, runTargetText } from "@/lib/utils/run-view";
 import { DEFAULT_UNITS, type Units } from "@/lib/utils/units";
 
 export type RidePushPlan = { sendAt: number; kind: RidePushKind; title: string; body: string; stepIndex: number };
@@ -101,6 +101,7 @@ function runPushTarget(plan: RidePlan, s: RidePlanStep, brickEasy: boolean): str
     const belt = s.run?.belt ?? null;
     const incline = s.step.incline !== undefined ? ` · incline ${s.step.incline}%` : "";
     if (belt !== null) return `${kmhText(belt)}${incline}`;
+    if (s.run?.carry) return `${KEEP_BELT}${incline}`;
     return `${(s.step.target?.metric === "hr" && runTargetText(s, th)) || "Belt by feel"}${incline}`;
   }
   if (brickEasy) return "Effort 4-5";

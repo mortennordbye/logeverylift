@@ -300,6 +300,9 @@ const STEP_WORD: Record<WorkoutStep["type"], string> = { warmup: "Warm-up", work
 
 const kmh = (tenths: number) => (tenths / 10).toFixed(1);
 
+/** The belt words of a step that keeps the belt the step before ended on (the 20 min of a run test, 4.10). */
+export const KEEP_BELT = "Keep the belt";
+
 /** "10:00", "1:15:00". */
 function clockText(seconds: number): string {
   if (seconds < 3600) return minSec(seconds);
@@ -315,7 +318,8 @@ function treadmillText(s: RidePlanStep, th: ThresholdValues, zone: number | null
   const t = mainTarget(s.step);
   const hr = t?.metric === "hr" ? targetText(s, zone, th) : null;
   let text: string;
-  if (run.belt === null) text = hr ? `${hr} · set the belt by feel` : "Set the belt by feel";
+  if (run.carry) text = KEEP_BELT;
+  else if (run.belt === null) text = hr ? `${hr} · set the belt by feel` : "Set the belt by feel";
   else if (run.beltFrom === "zone" || run.beltFrom === "history") text = `${hr} · start ${kmh(run.belt)} km/h`;
   else if (run.beltFrom === "effort" && run.belt === WALK_BELT_KMH * 10) text = `Walk ${kmh(run.belt)} km/h`;
   else text = `Belt ${kmh(run.belt)} km/h`;
