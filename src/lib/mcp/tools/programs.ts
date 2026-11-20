@@ -166,6 +166,7 @@ function setValues(programExerciseId: number, s: SetInput) {
     ramp: s.ramp ?? null,
     free: s.free ?? false,
     outdoorTarget: s.outdoorTarget ?? null,
+    beltKmh: s.beltKmh ?? null,
   };
 }
 
