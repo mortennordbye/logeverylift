@@ -56,6 +56,12 @@
  *                                 from a synthetic Garmin run with GPS.
  *   steps-runpick@demo.local      admin: the same outdoor run with two
  *                                 synthetic Garmin runs that match it: Pick.
+ *   steps-runtest@demo.local      pace 5:39 and LTHR 180: the treadmill run
+ *                                 test run 10 min ago, the belt at 10.9 km/h
+ *                                 from the test's first second, the 20 min
+ *                                 typed at HR 176, effort 9: the summary offers
+ *                                 New threshold pace 5:30 /km · LTHR 176. Also
+ *                                 "Run · Tempo" in pace, for the belts after Save.
  *
  * Dates are relative to the run day. Each run deletes the demo accounts (and
  * with them all their data) and makes them again. No other account is touched.
@@ -89,6 +95,7 @@ const RUN_BRICK = "steps-runbrick@demo.local";
 const RUN_GARMIN = "steps-rungarmin@demo.local";
 const RUN_GARMIN_OUT = "steps-rungarmin-out@demo.local";
 const RUN_PICK = "steps-runpick@demo.local";
+const RUN_TEST = "steps-runtest@demo.local";
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "postgres"]);
 const DEMO_TZ = "Europe/Oslo";
 
@@ -281,13 +288,14 @@ async function main() {
   const { fillRidesFromGarmin } = await import("../src/lib/ride-garmin");
   const { allOutStep, ftpTestWorkout } = await import("../src/lib/utils/ftp-tests");
   const { buildRunPlan } = await import("../src/lib/utils/run-plan");
+  const { runTestWorkout } = await import("../src/lib/utils/run-test");
   const { rideTimeline } = await import("../src/lib/utils/ride-timeline");
   const { beltResults } = await import("../src/lib/utils/run-screen");
   const { eq, isNull, and } = await import("drizzle-orm");
 
   type Ctx = { userId: string; writer: "user" };
 
-  const old = await db.select({ id: s.users.id }).from(s.users).where(inArray(s.users.email, [TRI, LIFT, RIDE, NOFTP, HAND, GARMIN, FTP_TEST, RUN, RUN_NOPACE, RUN_NOLTHR, RUN_PACE, RUN_MODE, RUN_OUT, BRICK, BRICK_LIVE, RUN_DONE, RUN_EARLY, RUN_BRICK, RUN_GARMIN, RUN_GARMIN_OUT, RUN_PICK]));
+  const old = await db.select({ id: s.users.id }).from(s.users).where(inArray(s.users.email, [TRI, LIFT, RIDE, NOFTP, HAND, GARMIN, FTP_TEST, RUN, RUN_NOPACE, RUN_NOLTHR, RUN_PACE, RUN_MODE, RUN_OUT, BRICK, BRICK_LIVE, RUN_DONE, RUN_EARLY, RUN_BRICK, RUN_GARMIN, RUN_GARMIN_OUT, RUN_PICK, RUN_TEST]));
   if (old.length) {
     const ids = old.map((u) => u.id);
     await db.delete(s.planRevisions).where(inArray(s.planRevisions.userId, ids));
@@ -749,7 +757,17 @@ async function main() {
     await garminRun(id, 990000104, "running", run, { lead: 60, gps: true, hr: () => 151, speed: () => thr * 0.84 });
   }
 
-  console.log(`Demo accounts ready (password "${DEMO_PASSWORD}"): ${TRI}, ${LIFT}, ${RIDE}, ${NOFTP}, ${HAND}, ${GARMIN}, ${FTP_TEST}, ${RUN}, ${RUN_NOPACE}, ${RUN_NOLTHR}, ${RUN_PACE}, ${RUN_MODE}, ${RUN_OUT}, ${BRICK}, ${BRICK_LIVE}, ${RUN_DONE}, ${RUN_EARLY}, ${RUN_BRICK}, ${RUN_GARMIN}, ${RUN_GARMIN_OUT}, ${RUN_PICK}`);
+  {
+    // The treadmill run test (docs/plans/run-logger.md, 4.10): the belt up to 10.9 km/h a second into the test, kept into the 20 min.
+    const test = runTestWorkout("treadmill");
+    const { id, ctx, programId } = await runAccount(RUN_TEST, "Run Test Demo", test);
+    // The numbers before the test are a week old, so the saved test (dated the day it was run) becomes the current one.
+    await db.update(s.athleteThresholds).set({ measuredOn: addDaysStr(today, -7) }).where(eq(s.athleteThresholds.userId, id));
+    await stepProgram(ctx, PACE_RUN.name, [{ exercise: "Run", workout: PACE_RUN }]);
+    await ranRun(id, programId, test, "indoor", { agoMin: 10, belts: [{ at: 901, kmh: 10.9 }], hr: (i) => (i === 7 ? 170 : i === 8 ? 176 : null), rpe: 9 });
+  }
+
+  console.log(`Demo accounts ready (password "${DEMO_PASSWORD}"): ${TRI}, ${LIFT}, ${RIDE}, ${NOFTP}, ${HAND}, ${GARMIN}, ${FTP_TEST}, ${RUN}, ${RUN_NOPACE}, ${RUN_NOLTHR}, ${RUN_PACE}, ${RUN_MODE}, ${RUN_OUT}, ${BRICK}, ${BRICK_LIVE}, ${RUN_DONE}, ${RUN_EARLY}, ${RUN_BRICK}, ${RUN_GARMIN}, ${RUN_GARMIN_OUT}, ${RUN_PICK}, ${RUN_TEST}`);
   process.exit(0);
 }
 

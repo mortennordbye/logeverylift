@@ -8,7 +8,6 @@ import {
   runTestResult,
   runTestSteps,
   runTestThresholds,
-  runTestValuesText,
   runTestView,
   runTestWorkout,
   sickBlocksTest,
@@ -16,7 +15,7 @@ import {
   type RunTestLog,
   type RunTestTiming,
 } from "@/lib/utils/run-test";
-import { valueFromTest } from "@/lib/utils/thresholds";
+import { minSec, valueFromTest } from "@/lib/utils/thresholds";
 import { estimateWorkout, parseWorkout, type ThresholdValues, type WorkoutStep } from "@/lib/utils/workout-steps";
 import { describe, expect, it } from "vitest";
 
@@ -132,7 +131,7 @@ describe("runTestResult", () => {
     const r = runTestResult(input())!;
     expect(r).toMatchObject({ lthr: 176, hr20: 176, meters30: 5750, valid: true, band: "save" });
     expect(1000 / r.speed!).toBeCloseTo(313.04, 1);
-    expect(runTestValuesText(r)).toBe("threshold pace 5:13 /km · LTHR 176");
+    expect(minSec(1000 / r.speed!)).toBe("5:13");
     expect(r.checks).toEqual({ noStops: true, evenPace: true, hrHigh: true, effort: true });
   });
 
@@ -163,7 +162,6 @@ describe("runTestResult", () => {
     expect(r).toMatchObject({ lthr: 176, speed: null, meters30: null });
     expect(r.checks.evenPace).toBeNull();
     expect(runTestThresholds(r).map((x) => x.kind)).toEqual(["lthr_run"]);
-    expect(runTestValuesText(r)).toBe("LTHR 176");
   });
 
   it("outdoors the pace counts with no belt; with no distance it gives LTHR only", () => {

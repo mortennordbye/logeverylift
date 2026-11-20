@@ -16,7 +16,6 @@
 
 import type { RidePlan, RidePlanStep } from "@/lib/utils/ride-timeline";
 import { addDaysStr } from "@/lib/utils/seasons";
-import { minSec } from "@/lib/utils/thresholds";
 import type { ThresholdValues, Workout, WorkoutStep, WorkoutTarget } from "@/lib/utils/workout-steps";
 
 export const RUN_TEST_MODES = ["treadmill", "outdoor"] as const;
@@ -237,12 +236,6 @@ export function runTestThresholds(r: RunTestResult): { kind: "lthr_run" | "run_t
   return out;
 }
 
-const paceOf = (speed: number) => `${minSec(1000 / speed)} /km`;
-
-/** "threshold pace 5:30 /km · LTHR 176", the values a result or the current numbers hold. */
-export function runTestValuesText(v: { lthr: number | null; speed: number | null }): string {
-  return [v.speed !== null ? `threshold pace ${paceOf(v.speed)}` : null, v.lthr !== null ? `LTHR ${Math.round(v.lthr)}` : null].filter(Boolean).join(" · ");
-}
 
 /** The failed checks in words, for the line under "Test may be invalid". */
 export function runTestCheckText(c: RunTestChecks): string[] {

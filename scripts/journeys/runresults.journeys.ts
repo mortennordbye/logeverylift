@@ -1,5 +1,5 @@
 // Journeys of a run after it is run (docs/plans/run-logger.md, step 4): the results table and the summary.
-// Data: the steps demo seed (steps-rundone, steps-runearly, steps-runbrick, and for the Garmin fill of step 7 steps-rungarmin, steps-rungarmin-out and steps-runpick). Run: pnpm journeys runresults --seed
+// Data: the steps demo seed (steps-rundone, steps-runearly, steps-runbrick, for the Garmin fill of step 7 steps-rungarmin, steps-rungarmin-out and steps-runpick, and for the run test of step 8 steps-runtest). Run: pnpm journeys runresults --seed
 import type { Ctx, JourneySet } from "./types";
 
 const PASSWORD = "steps-demo-password";
@@ -30,6 +30,7 @@ const set: JourneySet = {
     garmin: { email: "steps-rungarmin@demo.local", password: PASSWORD, about: "admin, the 2 Base treadmill run filled from a synthetic Garmin treadmill run" },
     garminOut: { email: "steps-rungarmin-out@demo.local", password: PASSWORD, about: "admin, Run · Tempo run outdoors and filled from a synthetic Garmin run with GPS" },
     pick: { email: "steps-runpick@demo.local", password: PASSWORD, about: "admin, Run · Tempo outdoors with two synthetic Garmin runs that match it" },
+    test: { email: "steps-runtest@demo.local", password: PASSWORD, about: "pace 5:39 and LTHR 180, the treadmill run test run 10 min ago at 10.9 km/h, the 20 min at HR 176, and Run · Tempo in pace" },
   },
   journeys: [
     { id: 1, title: "Treadmill run done", summary: "The summary, the results table with the belt stepper and More numbers, and the summary after a belt is fixed." },
@@ -38,6 +39,7 @@ const set: JourneySet = {
     { id: 4, title: "Treadmill run filled from Garmin", summary: "Heart rate and cadence from Garmin, distance from the belt, drift, the chart, time on target and Undo." },
     { id: 5, title: "Outdoor run filled from Garmin", summary: "Distance, pace and GAP from Garmin's GPS run, load from the stream, the chart in pace and the arrows." },
     { id: 6, title: "Two Garmin runs match", summary: "Pick lists both with start, time and distance; picking one fills the run." },
+    { id: 7, title: "Run threshold test", summary: "The result line New threshold pace and LTHR with Save, Saved, and a pace run's belts after Save." },
   ],
   flows: [
     {
@@ -163,6 +165,41 @@ const set: JourneySet = {
           await page.getByTestId("summary-garmin-pick").getByRole("button", { name: "Pick" }).click();
           await settle(400);
           await shot(6, 1, "pick", "Two Garmin runs match: Pick lists each with start, time and distance");
+        });
+      },
+    },
+    {
+      name: "test",
+      account: "test",
+      journeys: [7],
+      async run(c: Ctx) {
+        const { page, go, step, shot, settle } = c;
+        await step("J7 result", async () => {
+          await openRun(c, /30 min run test/);
+          await page.getByTestId("summary-threshold").scrollIntoViewIfNeeded();
+          await settle(400);
+          await shot(7, 1, "result", "Run test done: New threshold pace 5:30 /km · LTHR 176 · Save");
+        });
+        await step("J7 saved", async () => {
+          await page.getByTestId("summary-threshold").getByRole("button", { name: "Save" }).click();
+          await page.getByTestId("summary-threshold").getByText("Saved").waitFor();
+          await settle(600);
+          await shot(7, 2, "saved", "Saved: the test rows are stored");
+        });
+        await step("J7 belts", async () => {
+          await go("/programs");
+          await settle(1200);
+          const hrefs = await page.locator('a[href^="/programs/"]').evaluateAll((as) => as.map((a) => [a.getAttribute("href") ?? "", a.textContent ?? ""]));
+          const href = hrefs.find(([h, t]) => /^\/programs\/\d+$/.test(h) && /Tempo/.test(t))?.[0];
+          await go(`${href}/workout`);
+          await page.getByRole("link", { name: /^Open / }).first().click();
+          await page.getByTestId("run-exercise").filter({ visible: true }).waitFor();
+          if ((await page.getByTestId("run-mode").filter({ visible: true }).textContent()) !== "Treadmill") {
+            await page.getByRole("button", { name: "Change" }).click();
+            await page.getByTestId("run-mode-sheet").getByRole("button", { name: "Treadmill" }).click();
+          }
+          await settle(800);
+          await shot(7, 3, "belts-after", "Run · Tempo on a treadmill after Save: threshold 5:30 /km and the belts from it");
         });
       },
     },

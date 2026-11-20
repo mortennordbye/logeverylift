@@ -12,7 +12,7 @@
  */
 
 import { saveRunThreshold } from "@/lib/actions/run-test";
-import { runTestCheckText, runTestValuesText, type RunTestView } from "@/lib/utils/run-test";
+import { runTestCheckText, type RunTestView } from "@/lib/utils/run-test";
 import { minSec } from "@/lib/utils/thresholds";
 import { callAction } from "@/lib/utils/stale-bundle";
 import { useRouter } from "next/navigation";
@@ -40,7 +40,6 @@ export function RunTestLine({ rideId, test }: { rideId: number; test: RunTestVie
   };
   const failed = runTestCheckText(r.checks);
   const quiet = !r.valid || r.band === "retest";
-  const values = runTestValuesText(r);
 
   return (
     <div className="rounded-xl bg-muted pl-4 pr-2 py-1.5 text-sm flex flex-col" data-testid="summary-threshold">
@@ -60,7 +59,15 @@ export function RunTestLine({ rideId, test }: { rideId: number; test: RunTestVie
       ) : null}
       <div className="flex items-center justify-between gap-2 min-h-11">
         <span className={`tabular-nums ${quiet ? "" : "font-semibold"}`} data-testid="threshold-values">
-          {r.band === "choose" && !test.saved ? "Choose the new values" : `New ${values}`}
+          {r.band === "choose" && !test.saved ? (
+            "Choose the new values"
+          ) : (
+            <>
+              New {r.speed !== null && <>threshold pace <span className="whitespace-nowrap">{pace(r.speed)}</span></>}
+              {r.speed !== null && r.lthr !== null && " · "}
+              {r.lthr !== null && <span className="whitespace-nowrap">LTHR {r.lthr}</span>}
+            </>
+          )}
         </span>
         {test.saved ? (
           <span className="min-h-11 px-3 inline-flex items-center text-muted-foreground">Saved</span>
