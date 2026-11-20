@@ -58,8 +58,9 @@ export default function PrivacyPage() {
           the ride it follows, and per treadmill step the distance, average speed and incline worked out from the belt
           speed and incline you set. In ride mode and run mode it keeps the plan as it was at the start and each tap you
           make (start, pause, skip, an extra minute, a target change, belt speed or incline, lap, end) with its time. If Garmin is on for your account, a Garmin
-          bike ride that overlaps your ride fills the step numbers you left empty, and the app keeps what was there before
-          so Undo can restore it, and whether you undid it. From your logged sessions and thresholds
+          bike ride that overlaps your ride (or a Garmin run that overlaps your run, also as part of a multisport activity)
+          fills the step numbers you left empty, and the app keeps what was there before so Undo can restore it, and
+          whether you undid it. From your logged sessions and thresholds
           the app also works out a training load and your fitness, fatigue and form; these are calculated when shown,
           not stored.
         </li>

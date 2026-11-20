@@ -34,7 +34,7 @@ when the brief was written.
 | 17 | [AI coach hub](ai-coach-hub.md) (one More row for AI; the built-in AI gives saved answers, a running plan changes through the user's own AI). Rows 13 to 16 are on the `docs/endurance-journeys` branch. | done (#250) | no | no |
 | 18 | [One program model](one-program-model.md) (structured endurance workouts move into programs; the workout library goes) | done (1-5 and 6a in #251, 6b in #252) | yes | yes (set logging, drag-reorder) |
 | 19 | [Bike ride logger](bike-ride-logger.md) (the bike exercise plans, runs and logs a ride: modes, ride mode, push, Garmin fill, cycling numbers; nine steps, no owner input needed) | steps 0 to 8 built on `feat/bike-ride-logger` (push off until the VAPID keys are set) | yes | yes (timers, set logging) |
-| 20 | [Run logger](run-logger.md) (the run exercise plans, runs and logs a run: Treadmill with belt speed and Outdoor, run mode, alerts, Garmin fill, run numbers, run threshold test; nine steps, no owner input needed) | in progress on `feat/run-logger` (steps 0 to 6 done 2026-11-20) | yes | yes (timers, set logging) |
+| 20 | [Run logger](run-logger.md) (the run exercise plans, runs and logs a run: Treadmill with belt speed and Outdoor, run mode, alerts, Garmin fill, run numbers, run threshold test; nine steps, no owner input needed) | in progress on `feat/run-logger` (steps 0 to 7 done 2026-11-20) | yes | yes (timers, set logging) |
 
 Why this order:
 - 1 is small, has no schema change, and clears two BACKLOG items.
