@@ -12,21 +12,29 @@ import { db } from "@/db";
 import { workoutSessions, workoutSets } from "@/db/schema";
 import type { RideView } from "@/lib/ride-settle";
 import { planSport, rideTimeline } from "@/lib/utils/ride-timeline";
-import { beltResults } from "@/lib/utils/run-screen";
+import { beltResults, beltStepsChanged } from "@/lib/utils/run-screen";
 import { and, eq, sql } from "drizzle-orm";
 
 type Executor = Pick<typeof db, "update" | "select">;
 
-/** Write the belt fields of every ended step of a treadmill run again, where they are still the belt's. */
-export async function rewriteBeltResults(ex: Executor, userId: string, view: Pick<RideView, "plan" | "events" | "serverNow" | "ride">) {
+type View = Pick<RideView, "plan" | "events" | "serverNow" | "ride">;
+
+/**
+ * Write the belt fields of a treadmill run's ended steps again, where they
+ * are still the belt's: only the steps the new event changed, from the ride
+ * as it was before it (`before`) to after it.
+ */
+export async function rewriteBeltResults(ex: Executor, userId: string, view: View, before: View) {
   if (planSport(view.plan) !== "run" || view.plan.mode !== "indoor") return;
-  const t = rideTimeline(view.plan, view.events, view.serverNow, { heartbeatAt: view.ride.heartbeatAt });
+  const timeline = (v: View) => rideTimeline(v.plan, v.events, view.serverNow, { heartbeatAt: v.ride.heartbeatAt });
+  const changed = beltStepsChanged(timeline(before), timeline(view));
+  if (!changed.length) return;
   const [session] = await ex
     .select({ id: workoutSessions.id })
     .from(workoutSessions)
     .where(and(eq(workoutSessions.id, view.ride.sessionId), eq(workoutSessions.userId, userId)));
   if (!session) return;
-  for (const r of t.steps) {
+  for (const r of changed) {
     const b = beltResults(r);
     if (b.distanceMeters === undefined) continue;
     const row = and(eq(workoutSets.sessionId, session.id), eq(workoutSets.programSetId, r.programSetId));

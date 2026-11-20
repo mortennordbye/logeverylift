@@ -317,7 +317,7 @@ export async function sendRideEvent(data: unknown): Promise<ActionResult<RideVie
       const after = await settle(tx, next, now);
       await schedulePushes(tx, userId, after);
       // A late belt or incline (an offline replay) moves the meters of steps already saved (4.7).
-      if (kind === "belt" || kind === "incline") await rewriteBeltResults(tx, userId, after);
+      if (kind === "belt" || kind === "incline") await rewriteBeltResults(tx, userId, after, view);
       return { success: true, data: after };
     });
   } catch (e) {

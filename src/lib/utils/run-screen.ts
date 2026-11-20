@@ -222,3 +222,15 @@ export function beltResults(r: Pick<RideStepResult, "distanceM" | "inclinePct" |
     ...(r.inclinePct != null && { inclinePercent: r.inclinePct }),
   };
 }
+
+/**
+ * The ended steps whose belt meters or incline differ between two timelines
+ * of the same run: the only rows a late belt or incline event writes again (4.7).
+ */
+export function beltStepsChanged(before: Pick<RideTimeline, "steps">, after: Pick<RideTimeline, "steps">): RideStepResult[] {
+  const was = new Map(before.steps.map((r) => [r.programSetId, r]));
+  return after.steps.filter((r) => {
+    const b = was.get(r.programSetId);
+    return !b || b.distanceM !== r.distanceM || b.inclinePct !== r.inclinePct || b.activeSeconds !== r.activeSeconds;
+  });
+}

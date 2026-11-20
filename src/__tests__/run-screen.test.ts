@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { BASE_RUN, OWNER } from "@/__tests__/fixtures/base-run";
 import { rideTimeline, type RideEventInput } from "@/lib/utils/ride-timeline";
 import { buildRunPlan } from "@/lib/utils/run-plan";
-import { beltResults, beltToastText, resumeBeltText, runKeptText, runScreen, stepOnText } from "@/lib/utils/run-screen";
+import { beltStepsChanged, beltResults, beltToastText, resumeBeltText, runKeptText, runScreen, stepOnText } from "@/lib/utils/run-screen";
 import { parseWorkout, type Workout } from "@/lib/utils/workout-steps";
 
 /** What run mode shows (docs/plans/run-logger.md, 4.2 to 4.6 and section 5 "Run mode"). */
@@ -139,5 +139,15 @@ describe("beltResults", () => {
   it("toasts say the value", () => {
     expect(beltToastText("belt", 95)).toBe("Belt 9.5 km/h");
     expect(beltToastText("incline", 15)).toBe("Incline 1.5%");
+  });
+});
+
+describe("beltStepsChanged", () => {
+  it("only the ended steps whose belt meters or incline moved", () => {
+    const before = rideTimeline(treadmill, [ev("start", 0)], at(700));
+    const later = rideTimeline(treadmill, [ev("start", 0), ev("belt", 300, 85, "s1")], at(700));
+    expect(beltStepsChanged(before, later).map((r: { index: number }) => r.index)).toEqual([0]);
+    const inStep2 = rideTimeline(treadmill, [ev("start", 0), ev("belt", 650, 85, treadmill.steps[1].key)], at(700));
+    expect(beltStepsChanged(before, inStep2)).toEqual([]);
   });
 });
