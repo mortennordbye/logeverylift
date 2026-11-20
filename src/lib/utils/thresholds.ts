@@ -152,7 +152,7 @@ const run30 = (key: string, label: string, kind: ProtocolInput["kind"], last: st
   ],
   inputs: [{ key, label, kind }],
   evidence:
-    key === "avgHrLast20" ? "Friel 30-minute test (research line 96)" : "Friel 30-minute test (research line 96); pace from it is Inference",
+    key === "avgHrLast20" ? "Friel 30-minute test (research line 96)" : "Friel 30-minute test, pace = average of the whole 30 minutes (TrainingPeaks quick guide)",
 });
 
 const bike30 = (key: string, label: string, kind: ProtocolInput["kind"], last: string, evidence: string): ProtocolSpec => ({
@@ -176,7 +176,9 @@ export const RAMP_FTP_FACTOR = 0.75;
  * research gives no protocol, so it is typed in or taken from the watch.
  *
  * Sources: Friel's 30-minute test, mean HR of the last 20 minutes as LTHR
- * (docs/research/endurance-training-reference.md:96, Study for the method).
+ * (docs/research/endurance-training-reference.md:96, Study for the method),
+ * and the average pace of the whole 30 minutes as threshold pace ("not the
+ * last 20 minutes", Friel's quick guide to setting zones, TrainingPeaks).
  * The FTP rules are coach convention and not in the research doc, which only
  * changes by a research pass (T1); the hub chose them on 2026-11-12
  * (docs/plans/athlete-profile.md, 12):
@@ -190,7 +192,7 @@ export const RAMP_FTP_FACTOR = 0.75;
  */
 export const PROTOCOLS: Partial<Record<ThresholdKind, ProtocolSpec[]>> = {
   lthr_run: [run30("avgHrLast20", "Average HR, last 20 min", "bpm", "Enter the average heart rate of the last 20 minutes.")],
-  run_threshold_pace: [run30("distanceLast20Meters", "Distance, last 20 min", "meters", "Enter the distance of the last 20 minutes.")],
+  run_threshold_pace: [run30("distance30Meters", "Distance, whole 30 min", "meters", "Enter the distance of the whole 30 minutes.")],
   lthr_bike: [
     bike30("avgHrLast20", "Average HR, last 20 min", "bpm", "Enter the average heart rate of the last 20 minutes.", "Friel 30-minute test (research line 96)"),
   ],
@@ -312,9 +314,9 @@ export function valueFromTest(
     return { value: Math.round(p * RAMP_FTP_FACTOR) };
   }
   if (kind === "run_threshold_pace") {
-    const d = pos(data.distanceLast20Meters);
-    if (!d) return { error: "Enter the distance of the last 20 minutes" };
-    return { value: d / 1200 };
+    const d = pos(data.distance30Meters);
+    if (!d) return { error: "Enter the distance of the whole 30 minutes" };
+    return { value: d / 1800 };
   }
   if (kind === "ftp") {
     const p = pos(data.avgPower30);

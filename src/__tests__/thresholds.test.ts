@@ -46,8 +46,10 @@ describe("field tests", () => {
 
   it("LTHR and pace from the 30-minute run", () => {
     expect(valueFromTest("lthr_run", "run_30min", { avgHrLast20: 171.4 })).toEqual({ value: 171 });
-    const pace = valueFromTest("run_threshold_pace", "run_30min", { distanceLast20Meters: 4800 });
+    // Friel: threshold pace is the average pace of the whole 30 minutes, not the last 20.
+    const pace = valueFromTest("run_threshold_pace", "run_30min", { distance30Meters: 7200 });
     expect("value" in pace && formatThreshold("run_threshold_pace", pace.value)).toBe("4:10 /km");
+    expect(protocolsFor("run_threshold_pace")[0].inputs).toEqual([{ key: "distance30Meters", label: "Distance, whole 30 min", kind: "meters" }]);
   });
 
   it("refuses bad inputs and the wrong test for a kind", () => {

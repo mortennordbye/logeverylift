@@ -220,7 +220,7 @@ Pure rules in `src/lib/utils/thresholds.ts` (*new*), unit tested, each citing th
 | Kind | Unit stored | Field test | How the value is computed | Evidence |
 |---|---|---|---|---|
 | `lthr_run` | bpm | `run_30min`: 30 min solo all-out run after a warm-up | Mean HR of the last 20 min | Research line 96 (Friel) |
-| `run_threshold_pace` | m/s | Same test | Mean pace of the last 20 min: distance of the last 20 min / 1200 s | Inference: the research gives HR only |
+| `run_threshold_pace` | m/s | Same test | Mean pace of the whole 30 min: distance of the 30 min / 1800 s (changed by docs/plans/run-logger.md step 8) | Friel's quick guide to setting zones (TrainingPeaks): "the entire 30 minutes (not the last 20 minutes)" |
 | `lthr_bike` | bpm | `bike_30min`: 30 min solo all-out ride | Mean HR of the last 20 min | Research line 96 |
 | `ftp` | W | `ftp_20min`: 20 min all-out ride with a power meter | 0.95 x mean power of the 20 min | Coach convention (the app's Garmin rule uses the same factor). Not in the research doc (T1) |
 | `ftp` | W | `bike_30min`: the 30 min ride test, with a power meter | Mean power of the whole 30 min, no factor (Friel) | Coach convention. Not in the research doc (T1) |
