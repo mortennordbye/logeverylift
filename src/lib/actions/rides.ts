@@ -78,6 +78,8 @@ export async function startRide(data: unknown): Promise<ActionResult<RideView>> 
   const { sessionId, programExerciseId, mode, clientId, again, surface, endActive } = parsed.data;
   if (!(await enduranceEnabledFor(userId))) return { success: false, error: "Endurance features are not on for this account" };
 
+  // Errors name the session by its sport: the run screen says run (docs/plans/run-logger.md, step 2).
+  let sport: "bike" | "run" = "bike";
   try {
     const replay = await startedWith(userId, clientId);
     if (replay) return { success: true, data: replay };
@@ -103,7 +105,7 @@ export async function startRide(data: unknown): Promise<ActionResult<RideView>> 
       .where(and(eq(programExercises.id, programExerciseId), eq(programs.userId, userId), liveProgramExercises, livePrograms));
     if (!slot || slot.programId !== session.programId) return { success: false, error: "Not found" };
     if (slot.discipline !== "bike" && slot.discipline !== "run") return { success: false, error: "Only a bike or run exercise has ride mode" };
-    const sport = slot.discipline;
+    sport = slot.discipline;
 
     const rows = await db
       .select()
@@ -123,7 +125,7 @@ export async function startRide(data: unknown): Promise<ActionResult<RideView>> 
     if (active && !endActive && isLive((await settle(db, active, now)).ride.status)) {
       // The same start sent twice at once: the other one stored it after the read above.
       const same = await startedWith(userId, clientId);
-      return same ? { success: true, data: same } : { success: false, error: "A ride is already running" };
+      return same ? { success: true, data: same } : { success: false, error: active.sport === "run" ? "A run is already running" : "A ride is already running" };
     }
 
     let ended = null as RideView | null;
@@ -166,10 +168,10 @@ export async function startRide(data: unknown): Promise<ActionResult<RideView>> 
     // the same start gets that ride.
     if (isUniqueViolation(e)) {
       const same = await startedWith(userId, clientId);
-      return same ? { success: true, data: same } : { success: false, error: "A ride is already running" };
+      return same ? { success: true, data: same } : { success: false, error: sport === "run" ? "A run is already running" : "A ride is already running" };
     }
     console.error("[startRide] failed", { sessionId, programExerciseId });
-    return { success: false, error: "Failed to start the ride" };
+    return { success: false, error: sport === "run" ? "Failed to start the run" : "Failed to start the ride" };
   }
 }
 
