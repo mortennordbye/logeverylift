@@ -152,9 +152,11 @@ const set: JourneySet = {
         await step("J1 end early", async () => {
           await page.getByRole("button", { name: "Pause" }).click();
           await page.getByRole("button", { name: "End run" }).click();
-          await page.getByTestId("run-done").filter({ visible: true }).waitFor({ timeout: 20_000 });
+          await page.getByTestId("run-results").filter({ visible: true }).waitFor({ timeout: 20_000 });
+          await page.getByTestId("results-done").click();
+          await page.getByTestId("run-summary-screen").filter({ visible: true }).waitFor({ timeout: 20_000 });
           await settle(800);
-          await shot(1, 13, "ended-early", "Run ended early: the steps saved and the reason chips");
+          await shot(1, 13, "ended-early", "Run ended early: after the results table, the summary with the steps saved and the reason chips");
         });
         await step("J1 pain", async () => {
           await page.getByRole("button", { name: "Pain" }).click();
@@ -196,9 +198,9 @@ const set: JourneySet = {
         await step("J2 done", async () => {
           await page.getByRole("button", { name: "Pause" }).click();
           await page.getByRole("button", { name: "End run" }).click();
-          await page.getByTestId("run-done").filter({ visible: true }).waitFor({ timeout: 20_000 });
+          await page.getByTestId("run-results").filter({ visible: true }).waitFor({ timeout: 20_000 });
           await settle(800);
-          await shot(2, 5, "done", "Run done: both steps saved, no Start run");
+          await shot(2, 5, "done", "After the run: the results table, no Start run");
         });
       },
     },

@@ -38,6 +38,16 @@
  *   steps-brick@demo.local        the same thresholds and FTP 200 W: a short
  *                                 ride today, then its run linked as a brick.
  *   steps-brick-live@demo.local   the same brick, for "End ride and start run".
+ *   steps-rundone@demo.local      pace 5:39 and LTHR 180: "2 Base · Run" run on a
+ *                                 treadmill and done 10 min ago, the steady
+ *                                 step at 8.5 km/h by a belt tap, avg HR
+ *                                 typed: the run summary and results table.
+ *   steps-runearly@demo.local     the same thresholds: "Run · Tempo" run
+ *                                 outdoors and ended early in the tempo, no
+ *                                 numbers: plan only, the reason and Run again.
+ *   steps-runbrick@demo.local     the same thresholds and FTP 200 W: the short
+ *                                 brick ridden, then its run on a treadmill
+ *                                 1:12 after the ride: the brick line.
  *
  * Dates are relative to the run day. Each run deletes the demo accounts (and
  * with them all their data) and makes them again. No other account is touched.
@@ -65,6 +75,9 @@ const RUN_MODE = "steps-runmode@demo.local";
 const RUN_OUT = "steps-runout@demo.local";
 const BRICK = "steps-brick@demo.local";
 const BRICK_LIVE = "steps-brick-live@demo.local";
+const RUN_DONE = "steps-rundone@demo.local";
+const RUN_EARLY = "steps-runearly@demo.local";
+const RUN_BRICK = "steps-runbrick@demo.local";
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "postgres"]);
 const DEMO_TZ = "Europe/Oslo";
 
@@ -256,11 +269,14 @@ async function main() {
   const { buildRidePlan } = await import("../src/lib/utils/ride-timeline");
   const { fillRidesFromGarmin } = await import("../src/lib/ride-garmin");
   const { allOutStep, ftpTestWorkout } = await import("../src/lib/utils/ftp-tests");
+  const { buildRunPlan } = await import("../src/lib/utils/run-plan");
+  const { rideTimeline } = await import("../src/lib/utils/ride-timeline");
+  const { beltResults } = await import("../src/lib/utils/run-screen");
   const { eq, isNull, and } = await import("drizzle-orm");
 
   type Ctx = { userId: string; writer: "user" };
 
-  const old = await db.select({ id: s.users.id }).from(s.users).where(inArray(s.users.email, [TRI, LIFT, RIDE, NOFTP, HAND, GARMIN, FTP_TEST, RUN, RUN_NOPACE, RUN_NOLTHR, RUN_PACE, RUN_MODE, RUN_OUT, BRICK, BRICK_LIVE]));
+  const old = await db.select({ id: s.users.id }).from(s.users).where(inArray(s.users.email, [TRI, LIFT, RIDE, NOFTP, HAND, GARMIN, FTP_TEST, RUN, RUN_NOPACE, RUN_NOLTHR, RUN_PACE, RUN_MODE, RUN_OUT, BRICK, BRICK_LIVE, RUN_DONE, RUN_EARLY, RUN_BRICK]));
   if (old.length) {
     const ids = old.map((u) => u.id);
     await db.delete(s.planRevisions).where(inArray(s.planRevisions.userId, ids));
@@ -539,7 +555,107 @@ async function main() {
     await db.insert(s.plannedSessions).values({ userId: id, cycleId: ridePlanned.cycleId, date: today, position: 2, programId: runId, brickParentId: ridePlanned.id });
   }
 
-  console.log(`Demo accounts ready (password "${DEMO_PASSWORD}"): ${TRI}, ${LIFT}, ${RIDE}, ${NOFTP}, ${HAND}, ${GARMIN}, ${FTP_TEST}, ${RUN}, ${RUN_NOPACE}, ${RUN_NOLTHR}, ${RUN_PACE}, ${RUN_MODE}, ${RUN_OUT}, ${BRICK}, ${BRICK_LIVE}`);
+  // ── steps-rundone, steps-runearly and steps-runbrick: runs already run ──────
+  const runThresholds = { run_threshold_pace: 1000 / 339, lthr_run: 180 };
+  /**
+   * A run of a program's run exercise, run as run mode runs it and saved as it
+   * saves each step (docs/plans/run-logger.md, 4.7): `belts` are taps (seconds
+   * into the run, km/h), `endAfter` ends it early, `hr` gives each step's typed
+   * average heart rate.
+   */
+  async function ranRun(
+    id: string,
+    programId: number,
+    workout: Workout,
+    mode: "indoor" | "outdoor",
+    o: { agoMin: number; belts?: { at: number; kmh: number }[]; endAfter?: number; hr?: (i: number) => number | null; rpe?: number; brickRideId?: number },
+  ) {
+    const [pe] = await db.select().from(s.programExercises).where(eq(s.programExercises.programId, programId));
+    const sets = await db.select().from(s.programSets).where(eq(s.programSets.programExerciseId, pe.id)).orderBy(s.programSets.setNumber);
+    const plan = buildRunPlan(workout, sets.map((x) => x.id), runThresholds, mode, { surface: "road" });
+    const seconds = o.endAfter ?? plan.steps.reduce((a, x) => a + (x.seconds ?? 0), 0);
+    const end = new Date(Date.now() - o.agoMin * 60_000);
+    const start = new Date(end.getTime() - seconds * 1000);
+    const at = (sec: number) => start.getTime() + sec * 1000;
+    const [session] = await db.insert(s.workoutSessions).values({ userId: id, programId, date: today, startTime: start, endTime: end, isCompleted: true }).returning();
+    // The step key a belt tap carries: the step that runs at that second.
+    const keyAt = (sec: number) => {
+      let t = 0;
+      for (const st of plan.steps) {
+        t += st.seconds ?? 0;
+        if (sec < t) return st.key;
+      }
+      return plan.steps[plan.steps.length - 1].key;
+    };
+    type SeedEvent = { seq: number; kind: "start" | "belt" | "end"; at: number; value?: number; stepKey?: string };
+    const events: SeedEvent[] = [
+      { seq: 1, kind: "start", at: at(0) },
+      ...(o.belts ?? []).map((b, k) => ({ seq: k + 2, kind: "belt" as const, at: at(b.at), value: Math.round(b.kmh * 10), stepKey: keyAt(b.at) })),
+    ];
+    if (o.endAfter !== undefined) events.push({ seq: events.length + 1, kind: "end", at: at(o.endAfter) });
+    const [ride] = await db
+      .insert(s.rides)
+      .values({ userId: id, sessionId: session.id, programExerciseId: pe.id, sport: "run", mode, surface: mode === "outdoor" ? "road" : null, brickRideId: o.brickRideId ?? null, status: o.endAfter !== undefined ? "ended_early" : "finished", plan, seq: events.length, startedAt: start, endedAt: end })
+      .returning();
+    await db.insert(s.rideEvents).values(events.map((e) => ({ rideId: ride.id, seq: e.seq, clientId: `seed-${e.seq}`, kind: e.kind, at: new Date(e.at), value: e.value ?? null, stepKey: e.stepKey ?? null })));
+    const t = rideTimeline(plan, events, end.getTime() + 1000);
+    for (const [n, r] of t.steps.entries()) {
+      const b = mode === "indoor" ? beltResults(r) : {};
+      const hr = o.hr?.(r.index) ?? null;
+      await db.insert(s.workoutSets).values({
+        sessionId: session.id, exerciseId: pe.exerciseId, programExerciseId: pe.id, programSetId: r.programSetId, setNumber: n + 1,
+        actualReps: 0, weightKg: "0", restTimeSeconds: 0, durationSeconds: r.activeSeconds, isCompleted: r.status !== "skipped", stepStatus: r.status,
+        targetOffsetW: 0, extendedSeconds: 0, rpe: o.rpe ?? null, avgHr: hr, distanceMeters: b.distanceMeters ?? null, avgSpeed: b.avgSpeed ?? null, inclinePercent: b.inclinePercent ?? null,
+        sources: { durationSeconds: "clock", ...(b.distanceMeters !== undefined && { distanceMeters: "belt", avgSpeed: "belt" }), ...(hr !== null && { avgHr: "typed" }) },
+      });
+    }
+    return ride;
+  }
+  async function runAccount(email: string, name: string, workout: Workout, ftp = false) {
+    const id = await makeUser(email, name, true);
+    const ctx: Ctx = { userId: id, writer: "user" };
+    await db.insert(s.athleteThresholds).values([
+      { userId: id, kind: "run_threshold_pace", value: runThresholds.run_threshold_pace, measuredOn: today, source: "manual" },
+      { userId: id, kind: "lthr_run", value: runThresholds.lthr_run, measuredOn: today, source: "manual" },
+      ...(ftp ? [{ userId: id, kind: "ftp" as const, value: 200, measuredOn: today, source: "manual" as const }] : []),
+    ]);
+    const programId = await stepProgram(ctx, workout.name, [{ exercise: "Run", workout }]);
+    await weekdayCycle(ctx, "Base · Week 1", [{ dayOfWeek: dow(today), programId }], mondayOf(today));
+    return { id, ctx, programId };
+  }
+  {
+    // The steady step at 8.5 km/h from its second minute; heart rate rising from 124 to 146, strides with none.
+    const { id, programId } = await runAccount(RUN_DONE, "Run Done Demo", BASE_RUN);
+    const hr = [124, 146, ...Array(12).fill(null), 118];
+    await ranRun(id, programId, BASE_RUN, "indoor", { agoMin: 10, belts: [{ at: 660, kmh: 8.5 }], hr: (i) => hr[i], rpe: 6 });
+  }
+  {
+    const { id, programId } = await runAccount(RUN_EARLY, "Run Early Demo", PACE_RUN);
+    await ranRun(id, programId, PACE_RUN, "outdoor", { agoMin: 10, endAfter: 600 + 900 });
+  }
+  {
+    const { id, ctx, programId: runProgram } = await runAccount(RUN_BRICK, "Run Brick Demo", SHORT_BRICK_RUN, true);
+    const rideProgram = await stepProgram(ctx, SHORT_BRICK_RIDE.name, [{ exercise: "Bike", workout: SHORT_BRICK_RIDE }]);
+    const [pe] = await db.select().from(s.programExercises).where(eq(s.programExercises.programId, rideProgram));
+    const sets = await db.select().from(s.programSets).where(eq(s.programSets.programExerciseId, pe.id)).orderBy(s.programSets.setNumber);
+    const plan = buildRidePlan(SHORT_BRICK_RIDE, sets.map((x) => x.id), { ftp: 200 }, "indoor");
+    const runSeconds = SHORT_BRICK_RUN.steps.reduce((a, x) => a + (x.type !== "repeat" && x.end.type === "time" ? x.end.seconds : 0), 0);
+    const rideEnd = new Date(Date.now() - (5 * 60 + runSeconds + 72) * 1000);
+    const rideStart = new Date(rideEnd.getTime() - 420 * 1000);
+    const [session] = await db.insert(s.workoutSessions).values({ userId: id, programId: rideProgram, date: today, startTime: rideStart, endTime: rideEnd, isCompleted: true, rideMode: "indoor" }).returning();
+    const [ride] = await db.insert(s.rides).values({ userId: id, sessionId: session.id, programExerciseId: pe.id, mode: "indoor", status: "finished", plan, seq: 1, startedAt: rideStart, endedAt: rideEnd }).returning();
+    await db.insert(s.rideEvents).values({ rideId: ride.id, seq: 1, clientId: "seed-start", kind: "start", at: rideStart });
+    for (const [n, st] of plan.steps.entries()) {
+      await db.insert(s.workoutSets).values({
+        sessionId: session.id, exerciseId: pe.exerciseId, programExerciseId: pe.id, programSetId: st.programSetId, setNumber: n + 1,
+        actualReps: 0, weightKg: "0", restTimeSeconds: 0, durationSeconds: st.seconds, isCompleted: true, stepStatus: "done", targetOffsetW: 0, extendedSeconds: 0, sources: { durationSeconds: "clock" },
+      });
+    }
+    const hr = [150, 162];
+    await ranRun(id, runProgram, SHORT_BRICK_RUN, "indoor", { agoMin: 5, belts: [{ at: 30, kmh: 9 }, { at: 620, kmh: 10 }], hr: (i) => hr[i], rpe: 7, brickRideId: ride.id });
+  }
+
+  console.log(`Demo accounts ready (password "${DEMO_PASSWORD}"): ${TRI}, ${LIFT}, ${RIDE}, ${NOFTP}, ${HAND}, ${GARMIN}, ${FTP_TEST}, ${RUN}, ${RUN_NOPACE}, ${RUN_NOLTHR}, ${RUN_PACE}, ${RUN_MODE}, ${RUN_OUT}, ${BRICK}, ${BRICK_LIVE}, ${RUN_DONE}, ${RUN_EARLY}, ${RUN_BRICK}`);
   process.exit(0);
 }
 
