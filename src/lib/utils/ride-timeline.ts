@@ -561,7 +561,10 @@ export function rideTimeline(
         if (step.seconds === null) break;
         if (otherStep(e, l)) break;
         l.extendS = clamp(l.extendS + (e.value ?? EXTEND_STEP_S), 0, EXTEND_MAX_S);
-        if (status === "running" && endOf(l)! < t) next(t, "done");
+        if (status === "running") {
+          const end = endOf(l);
+          if (end !== null && end < t) next(t, "done");
+        }
         break;
       case "nudge":
         if (run) break;
@@ -570,8 +573,11 @@ export function rideTimeline(
       case "belt":
         if (!run || otherStep(e, l) || e.value == null) break;
         setBelt(l, t, e.value);
-        // A belt that already ran the step's meters ends it now.
-        if (status === "running" && step.run?.rule === "belt_distance" && endOf(l)! <= t) next(t, "done");
+        // A belt that already ran the step's meters ends it now; a belt of 0 ends nothing.
+        if (status === "running" && step.run?.rule === "belt_distance") {
+          const end = endOf(l);
+          if (end !== null && end <= t) next(t, "done");
+        }
         break;
       case "incline":
         if (!run || otherStep(e, l) || e.value == null) break;

@@ -118,6 +118,13 @@ describe("run timeline", () => {
     expect(t.current).toMatchObject({ index: 1, beltKmh: 7 });
   });
 
+  it("a belt of 0 stops the meters of a belt distance step and does not end it", () => {
+    const plan = runPlan([runStep(1, null, { rule: "belt_distance", meters: 1000, belt: 80 }), runStep(2, 300, { rule: "time", belt: 70 })]);
+    const t = rideTimeline(plan, [start(), ev("belt", 30, 0)], at(60));
+    expect(t.steps).toEqual([]);
+    expect(t.current).toMatchObject({ index: 0, beltKmh: 0, distanceM: 67, remainingMeters: 933, remainingSeconds: null });
+  });
+
   // Unit test 3.
   it("the same with a pause, and a belt event during the pause counts from the resume", () => {
     const plan = runPlan([runStep(1, null, { rule: "belt_distance", meters: 1000, belt: 80 }), runStep(2, 300, { rule: "time", belt: 70 })]);
