@@ -74,8 +74,8 @@ export default async function WorkoutSessionPage({ params }: Props) {
     discipline: pe.exercise.discipline,
     sets: pe.programSets,
     stepSummary: steps?.summaries.get(pe.id) ?? null,
-    // A ride (docs/plans/bike-ride-logger.md): the ring opens the bike exercise.
-    opensExercise: endurance && pe.exercise.discipline === "bike" && pe.programSets.some((s) => s.stepKind != null),
+    // A ride or a run (docs/plans/bike-ride-logger.md, docs/plans/run-logger.md): the ring opens the exercise screen.
+    opensExercise: endurance && (pe.exercise.discipline === "bike" || pe.exercise.discipline === "run") && pe.programSets.some((s) => s.stepKind != null),
   }));
 
   return (

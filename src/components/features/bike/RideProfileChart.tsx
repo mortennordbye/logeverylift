@@ -34,10 +34,14 @@ export function RideProfileChart({ chart, label }: { chart: RideChart; label: st
           {t.label}
         </text>
       ))}
-      <line x1={left} y1={chart.ftpY} x2={right} y2={chart.ftpY} className="stroke-foreground" strokeOpacity={0.55} strokeDasharray="3 3" />
-      <text x={left - 3} y={chart.ftpY + 2.5} textAnchor="end" fontSize={7.5} className="fill-foreground">
-        FTP
-      </text>
+      {chart.ftpY !== null && (
+        <>
+          <line x1={left} y1={chart.ftpY} x2={right} y2={chart.ftpY} className="stroke-foreground" strokeOpacity={0.55} strokeDasharray="3 3" />
+          <text x={left - 3} y={chart.ftpY + 2.5} textAnchor="end" fontSize={7.5} className="fill-foreground">
+            FTP
+          </text>
+        </>
+      )}
       {chart.bars.map((b) => {
         const labelY = Math.min(b.capY ?? b.y, b.y2) - 4;
         return (

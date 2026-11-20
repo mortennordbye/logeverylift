@@ -6,6 +6,7 @@ import { BikeExercise } from "@/components/features/bike/BikeExercise";
 import { RideMode } from "@/components/features/bike/RideMode";
 import { RideResults } from "@/components/features/bike/RideResults";
 import { RideSummary } from "@/components/features/bike/RideSummary";
+import { RunExercise } from "@/components/features/run/RunExercise";
 import { WorkoutSetsClient } from "@/components/features/WorkoutSetsClient";
 import { bikeExerciseView, handResultsView, rideAfterView, rideOfExercise } from "@/lib/bike-exercise-view";
 import { enduranceEnabledFor } from "@/lib/endurance";
@@ -16,6 +17,7 @@ import { stepLabels } from "@/lib/program-steps-view";
 import type { StepRow } from "@/lib/utils/program-steps";
 import { offersSaveTheRide, resultSteps, rideSummary } from "@/lib/utils/ride-results";
 import { pushPublicKey } from "@/lib/push";
+import { runExerciseView } from "@/lib/run-exercise-view";
 import { getUserSettings } from "@/lib/user-settings";
 import { requireSession } from "@/lib/utils/session";
 import { rideTestOf } from "@/lib/utils/workout-steps";
@@ -132,6 +134,17 @@ export default async function WorkoutExerciseSetsPage({ params, searchParams }: 
       );
     }
     if (bike) return <BikeExercise programId={programId} programExerciseId={peId} exerciseName={pe.exercise.name} data={bike} pushPublicKey={pushPublicKey()} />;
+  }
+
+  // A run exercise of an endurance user is a run (docs/plans/run-logger.md,
+  // step 2): the run screen, with Resume while its run runs. "Log by hand"
+  // (?hand=1) keeps today's set list.
+  if (pe.exercise.discipline === "run" && (await enduranceEnabledFor(user.id))) {
+    const sets = pe.programSets as (StepRow & { id: number })[];
+    const run = await runExerciseView(user.id, peId, pe.exercise.name, sets, pe.rideTest === "30min" ? "30min" : null);
+    if (run && !(hand === "1" && !run.liveRun)) {
+      return <RunExercise programId={programId} programExerciseId={peId} exerciseName={pe.exercise.name} data={run} pushPublicKey={pushPublicKey()} />;
+    }
   }
 
   const suggestions = suggestionsResult.success ? suggestionsResult.data : {};

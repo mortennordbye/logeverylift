@@ -46,7 +46,20 @@ const WHY: Partial<Record<StepAlertsState, string>> = {
 };
 
 /** "Step alerts are off", with the reason or the fix. Shown before the start only. */
-export function StepAlertsRow({ state, busy, error, onTurnOn }: { state: StepAlertsState; busy: boolean; error: string | null; onTurnOn: () => void }) {
+export function StepAlertsRow({
+  state,
+  busy,
+  error,
+  onTurnOn,
+  hint,
+}: {
+  state: StepAlertsState;
+  busy: boolean;
+  error: string | null;
+  onTurnOn: () => void;
+  /** What to do without alerts, after "Step alerts are off" (an outdoor run, docs/plans/run-logger.md 4.6). */
+  hint?: string;
+}) {
   if (state === "on" || state === "checking") return null;
   if (state === "home_screen") {
     // The whole row is the link, so the tap target is the row.
@@ -60,7 +73,7 @@ export function StepAlertsRow({ state, busy, error, onTurnOn }: { state: StepAle
   return (
     <div className="flex items-center justify-between gap-2 rounded-xl bg-muted pl-4 pr-2 min-h-12 py-1 text-sm" data-testid="step-alerts">
       <div className="min-w-0">
-        <p className="text-muted-foreground">Step alerts are off</p>
+        <p className="text-muted-foreground">Step alerts are off{hint ? ` · ${hint}` : ""}</p>
         {WHY[state] && <p className="text-xs text-muted-foreground">{WHY[state]}</p>}
         {error && (
           <p role="alert" className="text-xs text-muted-foreground">
