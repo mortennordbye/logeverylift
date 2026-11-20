@@ -17,6 +17,7 @@ import { getUserSettings } from "@/lib/user-settings";
 import type { RidePlan } from "@/lib/utils/ride-timeline";
 import type { RunStepLog } from "@/lib/utils/run-results";
 import { brickSummaryOf } from "@/lib/run-brick";
+import { runGarminView, type RunGarminView } from "@/lib/run-garmin";
 import { runKeptText } from "@/lib/utils/run-screen";
 import { garminAllowedFor } from "@/lib/garmin/access";
 import { isIndoor, sportOf } from "@/lib/garmin/analytics/sport";
@@ -145,13 +146,15 @@ export type RunAfterData = {
   plan: RidePlan;
   /** Per program set: the logged step, else what the run's timeline says of it. */
   logs: Record<number, RunStepLog>;
-  /** "Done 17:12 · Treadmill", "Ended early 16:40 · Outdoor". */
+  /** "Done 17:12 · Treadmill", "Ended early 16:40 · Outdoor", "· from Garmin" when a fill stands. */
   doneLine: string;
   /** "Steps 1 and 2 are saved". */
   kept: string;
   endReason: EndReason | null;
-  /** The user has Garmin and no step holds a Garmin value yet: "Waiting for your Garmin run". */
+  /** The user has Garmin, no fill stands or was undone and no step holds a Garmin value yet: "Waiting for your Garmin run". */
   garminWaiting: boolean;
+  /** The run's Garmin fill, matches, stream numbers and T2 (4.8, 4.9). */
+  garmin: RunGarminView;
   /** The runner tapped the belt or incline; else a treadmill distance is the plan's (4.4). */
   beltEvents: boolean;
   /** The ride of the run's brick: its time and T2 (section 5 "Summary"). */
@@ -171,9 +174,10 @@ export async function runAfterView(userId: string, programExerciseId: number): P
   if (!r.success || !r.data) return null;
   const v = r.data;
   const status = v.ride.status === "ended_early" ? "ended_early" : "finished";
-  const [{ logs, timeline, unsaved }, garmin, { timeZone }, brick] = await Promise.all([
+  const [{ logs, timeline, unsaved }, garmin, fill, { timeZone }, brick] = await Promise.all([
     rideStepLogs(userId, v),
     garminAllowedFor(userId),
+    runGarminView(userId, v.ride.id),
     getUserSettings(userId),
     v.ride.brickRideId !== null ? brickSummaryOf(userId, v.ride.brickRideId, v.ride.startedAt) : null,
   ]);
@@ -189,12 +193,14 @@ export async function runAfterView(userId: string, programExerciseId: number): P
     status,
     plan: v.plan,
     logs,
-    doneLine: [`${status === "ended_early" ? "Ended early" : "Done"}${at ? ` ${at}` : ""}`, RUN_MODE_NAME[v.plan.mode]].join(" · "),
+    doneLine: [`${status === "ended_early" ? "Ended early" : "Done"}${at ? ` ${at}` : ""}`, RUN_MODE_NAME[v.plan.mode], ...(fill.state === "filled" ? ["from Garmin"] : [])].join(" · "),
     kept: runKeptText(v.plan, timeline),
     endReason: v.ride.endReason,
-    garminWaiting: garmin && !Object.values(logs).some((l) => Object.values(l.sources ?? {}).includes("garmin")),
+    garminWaiting: garmin && fill.state === "none" && !fill.declined && !Object.values(logs).some((l) => Object.values(l.sources ?? {}).includes("garmin")),
+    garmin: fill,
     beltEvents: v.events.some((e) => e.kind === "belt" || e.kind === "incline"),
-    brick,
+    // Garmin's transition gives T2 when the run is the part of a multisport file after it (4.8).
+    brick: brick && fill.t2Seconds !== null ? { ...brick, t2Seconds: fill.t2Seconds } : brick,
     surface: v.ride.surface,
   };
 }

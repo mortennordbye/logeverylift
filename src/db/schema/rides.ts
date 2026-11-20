@@ -120,12 +120,14 @@ export const rideGarminFills = pgTable(
       .references(() => rides.id, { onDelete: "cascade" })
       .notNull(),
     garminActivityId: bigint("garmin_activity_id", { mode: "number" }).notNull(),
+    // The part of a multisport file (its session index, docs/plans/run-logger.md 4.8); 0 for a one-sport activity.
+    segment: integer("segment").default(0).notNull(),
     previous: jsonb("previous").notNull(),
     declined: boolean("declined").default(false).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (t) => [
-    uniqueIndex("uniq_ride_garmin_fills_pair").on(t.rideId, t.garminActivityId),
+    uniqueIndex("uniq_ride_garmin_fills_pair").on(t.rideId, t.garminActivityId, t.segment),
     // One standing (not undone) fill per ride, so a worker fill and a Pick cannot both land.
     uniqueIndex("uniq_ride_garmin_fills_standing")
       .on(t.rideId)

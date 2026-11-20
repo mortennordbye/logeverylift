@@ -4,9 +4,9 @@
  * reason, each step planned against done with the source of each number, and
  * the numbers of 4.9 that need no Garmin stream: distance and moving pace
  * from the belt or the steps, GAP on a treadmill, the load per step, and time
- * in heart rate zones by step average. The stream numbers (outdoor GAP, drift,
- * time on target, zones from the 1 s stream) come with the Garmin fill of runs
- * (step 7); until then they are null and `stream` is false.
+ * in heart rate zones by step average. With a Garmin fill (step 7) the stream
+ * numbers come from the 1 s stream: outdoor GAP, IF and load, drift, time on
+ * target and zones; without one they are null and `stream` is false.
  *
  * Read only: the status comes from the run's timeline and is not stored here,
  * so a read never changes a run (D9).
@@ -18,6 +18,8 @@ import { db } from "@/db";
 import { rideEvents, rides, workoutSessions } from "@/db/schema";
 import { rideStepLogs } from "@/lib/bike-exercise-view";
 import { brickTimes } from "@/lib/run-brick";
+import { garminAllowedFor } from "@/lib/garmin/access";
+import { runGarminView } from "@/lib/run-garmin";
 import { rideTimeline, type RidePlan } from "@/lib/utils/ride-timeline";
 import { paceText } from "@/lib/utils/run-numbers";
 import { runSummary, type RunStepLog } from "@/lib/utils/run-results";
@@ -41,6 +43,21 @@ async function brickOf(userId: string, brickRideId: number, runStartedAt: number
   return { rideId: ride.id, ...brickTimes(t, t.endedAt, runStartedAt) };
 }
 
+/** The run's time on target in percent: each step's share weighted by its seconds in the stream. */
+function timeOnTargetOf(plan: RidePlan, onTarget: Record<number, number | null> | null, numbers: { seconds: number } | null): number | null {
+  if (!onTarget || !numbers) return null;
+  let inside = 0;
+  let secs = 0;
+  for (const s of plan.steps) {
+    const pct = onTarget[s.programSetId];
+    if (pct === null || pct === undefined) continue;
+    const w = s.seconds ?? s.estSeconds;
+    inside += (pct / 100) * w;
+    secs += w;
+  }
+  return secs > 0 ? Math.round((inside / secs) * 100) : null;
+}
+
 /** The report of one run (a `rides` row of sport run) of the user. */
 export async function runReport(userId: string, ride: typeof rides.$inferSelect) {
   const [events, [session]] = await Promise.all([
@@ -62,11 +79,15 @@ export async function runReport(userId: string, ride: typeof rides.$inferSelect)
   });
   const runLogs = logs as Record<number, RunStepLog>;
   const beltEvents = events.some((e) => e.kind === "belt" || e.kind === "incline");
-  const summary = runSummary(plan, runLogs, { beltEvents });
+  const [garmin, garminUser] = await Promise.all([runGarminView(userId, ride.id), garminAllowedFor(userId)]);
+  const stream = garmin.stream;
+  const summary = runSummary(plan, runLogs, { beltEvents, stream });
   const n = summary.numbers;
   const planned = plannedRunNumbers(plan);
   const live = timeline.status === "running" || timeline.status === "paused";
-  const brick = ride.brickRideId !== null ? await brickOf(userId, ride.brickRideId, ride.startedAt.getTime()) : null;
+  const brickApp = ride.brickRideId !== null ? await brickOf(userId, ride.brickRideId, ride.startedAt.getTime()) : null;
+  // Garmin's transition gives T2 when the run is the part of a multisport file after it (4.8).
+  const brick = brickApp && garmin.t2Seconds !== null ? { ...brickApp, t2Seconds: garmin.t2Seconds } : brickApp;
   // The summary's row of each step (a strides block is one row) and its arrow.
   const rowOf = runRowOfStep(plan);
   const mark = { "↑": "above", "↓": "below" } as const;
@@ -145,8 +166,8 @@ export async function runReport(userId: string, ride: typeof rides.$inferSelect)
         },
         // The summary's judgement (4.2): above a cap or a range, below a range; null when it passes or is not judged.
         judged: s.run?.block ? null : row?.key === s.key && row.mark ? mark[row.mark] : null,
-        // Percent of the step's seconds inside its target, from the stream (step 7).
-        timeOnTargetPct: null,
+        // Percent of the step's seconds inside its target, from the Garmin stream; null without one or without a target.
+        timeOnTargetPct: stream?.numbers.onTarget[s.programSetId] ?? null,
       };
     }),
     numbers: {
@@ -156,8 +177,8 @@ export async function runReport(userId: string, ride: typeof rides.$inferSelect)
       distanceSource: summary.distanceLine,
       paceSPerKm: n.paceSPerKm === null ? null : Math.round(n.paceSPerKm),
       pace: n.paceSPerKm === null ? null : paceText(n.paceSPerKm),
-      // Grade-adjusted pace: on a treadmill from the belt and incline; outdoors it needs the stream (step 7).
-      gapSPerKm: treadmill && n.gapSPerKm !== null ? Math.round(n.gapSPerKm) : null,
+      // Grade-adjusted pace: on a treadmill from the belt and incline; outdoors from the Garmin stream's distance and altitude.
+      gapSPerKm: (treadmill || stream?.numbers.gapSPerKm != null) && n.gapSPerKm !== null ? Math.round(n.gapSPerKm) : null,
       avgHr: n.avgHr === null ? null : Math.round(n.avgHr),
       intensityFactor: r2(n.intensityFactor),
       load: n.load && {
@@ -167,16 +188,25 @@ export async function runReport(userId: string, ride: typeof rides.$inferSelect)
         estimated: true,
       },
       effort: summary.effort,
-      // By step average until the stream (step 7); empty without a run LTHR.
+      // From the Garmin 1 s stream when the run is filled, else by step average; empty without a run LTHR.
       heartRateZoneMinutes: summary.zones.map((z) => ({ zone: z.zone, minutes: z.m })),
-      zonesFrom: "steps" as const,
-      // From Garmin's 1 s stream only (step 7): false and null until runs are filled from Garmin.
-      stream: false,
-      drift: null,
-      timeOnTarget: null,
+      zonesFrom: stream ? ("stream" as const) : ("steps" as const),
+      // From Garmin's 1 s stream only: false and null until the run is filled from Garmin.
+      stream: !!stream,
+      // Friel Pa:HR over the steady steps (45 min or more), the first 10 min and strides left out; under 5% is steady.
+      drift: stream?.numbers.drift ? { pct: stream.numbers.drift.pct, steady: stream.numbers.drift.steady } : null,
+      // The share of the steps' seconds inside their targets, over the steps with a target.
+      timeOnTarget: timeOnTargetOf(plan, stream?.numbers.onTarget ?? null, stream?.numbers ?? null),
     },
-    // The Garmin fill of runs comes with step 7.
-    garmin: null,
+    // Null for a user without Garmin access.
+    garmin: !garminUser ? null : {
+      // filled: Undo; pick: two or more Garmin runs match and none fills; refill: the one match was undone; none.
+      state: garmin.state,
+      garminActivityId: garmin.garminActivityId,
+      declined: garmin.declined,
+      split: stream?.split ?? null,
+      matches: garmin.candidates.map((c) => ({ garminActivityId: c.garminActivityId, segment: c.segment ?? 0, startedAt: iso(c.startMs), seconds: c.seconds, meters: c.meters ?? null })),
+    },
   };
 }
 

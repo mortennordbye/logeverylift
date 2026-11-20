@@ -14,6 +14,8 @@ import { parseField, resultPayloads, rideEffort, type ResultEdits, type ResultSa
 import { rideClock } from "@/lib/utils/ride-screen";
 import type { RidePlan, RidePlanStep } from "@/lib/utils/ride-timeline";
 import { doneRunNumbers, paceText, type DoneRunNumbers } from "@/lib/utils/run-numbers";
+import type { DoneChart } from "@/lib/utils/ride-stream";
+import type { RunStreamNumbers, StepBounds } from "@/lib/utils/run-stream";
 import { runOutdoorText, runRowOfStep, runStepTitle, runStepZone, runTargetText } from "@/lib/utils/run-view";
 import { minSec } from "@/lib/utils/thresholds";
 import { mainTarget, resolveTarget } from "@/lib/utils/workout-steps";
@@ -164,15 +166,21 @@ export function totalKmText(steps: ResultStep[]): string {
 
 export type RunTile = { label: string; value: string; est?: boolean; sub?: string };
 /** mark: ↑ over a cap or above a range, ↓ under a range (4.2); null when it passes or is not judged. */
-export type RunSummaryRow = { key: string; title: string; plan: string | null; done: string; mark: "↑" | "↓" | null; quiet: boolean };
+export type RunSummaryRow = { key: string; title: string; plan: string | null; done: string; mark: "↑" | "↓" | null; quiet: boolean; onTarget: number | null };
+
+/** The Garmin stream of a run as the summary reads it (4.9): its numbers and the plan against done chart. */
+export type RunStreamView = { numbers: RunStreamNumbers; chart: DoneChart | null };
 
 export type RunSummary = {
   numbers: DoneRunNumbers;
   tiles: RunTile[];
   /** "Distance from the belt", "Distance from the plan · no belt changes". */
   distanceLine: string | null;
-  /** Minutes per heart rate zone with time, by step average; empty without a run LTHR. */
+  /** Minutes per heart rate zone with time, by step average or from the Garmin stream; empty without a run LTHR. */
   zones: { zone: number; m: number }[];
+  /** The plan against done chart, from a Garmin stream only: the belt on a treadmill, the pace outdoors. */
+  chart: DoneChart | null;
+  treadmill: boolean;
   rows: RunSummaryRow[];
   /** What the plan and done columns hold: "km/h · HR. Under an easy cap is a pass." */
   footnote: string;
@@ -250,6 +258,13 @@ function markOf(s: RidePlanStep, log: StepLog | null, plan: RidePlan): RunSummar
   }
   const t = mainTarget(s.step);
   const belt = beltOfLog(log);
+  // Outdoors a pace judges Garmin's pace of the step (step 7): the clock alone has no pace.
+  if (plan.mode !== "indoor" && log.sources?.avgSpeed === "garmin" && log.avgSpeed !== null) {
+    const b = paceBounds(s, plan);
+    if (b?.low != null && log.avgSpeed < b.low) return "↓";
+    if (b?.high != null && log.avgSpeed > b.high) return "↑";
+    return null;
+  }
   if (plan.mode !== "indoor" || t?.metric !== "pace" || belt === null) return null;
   const r = resolveTarget(t, "run", plan.thresholds);
   if (r.low === null || r.high === null) return null;
@@ -257,6 +272,41 @@ function markOf(s: RidePlanStep, log: StepLog | null, plan: RidePlan): RunSummar
   if (belt < slow - BELT_TOLERANCE_KMH) return "↓";
   if (belt > fast + BELT_TOLERANCE_KMH) return "↑";
   return null;
+}
+
+/**
+ * Each step's target as the runner saw it, for time on target (4.9): a heart
+ * rate target (a cap or a range, steps of 8 min or more as 4.2 judges them)
+ * on either mode, else outdoors a pace range as speed in m/s. A strides
+ * block, an effort and a treadmill pace (the belt is the pace) have none.
+ */
+export function runStepBounds(plan: RidePlan): Record<number, StepBounds | null> {
+  const out: Record<number, StepBounds | null> = {};
+  for (const s of plan.steps) {
+    out[s.programSetId] = null;
+    if (s.run?.block) continue;
+    // The main target only: outdoors a pace with heart rate as information is judged on its pace.
+    const main = plan.mode === "indoor" ? hrTextOf(s, plan) : runOutdoorText(s, plan.thresholds, plan.surface ?? "road").main;
+    const band = hrBand(main);
+    if (band) {
+      if ((s.seconds ?? s.estSeconds) >= HR_JUDGED_FROM_S) out[s.programSetId] = { series: "hr", low: band.low, high: band.high };
+      continue;
+    }
+    out[s.programSetId] = plan.mode === "indoor" ? null : paceBounds(s, plan);
+  }
+  return out;
+}
+
+/** An outdoor step's pace range in m/s when its shown target is a pace; null otherwise. */
+function paceBounds(s: RidePlanStep, plan: RidePlan): StepBounds | null {
+  if (!runOutdoorText(s, plan.thresholds, plan.surface ?? "road").main?.endsWith(" /km")) return null;
+  const t = [mainTarget(s.step), s.step.target2].find((x) => x?.metric === "pace");
+  if (!t) return null;
+  const r = resolveTarget(t, "run", plan.thresholds);
+  if (r.low === null && r.high === null) return null;
+  const lo = r.low !== null && r.high !== null ? Math.min(r.low, r.high) : r.low;
+  const hi = r.low !== null && r.high !== null ? Math.max(r.low, r.high) : r.high;
+  return { series: "speed", low: lo, high: hi };
 }
 
 /** "Distance from the belt": where the run's distance comes from (4.9). */
@@ -269,18 +319,31 @@ function distanceSource(logs: StepLog[], beltEvents: boolean): string | null {
   return `Distance from ${list.length > 1 ? `${list.slice(0, -1).join(", ")} and ${list[list.length - 1]}` : list[0]}`;
 }
 
-/** The summary of a run. `beltEvents`: the runner tapped the belt or incline (else the belt distance is the plan's, 4.4). */
-export function runSummary(plan: RidePlan, logs: Record<number, RunStepLog>, opts: { beltEvents: boolean }): RunSummary {
+/**
+ * The summary of a run. `beltEvents`: the runner tapped the belt or incline
+ * (else the belt distance is the plan's, 4.4). `stream`: the Garmin stream's
+ * numbers (4.9): time in zones from the 1 s stream, drift, time on target,
+ * and outdoors the GAP, IF and load from it, and the chart.
+ */
+export function runSummary(plan: RidePlan, logs: Record<number, RunStepLog>, opts: { beltEvents: boolean; stream?: RunStreamView | null }): RunSummary {
   const th = plan.thresholds;
   const treadmill = plan.mode === "indoor";
   const { steps } = runResultRows(plan, logs);
   const effort = rideEffort(steps);
   // Totals count the run time and distance of skipped steps too (4.7).
   const ranLogs = steps.map((s) => s.log as RunStepLog | null).filter((l): l is RunStepLog => ran(l));
-  const numbers = doneRunNumbers(
+  const stream = opts.stream?.numbers ?? null;
+  const fromSteps = doneRunNumbers(
     ranLogs.map((l) => ({ seconds: l.durationSeconds ?? 0, meters: l.distanceMeters, inclinePct: treadmill ? (l.inclinePercent ?? null) : null, avgHr: l.avgHr })),
     { thresholdSpeed: th.run_threshold_pace, lthr: th.lthr_run, rpe: effort, treadmill, surface: plan.surface ?? null },
   );
+  // Outdoors the stream gives GAP and, when it has a pace load, the load (4.9); a treadmill's come from the belt.
+  const numbers: DoneRunNumbers = {
+    ...fromSteps,
+    ...(stream?.gapSPerKm != null && { gapSPerKm: stream.gapSPerKm }),
+    ...(stream?.load != null && { load: { value: stream.load, method: "pace" as const, estimated: true as const }, intensityFactor: stream.intensityFactor }),
+    ...(stream && th.lthr_run && { hrZoneMinutes: stream.hrZoneMinutes }),
+  };
 
   const tiles: RunTile[] = [{ label: "Time", value: rideClock(numbers.seconds) }];
   if (numbers.meters) tiles.push({ label: "Distance", value: `${(numbers.meters / 1000).toFixed(1)} km` });
@@ -292,6 +355,7 @@ export function runSummary(plan: RidePlan, logs: Record<number, RunStepLog>, opt
   if (numbers.avgHr !== null) tiles.push({ label: "Avg HR", value: `${Math.round(numbers.avgHr)}` });
   // A load that rounds to 0 (a run of seconds) says nothing.
   if (numbers.load && Math.round(numbers.load.value) > 0) tiles.push({ label: "Load", value: `${Math.round(numbers.load.value)}`, est: true });
+  if (stream?.drift) tiles.push({ label: "Drift", value: `${Math.round(stream.drift.pct)}%`, ...(stream.drift.steady && { sub: "steady" }) });
   if (effort !== null) tiles.push({ label: "Effort", value: `${effort}` });
 
   const rowOf = runRowOfStep(plan);
@@ -310,12 +374,14 @@ export function runSummary(plan: RidePlan, logs: Record<number, RunStepLog>, opt
         done: any ? `${ranReps} of ${work.length}` : "Not run",
         mark: null,
         quiet: !any || ranReps === 0,
+        onTarget: null,
       });
       return;
     }
     const log = logs[s.programSetId] ?? null;
     const text = doneText(log, plan.mode);
-    rows.push({ key: s.key, title: steps[i].title, plan: planText(s, plan), done: text, mark: markOf(s, log, plan), quiet: text === "Skipped" || text === "Not run" });
+    const quiet = text === "Skipped" || text === "Not run";
+    rows.push({ key: s.key, title: steps[i].title, plan: planText(s, plan), done: text, mark: markOf(s, log, plan), quiet, onTarget: quiet ? null : (stream?.onTarget[s.programSetId] ?? null) });
   });
   const caps = plan.steps.some((s) => hrBand(hrTextOf(s, plan))?.cap);
   const footnote = `${treadmill ? "km/h" : "Pace /km"} · HR.${caps ? " Under an easy cap is a pass." : ""}`;
@@ -328,6 +394,8 @@ export function runSummary(plan: RidePlan, logs: Record<number, RunStepLog>, opt
     tiles,
     distanceLine: distanceSource(runSteps, opts.beltEvents),
     zones: th.lthr_run ? numbers.hrZoneMinutes.map((m, i) => ({ zone: i + 1, m })).filter((z) => z.m > 0) : [],
+    chart: opts.stream?.chart ?? null,
+    treadmill,
     rows,
     footnote,
     effort,
