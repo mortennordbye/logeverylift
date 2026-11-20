@@ -34,6 +34,7 @@ import { weekDatesOf } from "@/lib/utils/user-date";
 import { db } from "@/db";
 import { exercises, programExercises, programSets, programs } from "@/db/schema";
 import { todayPlanFrom } from "@/lib/home/today-plan";
+import { defaultRunModeFor } from "@/lib/run-exercise-view";
 import { liveProgramExercises, livePrograms, liveProgramSets } from "@/lib/plan-live";
 import { and, asc, eq } from "drizzle-orm";
 import { cache } from "react";
@@ -88,6 +89,7 @@ export async function readTodayPlan(userId: string, programId: number) {
       blockId: programSets.blockId,
       blockRound: programSets.blockRound,
       endsOnLap: programSets.endsOnLap,
+      discipline: exercises.discipline,
     })
     .from(programExercises)
     .innerJoin(programs, and(eq(programs.id, programExercises.programId), eq(programs.userId, userId), livePrograms))
@@ -148,7 +150,7 @@ export async function loadHomeCore(session: Session, settings: UserSettings, tod
   const info = cycleResult.success ? cycleResult.data : null;
   const todayProgram = info?.todaySlot?.program ?? null;
 
-  const [statsResult, sessionsResult, insight, checkinResult, policyNotice, enduranceRead, todayPlan, scheduledNext] = await Promise.all([
+  const [statsResult, sessionsResult, insight, checkinResult, policyNotice, enduranceRead, todayPlanRead, scheduledNext] = await Promise.all([
     getWorkoutStats(),
     getCompletedSessions(monday),
     todayProgram
@@ -171,6 +173,17 @@ export async function loadHomeCore(session: Session, settings: UserSettings, tod
       return null;
     }),
   ]);
+  // A run day of an endurance user says where the run happens (R4).
+  const todayPlan =
+    todayPlanRead?.runExerciseId !== undefined && enduranceRead.enabled
+      ? {
+          ...todayPlanRead,
+          runMode: await defaultRunModeFor(session.user.id, todayPlanRead.runExerciseId).catch((e: unknown) => {
+            console.error("[Home] run_mode_read_failed", { error: e instanceof Error ? e.name : "unknown" });
+            return undefined;
+          }),
+        }
+      : todayPlanRead;
   const checkin = checkinResult.success ? checkinResult.data : null;
   // Today's single program with steps starts from the Today card, which asks
   // guided or by hand; Endurance today then lists only the other sessions

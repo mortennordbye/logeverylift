@@ -63,6 +63,15 @@ describe("todayPlanFrom with endurance steps (docs/plans/one-program-model.md)",
     expect(p.setCount).toBe(6);
   });
 
+  it("marks a program of one run with steps as a run day (docs/plans/run-logger.md, planned day card)", () => {
+    const run = todayPlanFrom([step({ stepKind: "warmup", durationSeconds: 600, discipline: "run" }), step({ stepKind: "work", durationSeconds: 3000, discipline: "run" })])!;
+    expect(run.runExerciseId).toBe(1);
+    // A run of plain sets, a bike, and a run with a second exercise are not.
+    expect(todayPlanFrom([step({ durationSeconds: 3000, discipline: "run" })])!.runExerciseId).toBeUndefined();
+    expect(todayPlanFrom([step({ stepKind: "work", durationSeconds: 3000, discipline: "bike" })])!.runExerciseId).toBeUndefined();
+    expect(todayPlanFrom([step({ stepKind: "work", durationSeconds: 3000, discipline: "run" }), set(2, "Plank", { durationSeconds: 45 })])!.runExerciseId).toBeUndefined();
+  });
+
   it("keeps the time when every step is timed, and a lifter's plan has no step fields", () => {
     const timed = todayPlanFrom([step({ stepKind: "work", durationSeconds: 1800 })])!;
     expect(timed.minutes).toBe(30);
