@@ -36,6 +36,17 @@ export async function sessionRide(ex: Executor, userId: string, sessionId: numbe
   return ride ?? null;
 }
 
+/** The latest ride of each program exercise on this workout session, newest first (a ride and a run can share one). */
+export async function sessionRides(ex: Executor, userId: string, sessionId: number) {
+  const all = await ex
+    .select()
+    .from(rides)
+    .where(and(eq(rides.userId, userId), eq(rides.sessionId, sessionId)))
+    .orderBy(desc(rides.startedAt), desc(rides.id));
+  const seen = new Set<number | null>();
+  return all.filter((r) => !seen.has(r.programExerciseId) && seen.add(r.programExerciseId));
+}
+
 /** The step of a frozen plan that logs to this program set: a ridden step or a dropped one. */
 export function planStepOf(plan: RidePlan, programSetId: number) {
   return plan.steps.find((s) => s.programSetId === programSetId) ?? plan.dropped?.find((s) => s.programSetId === programSetId) ?? null;

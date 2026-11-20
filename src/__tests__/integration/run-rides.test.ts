@@ -7,7 +7,11 @@
 import { db } from "@/db";
 import { athleteThresholds, rideEvents, rides, workoutSessions } from "@/db/schema";
 import { sendRideEvent, startRide } from "@/lib/actions/rides";
-import { rideStepSnapshot } from "@/lib/ride-plan-db";
+import { liveRideOnSession, rideStepSnapshot } from "@/lib/ride-plan-db";
+import { saveSessionStepResults } from "@/lib/program-step-results";
+import { settle } from "@/lib/ride-settle";
+import { rideTimeline } from "@/lib/utils/ride-timeline";
+import { workoutSets } from "@/db/schema";
 import { and, asc, eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createExercise, createProgram, createSession, createStepProgram, createUser } from "./factories";
@@ -200,5 +204,74 @@ describe("an earlier session after a later one started", () => {
     later(31 * MIN);
     const back = ok(await sendRideEvent({ rideId: br.id, clientId: cid(), kind: "unskip", expectedSeq: 2 }));
     expect(back.ride.status).toBe("running");
+  });
+});
+
+/** A treadmill run of 1 min at 8 km/h, then 200 m at 8 km/h (90 s). */
+const short = {
+  v: 2,
+  sport: "run",
+  name: "Short",
+  steps: [
+    { type: "work", end: { type: "time", seconds: 60 }, belt: 8 },
+    { type: "work", end: { type: "distance", meters: 200 }, belt: 8 },
+  ],
+};
+
+describe("step 0 review", () => {
+  it("takes a late offline belt event after the run ended on server time, and the step's meters count it", async () => {
+    const { program, slots } = await createStepProgram(me, run, short);
+    const session = await createSession(me, program.id);
+    const { ride: r } = ok(await startRide({ sessionId: session.id, programExerciseId: slots[0].programExerciseId, mode: "indoor", clientId: cid() }));
+    // Offline from the start; the run ended on its own at 150 s.
+    later(10 * MIN);
+    const res = await sendRideEvent({ rideId: r.id, clientId: cid(), kind: "belt", value: 100, stepKey: "s2", clientAt: T0.getTime() + 90_000, expectedSeq: 1 });
+    expect(res).toMatchObject({ success: true });
+    const [stored] = await db.select().from(rideEvents).where(and(eq(rideEvents.rideId, r.id), eq(rideEvents.kind, "belt")));
+    expect(stored).toMatchObject({ value: 100, stepKey: "s2", at: new Date(T0.getTime() + 90_000) });
+    const [row] = await db.select().from(rides).where(eq(rides.id, r.id));
+    const view = await settle(db, row, Date.now());
+    const t = rideTimeline(view.plan, view.events, view.serverNow);
+    // 30 s at 8 km/h is 67 m; the last 133 m at 10 km/h take 48 s.
+    expect(view.ride.status).toBe("finished");
+    expect(t.steps[1]).toMatchObject({ distanceM: 200, endedAt: T0.getTime() + 138_000 });
+  });
+
+  it("reads a run as live by the same timeline as settle, step keys included", async () => {
+    const { program, slots } = await createStepProgram(me, run, short);
+    const session = await createSession(me, program.id);
+    const { ride: r } = ok(await startRide({ sessionId: session.id, programExerciseId: slots[0].programExerciseId, mode: "indoor", clientId: cid() }));
+    // A belt 0 meant for step 1, replayed while step 2 runs: it is ignored, so step 2 still ends at 150 s.
+    later(100_000);
+    ok(await sendRideEvent({ rideId: r.id, clientId: cid(), kind: "belt", value: 0, stepKey: "s1", clientAt: T0.getTime() + 70_000, expectedSeq: 1 }));
+    later(200_000);
+    const [row] = await db.select().from(rides).where(eq(rides.id, r.id));
+    expect(row.status).toBe("running");
+    expect(await liveRideOnSession(db, me, session.id)).toBeNull();
+    expect((await settle(db, row, Date.now())).ride.status).toBe("finished");
+  });
+
+  it("log_step_results on a session with a ride then a run writes the ride's keys to the ride", async () => {
+    const [b, r] = [parseWorkout(ride), parseWorkout(base)].map((p) => (p.ok ? p.workout : null)) as Workout[];
+    const rows = (w: Workout) => workoutToRows(w).map((x) => ({ ...x, targetReps: null, weightKg: null, restTimeSeconds: 0 }));
+    const { program, slots } = await createProgram(me, [
+      { exerciseId: bike, sets: rows(b) },
+      { exerciseId: run, sets: rows(r) },
+    ]);
+    const session = await createSession(me, program.id);
+    const { ride: br } = ok(await startRide({ sessionId: session.id, programExerciseId: slots[0].programExerciseId, mode: "indoor", clientId: cid() }));
+    later(MIN);
+    ok(await sendRideEvent({ rideId: br.id, clientId: cid(), kind: "end", expectedSeq: 1 }));
+    later(2 * MIN);
+    const { ride: rr } = ok(await startRide({ sessionId: session.id, programExerciseId: slots[1].programExerciseId, mode: "indoor", clientId: cid() }));
+    later(3 * MIN);
+    ok(await sendRideEvent({ rideId: rr.id, clientId: cid(), kind: "end", expectedSeq: 1 }));
+
+    // Both plans have an s1: a key without its exercise's place is refused, with the way to name it.
+    await expect(saveSessionStepResults(me, session.id, { steps: [{ key: "s1", status: "done", avgPower: 150 }] })).rejects.toThrow(/e1:s1/);
+    await saveSessionStepResults(me, session.id, { steps: [{ key: "e1:s1", status: "done", activeSeconds: 60, avgPower: 150 }] });
+    const [set] = await db.select().from(workoutSets).where(and(eq(workoutSets.sessionId, session.id), eq(workoutSets.programSetId, slots[0].setIds[0])));
+    expect(set).toMatchObject({ avgPower: 150, plannedStep: expect.objectContaining({ sport: "bike" }) });
+    expect(await db.select().from(workoutSets).where(and(eq(workoutSets.sessionId, session.id), eq(workoutSets.programSetId, slots[1].setIds[0])))).toHaveLength(0);
   });
 });
