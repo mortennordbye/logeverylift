@@ -441,8 +441,9 @@ describe("saving steps from the editor (step 4)", () => {
       {
         exerciseId: run.id,
         sets: [
-          { targetReps: null, weightKg: null, distanceMeters: 8000, peakDistanceMeters: 16000, sessionRole: null },
-          { targetReps: null, weightKg: null, distanceMeters: 1000, peakDistanceMeters: 1000, sessionRole: "work", targetHeartRateZone: 4 },
+          // No rest: a run's rest on a plain set becomes a rest step (run-logger, step 1), tested in run-sets-to-steps.
+          { targetReps: null, weightKg: null, distanceMeters: 8000, peakDistanceMeters: 16000, sessionRole: null, restTimeSeconds: 0 },
+          { targetReps: null, weightKg: null, distanceMeters: 1000, peakDistanceMeters: 1000, sessionRole: "work", targetHeartRateZone: 4, restTimeSeconds: 0 },
         ],
       },
     ]);

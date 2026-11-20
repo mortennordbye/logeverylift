@@ -92,10 +92,13 @@ test("plain run sets turn into steps and keep their set ids", async ({ page }, t
   await editor.getByRole("button", { name: "Save steps" }).click();
   await expect(editor.getByRole("button", { name: "Saved" })).toBeVisible();
   const after = await rows(peId);
-  expect(after.map((r) => r.id)).toEqual(before);
-  expect(after.map((r) => [r.stepKind, r.distanceMeters, r.restTimeSeconds])).toEqual([
-    ["work", 2000, 60],
-    ["work", 1000, 60],
+  expect(after.filter((r) => r.stepKind !== "rest").map((r) => r.id)).toEqual(before);
+  // A run step has no rest of its own: each set's rest is a rest step after it (run-logger, step 1).
+  expect(after.map((r) => [r.stepKind, r.distanceMeters, r.durationSeconds, r.restTimeSeconds])).toEqual([
+    ["work", 2000, null, 0],
+    ["rest", null, 60, 0],
+    ["work", 1000, null, 0],
+    ["rest", null, 60, 0],
   ]);
 });
 

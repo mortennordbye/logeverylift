@@ -114,8 +114,15 @@ export async function replaceExerciseSteps(tx: Tx, programExerciseId: number, wo
       // The tree has no rest after a step (a rest is a step of its own), so the
       // rest a row had stays with its place. Not on a bike or a run: their rests
       // are rest steps, and the workout screen would run the row's too
-      // (bike-ride-logger, step 1; run-logger, step 1).
-      restTimeSeconds: workout.sport === "bike" || workout.sport === "run" ? 0 : (prev?.restTimeSeconds ?? 0),
+      // (bike-ride-logger, step 1; run-logger, step 1). A run keeps the rest of
+      // a plain set it replaces for a moment, and restsToSteps below moves it
+      // to a rest step, so the editor's first save over plain sets keeps it.
+      restTimeSeconds:
+        workout.sport === "run" && prev?.stepKind == null && row.blockId == null
+          ? (prev?.restTimeSeconds ?? 0)
+          : workout.sport === "bike" || workout.sport === "run"
+            ? 0
+            : (prev?.restTimeSeconds ?? 0),
       peakDistanceMeters: keepsAnchor && row.distanceMeters != null ? prev.peakDistanceMeters : null,
       peakDurationSeconds: keepsAnchor && row.durationSeconds != null ? prev.peakDurationSeconds : null,
       sessionRole: keepsAnchor ? prev.sessionRole : null,
@@ -126,6 +133,10 @@ export async function replaceExerciseSteps(tx: Tx, programExerciseId: number, wo
   const gone = old.slice(next.length).map((r) => r.id);
   if (gone.length) await tx.update(programSets).set({ deletedAt: new Date() }).where(inArray(programSets.id, gone));
   await tx.update(programExercises).set({ poolLengthM: workout.poolLengthM ?? null, rideTest: workout.test ?? null }).where(eq(programExercises.id, programExerciseId));
+  if (workout.sport === "run") {
+    const slot = await stepSlot(tx, programExerciseId);
+    if (slot) await restsToSteps(tx, programExerciseId, slot);
+  }
   await assertStepRows(tx, programExerciseId);
 }
 

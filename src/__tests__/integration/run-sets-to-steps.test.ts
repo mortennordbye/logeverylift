@@ -259,6 +259,35 @@ describe("no writer stores a plain run set for an endurance user", () => {
     expect(runs.some((r) => r.peak != null)).toBe(true);
   });
 
+  it("the step editor's save over plain run sets moves each set's rest to a rest step and keeps the set ids", async () => {
+    const { program, slots } = await createProgram(me, [
+      {
+        exerciseId: run,
+        sets: [
+          { targetReps: null, weightKg: null, distanceMeters: 2000, targetHeartRateZone: 2, restTimeSeconds: 60 },
+          { targetReps: null, weightKg: null, distanceMeters: 1000, targetHeartRateZone: 4, restTimeSeconds: 60 },
+        ],
+      },
+    ]);
+    // A workout keeps the slot plain, as on a screen opened before the move.
+    await createSession(me, program.id);
+    const pe = slots[0].programExerciseId;
+    const { plainSetsToWorkout } = await import("@/lib/utils/program-steps");
+    const { saveExerciseSteps } = await import("@/lib/actions/program-steps");
+    // The tree the step editor opens with over plain sets.
+    const workout = plainSetsToWorkout(await liveSets(pe), { sport: "run", name: "Run" });
+    const res = await saveExerciseSteps({ programExerciseId: pe, workout });
+    expect(res.success, !res.success ? res.error : "").toBe(true);
+    const rows = await liveSets(pe);
+    expect(rows.map((r) => [r.stepKind, r.distanceMeters, r.durationSeconds, r.restTimeSeconds])).toEqual([
+      ["work", 2000, null, 0],
+      ["rest", null, 60, 0],
+      ["work", 1000, null, 0],
+      ["rest", null, 60, 0],
+    ]);
+    expect(rows.filter((r) => r.stepKind !== "rest").map((r) => r.id)).toEqual(slots[0].setIds);
+  });
+
   it("the step editor's save over plain sets carries no rest on a run step", async () => {
     const { program, slots } = await createProgram(me, [{ exerciseId: run, sets: plainRun }]);
     // A workout keeps the slot plain, as on a screen opened before the move.
@@ -269,7 +298,13 @@ describe("no writer stores a plain run set for an endurance user", () => {
       workout: { v: 2, sport: "run", name: "Run", steps: [{ type: "work", end: { type: "time", seconds: 600 } }, { type: "work", end: { type: "time", seconds: 600 } }] },
     });
     expect(res.success, !res.success ? res.error : "").toBe(true);
-    expect((await liveSets(slots[0].programExerciseId)).map((r) => r.restTimeSeconds)).toEqual([0, 0]);
+    // The rest of each plain set stays with its place, as a rest step.
+    expect((await liveSets(slots[0].programExerciseId)).map((r) => [r.stepKind, r.durationSeconds, r.restTimeSeconds])).toEqual([
+      ["work", 600, 0],
+      ["rest", 60, 0],
+      ["work", 600, 0],
+      ["rest", 90, 0],
+    ]);
   });
 });
 
