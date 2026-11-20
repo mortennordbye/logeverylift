@@ -1,5 +1,5 @@
 // Journeys of a run after it is run (docs/plans/run-logger.md, step 4): the results table and the summary.
-// Data: the steps demo seed (steps-rundone, steps-runearly and steps-runbrick). Run: pnpm journeys runresults --seed
+// Data: the steps demo seed (steps-rundone, steps-runearly, steps-runbrick, and for the Garmin fill of step 7 steps-rungarmin, steps-rungarmin-out and steps-runpick). Run: pnpm journeys runresults --seed
 import type { Ctx, JourneySet } from "./types";
 
 const PASSWORD = "steps-demo-password";
@@ -27,11 +27,17 @@ const set: JourneySet = {
     done: { email: "steps-rundone@demo.local", password: PASSWORD, about: "threshold pace 5:39 /km and run LTHR 180, 2 Base · Run run on a treadmill 10 min ago, the steady step at 8.5 km/h" },
     early: { email: "steps-runearly@demo.local", password: PASSWORD, about: "the same thresholds, Run · Tempo run outdoors and ended early in the tempo, no numbers" },
     brick: { email: "steps-runbrick@demo.local", password: PASSWORD, about: "the same thresholds and FTP 200 W, the short brick ridden and its run on a treadmill after it" },
+    garmin: { email: "steps-rungarmin@demo.local", password: PASSWORD, about: "admin, the 2 Base treadmill run filled from a synthetic Garmin treadmill run" },
+    garminOut: { email: "steps-rungarmin-out@demo.local", password: PASSWORD, about: "admin, Run · Tempo run outdoors and filled from a synthetic Garmin run with GPS" },
+    pick: { email: "steps-runpick@demo.local", password: PASSWORD, about: "admin, Run · Tempo outdoors with two synthetic Garmin runs that match it" },
   },
   journeys: [
     { id: 1, title: "Treadmill run done", summary: "The summary, the results table with the belt stepper and More numbers, and the summary after a belt is fixed." },
     { id: 2, title: "Outdoor run ended early", summary: "Plan only, the reason chips and Pain, one total distance in the results, and Run again." },
     { id: 3, title: "Brick run", summary: "The summary of a brick run: the ride, T2 and the run." },
+    { id: 4, title: "Treadmill run filled from Garmin", summary: "Heart rate and cadence from Garmin, distance from the belt, drift, the chart, time on target and Undo." },
+    { id: 5, title: "Outdoor run filled from Garmin", summary: "Distance, pace and GAP from Garmin's GPS run, load from the stream, the chart in pace and the arrows." },
+    { id: 6, title: "Two Garmin runs match", summary: "Pick lists both with start, time and distance; picking one fills the run." },
   ],
   flows: [
     {
@@ -114,6 +120,49 @@ const set: JourneySet = {
         await step("J3 summary", async () => {
           await openRun(c, /Brick run/);
           await shot(3, 1, "brick", "A brick run: Brick · ride 7:00 · T2 1:12 · run 30:00 under the done line");
+        });
+      },
+    },
+    {
+      name: "garmin",
+      account: "garmin",
+      journeys: [4],
+      async run(c: Ctx) {
+        const { page, step, shot, settle } = c;
+        await step("J4 summary", async () => {
+          await openRun(c, /2 Base/);
+          await shot(4, 1, "filled-treadmill", "Treadmill run from Garmin: heart rate and drift tiles, the belt chart, zones from the stream");
+        });
+        await step("J4 undo", async () => {
+          await page.getByTestId("summary-garmin").getByRole("button", { name: "Undo" }).click();
+          await settle(400);
+          await shot(4, 2, "undo-ask", "Undo asks first: Remove the Garmin numbers?");
+        });
+      },
+    },
+    {
+      name: "garmin-out",
+      account: "garminOut",
+      journeys: [5],
+      async run(c: Ctx) {
+        const { step, shot } = c;
+        await step("J5 summary", async () => {
+          await openRun(c, /Tempo/);
+          await shot(5, 1, "filled-outdoor", "Outdoor run from Garmin: distance, pace and GAP, load from the stream, the pace chart, time on target");
+        });
+      },
+    },
+    {
+      name: "pick",
+      account: "pick",
+      journeys: [6],
+      async run(c: Ctx) {
+        const { page, step, shot, settle } = c;
+        await step("J6 pick", async () => {
+          await openRun(c, /Tempo/);
+          await page.getByTestId("summary-garmin-pick").getByRole("button", { name: "Pick" }).click();
+          await settle(400);
+          await shot(6, 1, "pick", "Two Garmin runs match: Pick lists each with start, time and distance");
         });
       },
     },

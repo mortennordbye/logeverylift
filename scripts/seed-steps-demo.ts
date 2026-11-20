@@ -48,6 +48,14 @@
  *   steps-runbrick@demo.local     the same thresholds and FTP 200 W: the short
  *                                 brick ridden, then its run on a treadmill
  *                                 1:12 after the ride: the brick line.
+ *   steps-rungarmin@demo.local    admin (Garmin is for Premium accounts): the
+ *                                 rundone treadmill run, filled from a
+ *                                 synthetic Garmin treadmill run (no real
+ *                                 data): heart rate, cadence, drift, the chart.
+ *   steps-rungarmin-out@demo.local admin: "Run · Tempo" run outdoors, filled
+ *                                 from a synthetic Garmin run with GPS.
+ *   steps-runpick@demo.local      admin: the same outdoor run with two
+ *                                 synthetic Garmin runs that match it: Pick.
  *
  * Dates are relative to the run day. Each run deletes the demo accounts (and
  * with them all their data) and makes them again. No other account is touched.
@@ -78,6 +86,9 @@ const BRICK_LIVE = "steps-brick-live@demo.local";
 const RUN_DONE = "steps-rundone@demo.local";
 const RUN_EARLY = "steps-runearly@demo.local";
 const RUN_BRICK = "steps-runbrick@demo.local";
+const RUN_GARMIN = "steps-rungarmin@demo.local";
+const RUN_GARMIN_OUT = "steps-rungarmin-out@demo.local";
+const RUN_PICK = "steps-runpick@demo.local";
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "postgres"]);
 const DEMO_TZ = "Europe/Oslo";
 
@@ -276,7 +287,7 @@ async function main() {
 
   type Ctx = { userId: string; writer: "user" };
 
-  const old = await db.select({ id: s.users.id }).from(s.users).where(inArray(s.users.email, [TRI, LIFT, RIDE, NOFTP, HAND, GARMIN, FTP_TEST, RUN, RUN_NOPACE, RUN_NOLTHR, RUN_PACE, RUN_MODE, RUN_OUT, BRICK, BRICK_LIVE, RUN_DONE, RUN_EARLY, RUN_BRICK]));
+  const old = await db.select({ id: s.users.id }).from(s.users).where(inArray(s.users.email, [TRI, LIFT, RIDE, NOFTP, HAND, GARMIN, FTP_TEST, RUN, RUN_NOPACE, RUN_NOLTHR, RUN_PACE, RUN_MODE, RUN_OUT, BRICK, BRICK_LIVE, RUN_DONE, RUN_EARLY, RUN_BRICK, RUN_GARMIN, RUN_GARMIN_OUT, RUN_PICK]));
   if (old.length) {
     const ids = old.map((u) => u.id);
     await db.delete(s.planRevisions).where(inArray(s.planRevisions.userId, ids));
@@ -609,7 +620,58 @@ async function main() {
         sources: { durationSeconds: "clock", ...(b.distanceMeters !== undefined && { distanceMeters: "belt", avgSpeed: "belt" }), ...(hr !== null && { avgHr: "typed" }) },
       });
     }
-    return ride;
+    return { ride, plan, steps: t.steps };
+  }
+  /**
+   * A synthetic Garmin run over a ran run (docs/plans/run-logger.md, step 7):
+   * 1 s samples from `lead` seconds before its start to its end, heart rate
+   * and speed per step from `hr` and `speed` (step index, share of the step
+   * run), cadence per foot as Garmin's FIT has it, GPS and altitude outdoors.
+   * No real Garmin data.
+   */
+  async function garminRun(
+    id: string,
+    garminActivityId: number,
+    typeKey: string,
+    run: Awaited<ReturnType<typeof ranRun>>,
+    o: { lead: number; gps: boolean; hr: (i: number, f: number) => number; speed: (i: number) => number },
+  ) {
+    const start = new Date(run.ride.startedAt.getTime() - o.lead * 1000);
+    const t: number[] = [];
+    const hr: number[] = [];
+    const cadence: number[] = [];
+    const distance: number[] = [];
+    const altitude: number[] = [];
+    const lat: number[] = [];
+    const lng: number[] = [];
+    let d = 0;
+    const end = (run.steps[run.steps.length - 1].endedAt - start.getTime()) / 1000;
+    for (let sec = 0; sec < end; sec++) {
+      const ms = start.getTime() + sec * 1000;
+      const r = run.steps.find((x) => ms >= x.startedAt && ms < x.endedAt);
+      const i = r?.index ?? 0;
+      const f = r ? (ms - r.startedAt) / (r.endedAt - r.startedAt) : 0;
+      const v = r ? o.speed(i) : 1.4;
+      d += v;
+      t.push(sec);
+      hr.push(Math.round((r ? o.hr(i, f) : 105) + Math.sin(sec / 23) * 2));
+      cadence.push(r ? (v > 3.4 ? 92 : 84) + (sec % 3) - 1 : 70);
+      distance.push(Math.round(d * 100) / 100);
+      altitude.push(Math.round((60 + 8 * Math.sin(d / 900)) * 10) / 10);
+      lat.push(59.92 + d / 111_320);
+      lng.push(10.75);
+    }
+    const total = t.length;
+    await db.insert(s.garminActivities).values({
+      userId: id, garminActivityId, startTimeLocal: new Date(start.getTime() + 3600_000), activityType: typeKey,
+      data: { activityId: garminActivityId, startTimeGMT: start.toISOString().slice(0, 19).replace("T", " "), activityType: { typeKey }, duration: total, elapsedDuration: total, distance: Math.round(d) },
+      filesFetchedAt: new Date(),
+    });
+    await db.insert(s.garminActivityStreams).values({
+      userId: id, garminActivityId, parserVersion: 4, sport: "running", subSport: o.gps ? "street" : "treadmill",
+      streams: { t, hr, cadence, distance, ...(o.gps && { altitude, lat, lng }) }, laps: [], sets: [], timeInZone: [],
+      session: { startTime: start.toISOString(), totalElapsedTime: total, firstRecordTime: start.toISOString() }, lengths: [], events: [],
+    });
   }
   async function runAccount(email: string, name: string, workout: Workout, ftp = false) {
     const id = await makeUser(email, name, true);
@@ -655,7 +717,39 @@ async function main() {
     await ranRun(id, runProgram, SHORT_BRICK_RUN, "indoor", { agoMin: 5, belts: [{ at: 30, kmh: 9 }, { at: 620, kmh: 10 }], hr: (i) => hr[i], rpe: 7, brickRideId: ride.id });
   }
 
-  console.log(`Demo accounts ready (password "${DEMO_PASSWORD}"): ${TRI}, ${LIFT}, ${RIDE}, ${NOFTP}, ${HAND}, ${GARMIN}, ${FTP_TEST}, ${RUN}, ${RUN_NOPACE}, ${RUN_NOLTHR}, ${RUN_PACE}, ${RUN_MODE}, ${RUN_OUT}, ${BRICK}, ${BRICK_LIVE}, ${RUN_DONE}, ${RUN_EARLY}, ${RUN_BRICK}`);
+  {
+    // The rundone run with a Garmin treadmill run: heart rate rising slowly in the steady step (drift under 5%), strides hard.
+    const { id, programId } = await runAccount(RUN_GARMIN, "Run Garmin Demo", BASE_RUN);
+    await db.update(s.users).set({ role: "admin" }).where(eq(s.users.id, id));
+    const run = await ranRun(id, programId, BASE_RUN, "indoor", { agoMin: 10, belts: [{ at: 660, kmh: 8.5 }], rpe: 6 });
+    const hrOf = (i: number, f: number) => (i === 0 ? 118 + 10 * f : i === 1 ? 141 + 5 * f : i === 14 ? 128 - 6 * f : i % 2 === 0 ? 158 + 6 * f : 150 - 8 * f);
+    await garminRun(id, 990000101, "treadmill_running", run, { lead: 15, gps: false, hr: hrOf, speed: () => 2.3 });
+    const { fillRidesFromGarmin } = await import("../src/lib/ride-garmin");
+    console.log(`steps-rungarmin: ${await fillRidesFromGarmin(id)} run filled from Garmin`);
+  }
+  {
+    // The tempo outdoors with GPS: each step near its pace, the threshold reps a little fast.
+    const { id, programId } = await runAccount(RUN_GARMIN_OUT, "Run Garmin Outdoor Demo", PACE_RUN);
+    await db.update(s.users).set({ role: "admin" }).where(eq(s.users.id, id));
+    const run = await ranRun(id, programId, PACE_RUN, "outdoor", { agoMin: 10, rpe: 7 });
+    const thr = runThresholds.run_threshold_pace;
+    const speed = (i: number) => (i === 0 || i === 8 ? thr * 0.78 : i === 1 ? thr * 0.9 : i % 2 === 0 ? thr * 1.03 : thr * 0.65);
+    const hr = (i: number, f: number) => (i === 0 ? 128 + 10 * f : i === 1 ? 158 + 6 * f : i === 8 ? 150 - 15 * f : i % 2 === 0 ? 168 + 8 * f : 160 - 15 * f);
+    await garminRun(id, 990000102, "running", run, { lead: 5, gps: true, hr, speed });
+    const { fillRidesFromGarmin } = await import("../src/lib/ride-garmin");
+    console.log(`steps-rungarmin-out: ${await fillRidesFromGarmin(id)} run filled from Garmin`);
+  }
+  {
+    // Two Garmin runs over the same outdoor run (the watch and a second recording): the runner picks one.
+    const { id, programId } = await runAccount(RUN_PICK, "Run Pick Demo", PACE_RUN);
+    await db.update(s.users).set({ role: "admin" }).where(eq(s.users.id, id));
+    const run = await ranRun(id, programId, PACE_RUN, "outdoor", { agoMin: 10, rpe: 7 });
+    const thr = runThresholds.run_threshold_pace;
+    await garminRun(id, 990000103, "running", run, { lead: 5, gps: true, hr: () => 150, speed: () => thr * 0.85 });
+    await garminRun(id, 990000104, "running", run, { lead: 60, gps: true, hr: () => 151, speed: () => thr * 0.84 });
+  }
+
+  console.log(`Demo accounts ready (password "${DEMO_PASSWORD}"): ${TRI}, ${LIFT}, ${RIDE}, ${NOFTP}, ${HAND}, ${GARMIN}, ${FTP_TEST}, ${RUN}, ${RUN_NOPACE}, ${RUN_NOLTHR}, ${RUN_PACE}, ${RUN_MODE}, ${RUN_OUT}, ${BRICK}, ${BRICK_LIVE}, ${RUN_DONE}, ${RUN_EARLY}, ${RUN_BRICK}, ${RUN_GARMIN}, ${RUN_GARMIN_OUT}, ${RUN_PICK}`);
   process.exit(0);
 }
 
