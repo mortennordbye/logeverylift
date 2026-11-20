@@ -426,7 +426,7 @@ before building (rule 3 of section 0).
 | 3 Run mode | done |
 | 4 Results and numbers | done |
 | 5 AI tools | done |
-| 6 Alerts | todo |
+| 6 Alerts | done |
 | 7 Garmin fill and stream numbers | todo |
 | 8 Run threshold test | todo |
 
@@ -660,3 +660,10 @@ before building (rule 3 of section 0).
 - Step 5, the brick in `get_ride`: read from the brick ride's timeline without settling it (`brickTimes`, `src/lib/run-brick.ts`), so a read never writes a ride (D9).
 - Step 5, a bug found: `edit_program_exercise` dropped a step's belt (`beltKmh`) on every write, in a set list and a tree. Fixed with a test first.
 - Step 5, privacy: no new data class. The record and the policy now name runs among what `get_ride` reads, and belt and incline among what `log_step_results` writes. `LEGAL_VERSION` stays at the branch's `2026-11-20.1`, which is not released yet and covers this.
+- Step 6, alert text (target first): a step change reads target, step, time ("8.0 km/h · Steady · 50 min", outdoors "HR under 160 · Steady · 50 min"); a minute alert reads "1 min left · next 8.0 km/h · Steady". On a treadmill the target is the step's frozen belt (with its own incline), else its heart rate, else "Belt by feel"; outdoors the target of 4.2 (`runOutdoorText`). A distance step shows its distance ("1 km"), not a time. Times have no colon ("1 min 30 s"), as for the bike. The last step's end says "Run done". Km only (R6), so a run's alerts ignore the units setting.
+- Step 6, strides block (4.5): the block's start alert has the whole block as its title ("13.0 km/h · Strides 6 × 30 s · 1 min 30 s easy between"); the end of its last work round sends the recovery after it ("7.0 km/h · Easy · 1 min 30 s", body "Step 3 of 4 · Strides done"); the step after the block gets its own alert, as every step does. Steps are numbered as the step list numbers them (a block is one step).
+- Step 6, later belt distance steps: the walk counts a treadmill distance step at its frozen belt, so the alerts after it have times; a belt event rewrites them. A distance step with no belt (by feel) has no end time, so its start is the last alert, as a lap step is for the bike.
+- Step 6, brick run: an alert whose step starts in the first 10 min of a brick run outdoors names "Effort 4-5" (4.2); on a treadmill the belt stays first, as on the screen.
+- Step 6, both modes get alerts when push is on; a treadmill run with the screen on sends heartbeats, so the server holds them back (bike 4.7). The alerts row stays outdoors only, before the start (step 2 choice), and says "Step alerts are off" while prod has no keys (R7).
+- Step 6, the check on a dev setup with keys: not done in a browser. Headless Chromium has no push service (`pushManager.subscribe` never answers), and the bike step could not check it on the owner's phone for the same reasons (plain HTTP on the laptop). The integration tests run the schedule and the sender with throwaway VAPID keys made in the test (`webpush.generateVAPIDKeys`), with only the network call faked. The locked-phone check is in the BACKLOG entry that turns the keys on.
+- Step 6, privacy: no new data class. `ride_pushes` now holds a run's alerts too (a run's title can name a heart rate target, never a reading); the record and the policy say "ride or run". `LEGAL_VERSION` stays at the branch's unreleased `2026-11-20.1`.
