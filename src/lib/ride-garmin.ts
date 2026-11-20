@@ -256,7 +256,8 @@ export async function fillRidesFromGarmin(userId: string, now = Date.now()): Pro
   const recent = await db
     .select()
     .from(rides)
-    .where(and(eq(rides.userId, userId), ne(rides.status, "ready"), gte(rides.startedAt, new Date(now - FILL_WINDOW_MS))));
+    // Rides only: a run's fill comes with docs/plans/run-logger.md step 7, and never from a bike activity.
+    .where(and(eq(rides.userId, userId), eq(rides.sport, "bike"), ne(rides.status, "ready"), gte(rides.startedAt, new Date(now - FILL_WINDOW_MS))));
   if (!recent.length) return 0;
   const fills = await db
     .select({ rideId: rideGarminFills.rideId, garminActivityId: rideGarminFills.garminActivityId, declined: rideGarminFills.declined })
@@ -327,7 +328,7 @@ export async function undoRideFill(userId: string, rideId: number): Promise<bool
  */
 export async function pickRideActivity(userId: string, rideId: number, garminActivityId: number): Promise<"filled" | "not_found" | "already_filled"> {
   return db.transaction(async (tx) => {
-    const [ride] = await tx.select().from(rides).where(and(eq(rides.id, rideId), eq(rides.userId, userId))).for("update");
+    const [ride] = await tx.select().from(rides).where(and(eq(rides.id, rideId), eq(rides.userId, userId), eq(rides.sport, "bike"))).for("update");
     if (!ride) return "not_found";
     const t = await timelineOf(ride);
     if (!ended(t)) return "not_found";
@@ -372,7 +373,7 @@ const NONE: RideGarminView = { state: "none", garminActivityId: null, declined: 
 /** The ride's Garmin state for the summary and get_ride. Garmin access only; else nothing. Streams are read only for the filled activity. */
 export async function rideGarminView(userId: string, rideId: number): Promise<RideGarminView> {
   if (!(await garminAllowedFor(userId))) return NONE;
-  const [ride] = await db.select().from(rides).where(and(eq(rides.id, rideId), eq(rides.userId, userId)));
+  const [ride] = await db.select().from(rides).where(and(eq(rides.id, rideId), eq(rides.userId, userId), eq(rides.sport, "bike")));
   if (!ride) return NONE;
   const t = await timelineOf(ride);
   if (!ended(t)) return NONE;

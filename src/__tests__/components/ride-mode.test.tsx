@@ -71,7 +71,7 @@ function view(): RideView {
   const now = Date.now();
   const t = rideTimeline(plan, events, now);
   return {
-    ride: { id: 5, sessionId: 7, programExerciseId: 2, mode: plan.mode, status: t.status, seq, startedAt: T, endedAt: t.endedAt, heartbeatAt: null },
+    ride: { id: 5, sessionId: 7, programExerciseId: 2, sport: "bike", mode: plan.mode, surface: null, endReason: null, brickRideId: null, status: t.status, seq, startedAt: T, endedAt: t.endedAt, heartbeatAt: null },
     plan,
     events: [...events],
     serverNow: now,

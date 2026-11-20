@@ -46,7 +46,7 @@ async function recentRide(userId: string, programExerciseId: number) {
     .select({ id: rides.id, status: rides.status, sessionOpen: sql<boolean>`not ${workoutSessions.isCompleted}` })
     .from(rides)
     .innerJoin(workoutSessions, eq(workoutSessions.id, rides.sessionId))
-    .where(and(eq(rides.userId, userId), eq(rides.programExerciseId, programExerciseId), gt(rides.startedAt, new Date(Date.now() - RIDE_RECENT_MS))))
+    .where(and(eq(rides.userId, userId), eq(rides.sport, "bike"), eq(rides.programExerciseId, programExerciseId), gt(rides.startedAt, new Date(Date.now() - RIDE_RECENT_MS))))
     .orderBy(desc(rides.startedAt))
     .limit(1);
   return row ?? null;
@@ -81,7 +81,7 @@ async function lastRideMode(userId: string, programExerciseId: number): Promise<
     .select({ mode: sql<RideMode>`coalesce(${workoutSessions.rideMode}, ${rides.mode})` })
     .from(rides)
     .leftJoin(workoutSessions, eq(workoutSessions.id, rides.sessionId))
-    .where(and(eq(rides.userId, userId), eq(rides.programExerciseId, programExerciseId)))
+    .where(and(eq(rides.userId, userId), eq(rides.sport, "bike"), eq(rides.programExerciseId, programExerciseId)))
     .orderBy(desc(rides.startedAt))
     .limit(1);
   return row?.mode ?? null;

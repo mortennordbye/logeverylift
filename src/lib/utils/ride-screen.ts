@@ -208,7 +208,7 @@ export function stepsToSave(steps: RideStepResult[], saved: Record<string, strin
 
 export type RideTap = Exclude<RideEventKind, "start" | "heartbeat">;
 /** A tap not yet stored by the server: its client id (for replays) and when it happened, in server time. */
-export type QueuedRideEvent = { clientId: string; kind: RideTap; value?: number; clientAt: number };
+export type QueuedRideEvent = { clientId: string; kind: RideTap; value?: number; clientAt: number; /** The step on screen at a run's tap (docs/plans/run-logger.md, 4.4). */ stepKey?: string };
 
 /** The server's events and the queued ones after them, timed the way the server will time them. */
 export function withQueued(view: RideView, queued: QueuedRideEvent[], serverNow: number): RideEventInput[] {
@@ -221,7 +221,7 @@ export function withQueued(view: RideView, queued: QueuedRideEvent[], serverNow:
     if (stored.has(q.clientId)) continue;
     const at = eventTime(q.clientAt, startedAt, serverNow, knownUntil);
     knownUntil = Math.max(knownUntil, at);
-    out.push({ seq: ++seq, kind: q.kind, value: q.value ?? null, at });
+    out.push({ seq: ++seq, kind: q.kind, value: q.value ?? null, at, ...(q.stepKey !== undefined && { stepKey: q.stepKey }) });
   }
   return out;
 }

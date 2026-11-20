@@ -53,7 +53,8 @@ export function pushPublicKey(): string | null {
  */
 export async function scheduleRidePushes(ex: Executor, userId: string, view: RideView): Promise<void> {
   await ex.delete(ridePushes).where(eq(ridePushes.rideId, view.ride.id));
-  if (!pushKeys()) return;
+  // The alert text is a ride's; a run's alerts come with docs/plans/run-logger.md step 6.
+  if (!pushKeys() || view.ride.sport !== "bike") return;
   const [device] = await ex.select({ id: pushSubscriptions.id }).from(pushSubscriptions).where(eq(pushSubscriptions.userId, userId)).limit(1);
   if (!device) return;
   const t = rideTimeline(view.plan, view.events, view.serverNow, { heartbeatAt: view.ride.heartbeatAt });

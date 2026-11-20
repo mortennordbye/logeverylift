@@ -28,7 +28,7 @@ import { appSessionLoads } from "@/lib/training-load";
 import { getUserSettings, userToday } from "@/lib/user-settings";
 import { toDateStr } from "@/lib/utils/cycle-position";
 import { stepOfRow, type PlannedStepSnapshot, type StepRow } from "@/lib/utils/program-steps";
-import type { RidePlan } from "@/lib/utils/ride-timeline";
+import { planSport, type RidePlan } from "@/lib/utils/ride-timeline";
 import { programPlay, type ProgramPlay } from "@/lib/utils/program-steps";
 import {
   assistantStepWrite,
@@ -207,7 +207,7 @@ async function rideEntries(plan: RidePlan, programExerciseId: number, input: Pic
     const s = byKey.get(r.key)!;
     const row = rowOf.get(s.programSetId);
     if (!row) throw new PlanStateError("A step of this ride is no longer in the program");
-    const snapshot: PlannedStepSnapshot = { v: 2, sport: "bike", step: s.step, blockId: s.round ? row.blockId : null, blockRound: s.round?.index ?? null, thresholds: plan.thresholds };
+    const snapshot: PlannedStepSnapshot = { v: 2, sport: planSport(plan), step: s.step, blockId: s.round ? row.blockId : null, blockRound: s.round?.index ?? null, thresholds: plan.thresholds };
     return stepEntry(r.key, r, { ...row, programExerciseId }, snapshot, input.sessionRpe, "assistant");
   });
 }
@@ -526,7 +526,8 @@ async function assertSameShape(sessionId: number, all: ProgramWorkout[]) {
       Array.isArray(v) ? v.map(sorted) : v && typeof v === "object" ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => a.localeCompare(b)).map(([k, x]) => [k, sorted(x)])) : v;
     return JSON.stringify(sorted(rest));
   };
-  const now = new Map(rows.map((r) => [r.id, same(stepOfRow(r as StepRow))]));
+  const sportOf = new Map(all.map((p) => [p.programExerciseId, p.sport]));
+  const now = new Map(rows.map((r) => [r.id, same(stepOfRow(r as StepRow, sportOf.get(r.programExerciseId) ?? null))]));
   const changed = logged.some((l) => now.get(l.programSetId!) !== same((l.plannedStep as PlannedStepSnapshot).step));
   if (changed) throw new PlanStateError("The program changed since this session was logged, so its step keys no longer fit. Log results in the app, or ask the user.");
 }

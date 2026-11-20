@@ -8,7 +8,7 @@
  */
 
 import { db } from "@/db";
-import { RIDE_MODES, exercises, programExercises, programSets, programs, rideEvents, rides, workoutSessions } from "@/db/schema";
+import { END_REASONS, RIDE_MODES, RUN_SURFACES, exercises, programExercises, programSets, programs, rideEvents, rides, workoutSessions } from "@/db/schema";
 import { isUniqueViolation } from "@/lib/custom-exercises";
 import { enduranceEnabledFor } from "@/lib/endurance";
 import { liveProgramExercises, liveProgramSets, livePrograms } from "@/lib/plan-live";
@@ -17,17 +17,20 @@ import { LIVE, isLive, schedulePushes, settle, type RideView } from "@/lib/ride-
 import { thresholdValues } from "@/lib/session-compliance";
 import { buildWorkout, type StepRow } from "@/lib/utils/program-steps";
 import {
+  BELT_RANGE,
   EXTEND_STEP_S,
+  INCLINE_RANGE,
   NUDGE_STEP_W,
   RIDE_CONFLICT,
   buildRidePlan,
   eventTime,
   rideTimeline,
 } from "@/lib/utils/ride-timeline";
+import { buildRunPlan } from "@/lib/utils/run-plan";
 import { requireSession } from "@/lib/utils/session";
 import { parseWorkout } from "@/lib/utils/workout-steps";
 import type { ActionResult } from "@/types/workout";
-import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNotNull, ne } from "drizzle-orm";
 import { z } from "zod";
 
 export type { RideView } from "@/lib/ride-settle";
@@ -53,19 +56,26 @@ const startRideSchema = z.object({
   // "Ride again" on the summary of a ride that ended early: a new ride of the
   // same exercise on the same workout, which opens again if it was finished.
   again: z.boolean().optional(),
+  // An outdoor run's surface (docs/plans/run-logger.md, R14). Road when not given.
+  surface: z.enum(RUN_SURFACES).optional(),
+  // "End ride and start run" (4.3): end the user's active ride or run and start this one in one transaction.
+  endActive: z.boolean().optional(),
 });
 
 /**
- * Start a ride of a bike exercise in an open workout session. The plan is
- * frozen now, with watts from the FTP of this moment (D9). One active ride
- * per user: a ride that has ended by its timeline is closed first.
+ * Start a ride of a bike exercise, or a run of a run exercise
+ * (docs/plans/run-logger.md, 4.3), in an open workout session. The plan is
+ * frozen now, with watts or belts from the thresholds of this moment (D9).
+ * One active ride or run per user: one that has ended by its timeline is
+ * closed first; with `endActive`, one that still runs ends in the same
+ * transaction as the start.
  */
 export async function startRide(data: unknown): Promise<ActionResult<RideView>> {
   const auth = await requireSession();
   const parsed = startRideSchema.safeParse(data);
   if (!parsed.success) return { success: false, error: "Invalid input", fieldErrors: parsed.error.flatten().fieldErrors };
   const userId = auth.user.id;
-  const { sessionId, programExerciseId, mode, clientId, again } = parsed.data;
+  const { sessionId, programExerciseId, mode, clientId, again, surface, endActive } = parsed.data;
   if (!(await enduranceEnabledFor(userId))) return { success: false, error: "Endurance features are not on for this account" };
 
   try {
@@ -80,7 +90,7 @@ export async function startRide(data: unknown): Promise<ActionResult<RideView>> 
     // Only a ride again after this exercise's ride ended early opens a finished workout.
     let reopen = false;
     if (session.isCompleted) {
-      const last = again ? await sessionRide(db, userId, sessionId) : null;
+      const last = again ? await sessionRide(db, userId, sessionId, programExerciseId) : null;
       if (last?.status !== "ended_early" || last.programExerciseId !== programExerciseId) return { success: false, error: "This workout is finished" };
       reopen = true;
     }
@@ -92,38 +102,62 @@ export async function startRide(data: unknown): Promise<ActionResult<RideView>> 
       .innerJoin(exercises, eq(exercises.id, programExercises.exerciseId))
       .where(and(eq(programExercises.id, programExerciseId), eq(programs.userId, userId), liveProgramExercises, livePrograms));
     if (!slot || slot.programId !== session.programId) return { success: false, error: "Not found" };
-    if (slot.discipline !== "bike") return { success: false, error: "Only a bike exercise has ride mode" };
+    if (slot.discipline !== "bike" && slot.discipline !== "run") return { success: false, error: "Only a bike or run exercise has ride mode" };
+    const sport = slot.discipline;
 
     const rows = await db
       .select()
       .from(programSets)
       .where(and(eq(programSets.programExerciseId, programExerciseId), isNotNull(programSets.stepKind), liveProgramSets))
       .orderBy(asc(programSets.setNumber), asc(programSets.id));
-    const built = rows.length ? buildWorkout(rows as StepRow[], { sport: "bike", name: slot.name, test: slot.rideTest }) : null;
+    const built = rows.length ? buildWorkout(rows as StepRow[], { sport, name: slot.name, test: slot.rideTest }) : null;
     const tree = built && "workout" in built ? parseWorkout(built.workout) : null;
-    if (!tree?.ok) return { success: false, error: "This exercise has no steps to ride" };
-    const plan = buildRidePlan(tree.workout, rows.map((r) => r.id), await thresholdValues(userId), mode);
+    if (!tree?.ok) return { success: false, error: sport === "run" ? "This exercise has no steps to run" : "This exercise has no steps to ride" };
+    const ids = rows.map((r) => r.id);
+    const thresholds = await thresholdValues(userId);
+    // A run's belt from history and its easy pace come with the results of step 4 (docs/plans/run-logger.md, section 10).
+    const plan = sport === "run" ? buildRunPlan(tree.workout, ids, thresholds, mode, { surface }) : buildRidePlan(tree.workout, ids, thresholds, mode);
 
     const now = Date.now();
     const [active] = await db.select().from(rides).where(and(eq(rides.userId, userId), inArray(rides.status, LIVE)));
-    if (active && isLive((await settle(db, active, now)).ride.status)) {
+    if (active && !endActive && isLive((await settle(db, active, now)).ride.status)) {
       // The same start sent twice at once: the other one stored it after the read above.
       const same = await startedWith(userId, clientId);
       return same ? { success: true, data: same } : { success: false, error: "A ride is already running" };
     }
 
+    let ended = null as RideView | null;
     const ride = await db.transaction(async (tx) => {
+      // End ride and start run: the active one ends at the server's time, after
+      // everything it has, so no later tap makes it live again.
+      if (active && endActive) {
+        const [locked] = await tx.select().from(rides).where(eq(rides.id, active.id)).for("update");
+        const before = locked ? await settle(tx, locked, now) : null;
+        if (locked && before && isLive(before.ride.status)) {
+          const at = Math.max(now, locked.heartbeatAt?.getTime() ?? 0, ...before.events.map((e) => e.at));
+          const seq = before.ride.seq + 1;
+          await tx.insert(rideEvents).values({ rideId: locked.id, seq, clientId: `${clientId}:end-active`, kind: "end", at: new Date(at) });
+          const [bumped] = await tx.update(rides).set({ seq }).where(eq(rides.id, locked.id)).returning();
+          ended = await settle(tx, bumped, now);
+        }
+      }
       const [row] = await tx
         .insert(rides)
-        .values({ userId, sessionId, programExerciseId, mode, status: "running", plan, seq: 1, startedAt: new Date(now) })
+        .values({ userId, sessionId, programExerciseId, sport, mode, surface: sport === "run" && mode === "outdoor" ? (surface ?? "road") : null, status: "running", plan, seq: 1, startedAt: new Date(now) })
         .returning();
       await tx.insert(rideEvents).values({ rideId: row.id, seq: 1, clientId, kind: "start", at: new Date(now) });
-      await tx
-        .update(workoutSessions)
-        .set(reopen ? { rideMode: mode, isCompleted: false, endTime: null } : { rideMode: mode })
-        .where(and(eq(workoutSessions.id, sessionId), eq(workoutSessions.userId, userId)));
+      // The session's ride mode is the bike's (the bike screen's default); a run keeps its mode on its ride.
+      const reopened = reopen ? { isCompleted: false, endTime: null } : {};
+      if (sport === "bike" || reopen) {
+        await tx
+          .update(workoutSessions)
+          .set(sport === "bike" ? { rideMode: mode, ...reopened } : reopened)
+          .where(and(eq(workoutSessions.id, sessionId), eq(workoutSessions.userId, userId)));
+      }
       return row;
     });
+    // The ended one's alerts go.
+    if (ended) await schedulePushes(db, userId, ended);
     const view = await settle(db, ride, now);
     await schedulePushes(db, userId, view);
     return { success: true, data: view };
@@ -143,17 +177,34 @@ const sendRideEventSchema = z
   .object({
     rideId: z.number().int().positive(),
     clientId: clientIdSchema,
-    kind: z.enum(["pause", "resume", "skip", "unskip", "extend", "nudge", "lap", "end", "heartbeat"]),
+    kind: z.enum(["pause", "resume", "skip", "unskip", "extend", "nudge", "lap", "end", "belt", "incline", "heartbeat"]),
     value: z.number().int().optional(),
+    // The step key the client saw (run events, docs/plans/run-logger.md, 4.4).
+    stepKey: z.string().min(1).max(40).optional(),
+    // Why the runner ended early (R15), with an end only.
+    reason: z.enum(END_REASONS).optional(),
     // When it happened on the phone (epoch ms), sent for an event replayed after being offline.
     clientAt: z.number().int().positive().optional(),
     // The seq of the last event this client knows. Another device's event in between is a conflict.
     expectedSeq: z.number().int().min(0),
   })
-  .refine((d) => (d.kind === "nudge" ? Math.abs(d.value ?? 0) === NUDGE_STEP_W : d.kind === "extend" ? Math.abs(d.value ?? 0) === EXTEND_STEP_S : d.value === undefined), {
-    message: `a nudge is ±${NUDGE_STEP_W} W, an extend ±${EXTEND_STEP_S} s, other events take no value`,
-    path: ["value"],
-  });
+  .refine(
+    (d) => {
+      const v = d.value;
+      if (d.kind === "nudge") return Math.abs(v ?? 0) === NUDGE_STEP_W;
+      if (d.kind === "extend") return Math.abs(v ?? 0) === EXTEND_STEP_S;
+      if (d.kind === "belt") return v !== undefined && v >= BELT_RANGE.min && v <= BELT_RANGE.max;
+      if (d.kind === "incline") return v !== undefined && v >= INCLINE_RANGE.min && v <= INCLINE_RANGE.max;
+      // A block skip (4.5) takes 1.
+      if (d.kind === "skip") return v === undefined || v === 1;
+      return v === undefined;
+    },
+    {
+      message: `a nudge is ±${NUDGE_STEP_W} W, an extend ±${EXTEND_STEP_S} s, a belt ${BELT_RANGE.min} to ${BELT_RANGE.max} tenths of km/h, an incline ${INCLINE_RANGE.min} to ${INCLINE_RANGE.max} tenths of %, a block skip 1, other events take no value`,
+      path: ["value"],
+    },
+  )
+  .refine((d) => d.reason === undefined || d.kind === "end", { message: "only an end takes a reason", path: ["reason"] });
 
 /**
  * Record one event of the user's ride. A client id already stored is a replay
@@ -166,7 +217,7 @@ export async function sendRideEvent(data: unknown): Promise<ActionResult<RideVie
   const parsed = sendRideEventSchema.safeParse(data);
   if (!parsed.success) return { success: false, error: "Invalid input", fieldErrors: parsed.error.flatten().fieldErrors };
   const userId = auth.user.id;
-  const { rideId, clientId, kind, value, clientAt, expectedSeq } = parsed.data;
+  const { rideId, clientId, kind, value, clientAt, expectedSeq, stepKey, reason } = parsed.data;
 
   try {
     return await db.transaction(async (tx): Promise<ActionResult<RideView>> => {
@@ -183,6 +234,9 @@ export async function sendRideEvent(data: unknown): Promise<ActionResult<RideVie
         .from(rideEvents)
         .where(and(eq(rideEvents.rideId, rideId), eq(rideEvents.clientId, clientId)));
       if (replay) return { success: true, data: await settle(tx, ride, now) };
+      // Belt, incline and the block skip are a run's; the nudge is a ride's (4.4).
+      const runOnly = kind === "belt" || kind === "incline" || (kind === "skip" && value === 1);
+      if ((ride.sport === "run" && kind === "nudge") || (ride.sport !== "run" && runOnly)) return { success: false, error: "Invalid input" };
 
       const view = await settle(tx, ride, now);
       // Its workout was finished: settle stored the end, and nothing makes it live again.
@@ -202,8 +256,15 @@ export async function sendRideEvent(data: unknown): Promise<ActionResult<RideVie
       // An ended ride takes an event that makes it live again: an unskip of
       // the last step, or an offline extend or pause from before its end.
       if (!isLive(view.ride.status)) {
-        const withIt = rideTimeline(view.plan, [...view.events, { seq, kind, value: value ?? null, at }], now, { heartbeatAt });
+        const withIt = rideTimeline(view.plan, [...view.events, { seq, kind, value: value ?? null, at, stepKey: stepKey ?? null }], now, { heartbeatAt });
         if (!isLive(withIt.status)) return { success: false, error: "The ride has ended" };
+        // Never once a later session has started (docs/plans/run-logger.md, 4.3): the queue drops it.
+        const [later] = await tx
+          .select({ id: rides.id })
+          .from(rides)
+          .where(and(eq(rides.userId, userId), ne(rides.id, rideId), gt(rides.startedAt, ride.startedAt)))
+          .limit(1);
+        if (later) return { success: false, error: "The ride has ended" };
       }
       await tx.insert(rideEvents).values({
         rideId,
@@ -211,10 +272,15 @@ export async function sendRideEvent(data: unknown): Promise<ActionResult<RideVie
         clientId,
         kind,
         value: value ?? null,
+        stepKey: stepKey ?? null,
         at: new Date(at),
         clientAt: clientAt != null ? new Date(clientAt) : null,
       });
-      const [next] = await tx.update(rides).set({ seq }).where(eq(rides.id, rideId)).returning();
+      const [next] = await tx
+        .update(rides)
+        .set(reason ? { seq, endReason: reason } : { seq })
+        .where(eq(rides.id, rideId))
+        .returning();
       const after = await settle(tx, next, now);
       await schedulePushes(tx, userId, after);
       return { success: true, data: after };

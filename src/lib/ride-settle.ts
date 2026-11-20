@@ -24,7 +24,13 @@ export type RideView = {
     id: number;
     sessionId: number;
     programExerciseId: number | null;
+    /** A bike ride or a run (docs/plans/run-logger.md, R10). */
+    sport: Ride["sport"];
     mode: Ride["mode"];
+    surface: Ride["surface"];
+    endReason: Ride["endReason"];
+    /** The run of a brick: the ride it follows. */
+    brickRideId: number | null;
     status: Ride["status"];
     seq: number;
     startedAt: number;
@@ -45,7 +51,7 @@ const workoutEndId = (rideId: number) => `workout-finished-${rideId}`;
 
 async function readEvents(ex: Executor, rideId: number) {
   const rows = await ex.select().from(rideEvents).where(eq(rideEvents.rideId, rideId)).orderBy(asc(rideEvents.seq));
-  return rows.map((e) => ({ seq: e.seq, kind: e.kind, value: e.value, at: e.at.getTime(), clientId: e.clientId }));
+  return rows.map((e) => ({ seq: e.seq, kind: e.kind, value: e.value, at: e.at.getTime(), clientId: e.clientId, ...(e.stepKey != null && { stepKey: e.stepKey }) }));
 }
 
 /**
@@ -121,7 +127,11 @@ export async function settle(ex: Executor, ride: Ride, now: number): Promise<Rid
       id: ride.id,
       sessionId: ride.sessionId,
       programExerciseId: ride.programExerciseId,
+      sport: ride.sport,
       mode: ride.mode,
+      surface: ride.surface,
+      endReason: ride.endReason,
+      brickRideId: ride.brickRideId,
       status,
       seq: ride.seq,
       startedAt: ride.startedAt.getTime(),

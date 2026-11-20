@@ -38,6 +38,8 @@ export async function rideReport(userId: string, by: { rideId?: number; workoutS
     .where(
       and(
         eq(rides.userId, userId),
+        // A ride's report; a run's comes with docs/plans/run-logger.md step 5.
+        eq(rides.sport, "bike"),
         by.rideId != null
           ? eq(rides.id, by.rideId)
           : by.workoutSessionId != null
