@@ -199,7 +199,14 @@ rate (`lthr` zones are Friel's), `threshold_pace` (% of threshold speed) or effo
   30 s work steps (not 20 s) with their belt, in a repeat with an easy step and its own belt.
   A repeat whose work step is under 60 s runs as one strides block.
 - **Hills:** a climb or the terrain is a note on the step, never a target.
-- **Run threshold test:** `"test": "30min"` on the tree, stored as protocol `run_30min`.
+- **Run threshold test:** `"test": "30min"` on the tree, stored as protocol `run_30min`. Or send
+  `runTest: "treadmill"` or `runTest: "outdoor"` to `edit_program_exercise` in place of `sets` or
+  `workout` to write the app's own test: warm-up 15 min with 3 x 1 min pickups, then the test as a
+  10 min and a 20 min work step at effort 9-10, then 10 min easy. The treadmill one starts at 10.0
+  km/h, and its 20 min step keeps the belt the runner ended the 10 min on. A test does not start
+  within 7 days of a sick period. After the run, `get_ride` gives `thresholdTest`: LTHR is the
+  average heart rate of the 20 min step and threshold pace the average pace of the whole 30 min
+  (Friel); a treadmill test with no belt tap gives LTHR only.
 - **A running run is frozen:** a run keeps the plan it started with, as a ride does.
 
 A 75 minute base run on the treadmill: a warm-up and a steady run in heart rate zones 1 and 2 at
