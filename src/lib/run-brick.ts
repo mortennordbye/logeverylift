@@ -11,7 +11,8 @@ import { db } from "@/db";
 import { exercises, plannedSessions, programExercises, rides, workoutSessions } from "@/db/schema";
 import { livePlannedSessions, liveProgramExercises } from "@/lib/plan-live";
 import { settle } from "@/lib/ride-settle";
-import { userToday } from "@/lib/user-settings";
+import { getUserSettings, userToday } from "@/lib/user-settings";
+import { localDateStr } from "@/lib/utils/user-date";
 import { toDateStr } from "@/lib/utils/cycle-position";
 import { rideTimeline } from "@/lib/utils/ride-timeline";
 import { and, asc, desc, eq, gt, inArray, isNotNull, or } from "drizzle-orm";
@@ -21,10 +22,12 @@ const BRICK_RECENT_MS = 12 * 60 * 60 * 1000;
 /** T2 shows only when the run starts this soon after the ride's end (4.7). */
 export const T2_MAX_MS = 60 * 60 * 1000;
 
-/** The user's latest bike ride of the last 12 hours on this planned session, or on a workout of its program. */
+/** The user's latest bike ride of today (in the user's time zone) on this planned session, or on a workout of its program. */
 async function rideOfPlanned(userId: string, planned: { id: number; programId: number | null }) {
-  const [row] = await db
-    .select({ ride: rides })
+  const [{ timeZone }, rows] = await Promise.all([
+    getUserSettings(userId),
+    db
+      .select({ ride: rides })
     .from(rides)
     .innerJoin(workoutSessions, eq(workoutSessions.id, rides.sessionId))
     .where(
@@ -35,9 +38,12 @@ async function rideOfPlanned(userId: string, planned: { id: number; programId: n
         or(eq(workoutSessions.plannedSessionId, planned.id), planned.programId !== null ? eq(workoutSessions.programId, planned.programId) : undefined),
       ),
     )
-    .orderBy(desc(rides.startedAt), desc(rides.id))
-    .limit(1);
-  return row?.ride ?? null;
+      .orderBy(desc(rides.startedAt), desc(rides.id))
+      .limit(5),
+  ]);
+  // Today's only: a ride of the same program last night is not this brick's (4.7).
+  const today = localDateStr(new Date(), timeZone);
+  return rows.find((r) => localDateStr(r.ride.startedAt, timeZone) === today)?.ride ?? null;
 }
 
 /** Today's planned run of this program that follows a ride, with that ride's planned session. */

@@ -70,7 +70,7 @@ import type {
     WorkoutStats,
 } from "@/types/workout";
 import { plannedStepSnapshot } from "@/lib/program-steps-db";
-import { rideStepSnapshot } from "@/lib/ride-plan-db";
+import { rideStepSnapshot, sessionRide } from "@/lib/ride-plan-db";
 import { WORKOUT_LIMITS } from "@/lib/utils/workout-steps";
 import { and, asc, desc, eq, gte, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
@@ -286,6 +286,13 @@ export async function getActiveSessionCompletedProgramSetIds(
   }
 }
 
+/** The step is a run's, and the session's run of its exercise runs on a treadmill. */
+async function onTreadmill(userId: string, sessionId: number, programExerciseId: number | null, plannedStep: { sport?: string } | null): Promise<boolean> {
+  if (plannedStep?.sport !== "run" || programExerciseId === null) return false;
+  const ride = await sessionRide(db, userId, sessionId, programExerciseId);
+  return ride?.sport === "run" && ride.mode === "indoor";
+}
+
 /**
  * The result fields this write sends from the belt whose stored value was
  * typed: the typed value stays (docs/plans/run-logger.md, 4.7).
@@ -404,6 +411,11 @@ export async function logWorkoutSet(
       slot?.stepKind != null && slot.programSetId != null
         ? ((await rideStepSnapshot(db, auth.user.id, sessionId, slot.programSetId)) ?? (await plannedStepSnapshot(db, slot.programSetId, auth.user.id)))
         : null;
+
+    // Belt numbers come only from a treadmill run's step (docs/plans/run-logger.md, 4.7).
+    if (Object.values(sources ?? {}).includes("belt") && !(await onTreadmill(auth.user.id, sessionId, slot?.programExerciseId ?? null, plannedStep))) {
+      return { success: false, error: "Invalid input data", fieldErrors: { sources: ["only a treadmill run step takes belt numbers"] } };
+    }
 
     // A step is at most 12 hours, as the step model allows (a typo in a typed time).
     if (plannedStep && durationSeconds != null && durationSeconds > WORKOUT_LIMITS.seconds.max) {

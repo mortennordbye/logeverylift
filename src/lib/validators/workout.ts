@@ -82,6 +82,9 @@ export const createWorkoutSessionSchema = z.object({
 /** The sources a client may send for a result field; the others are the server's (`RESULT_SOURCES`). */
 export const CLIENT_RESULT_SOURCES = ["typed", "clock", "belt"] as const satisfies readonly ResultSource[];
 
+/** The result fields a treadmill run step takes from the belt (docs/plans/run-logger.md, 4.7). */
+export const BELT_FIELDS = ["distanceMeters", "avgSpeed"] as const;
+
 /** The result fields of a set whose source is kept (`workout_sets.sources`). */
 export const RESULT_FIELDS = ["durationSeconds", "distanceMeters", "avgPower", "avgHr", "maxHr", "avgCadence", "avgSpeed", "climbM", "measuredValue"] as const;
 
@@ -164,6 +167,10 @@ export const logWorkoutSetSchema = z.object({
   // The workout list's ring logs a whole exercise: it never writes over a row
   // that carries a step status or sources (a ride's step, a typed result).
   bulk: z.boolean().optional(),
+}).refine((d) => Object.entries(d.sources ?? {}).every(([k, s]) => s !== "belt" || BELT_FIELDS.includes(k as (typeof BELT_FIELDS)[number])), {
+  // A belt measures distance and speed on a treadmill (docs/plans/run-logger.md, 4.7), nothing else.
+  message: "only distance and speed come from the belt",
+  path: ["sources"],
 });
 
 /** A correction to a set in a finished session, made from history. */

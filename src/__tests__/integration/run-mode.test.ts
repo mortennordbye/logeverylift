@@ -8,7 +8,7 @@ import { db } from "@/db";
 import { athleteThresholds, plannedSessions, rides, trainingCycles, users, workoutSets } from "@/db/schema";
 import { getRide, sendRideEvent, setRideEndReason, startRide } from "@/lib/actions/rides";
 import { logWorkoutSet } from "@/lib/actions/workout-sets";
-import { brickRideView, brickRunOf } from "@/lib/run-brick";
+import { brickRideOf, brickRideView, brickRunOf } from "@/lib/run-brick";
 import { runAfterView } from "@/lib/run-exercise-view";
 import { rideTimeline, type RideStepResult } from "@/lib/utils/ride-timeline";
 import { beltResults } from "@/lib/utils/run-screen";
@@ -158,6 +158,30 @@ describe("each step saves its belt numbers (4.7)", () => {
   });
 });
 
+describe("a client's belt source", () => {
+  it("is taken only for distance and speed: a heart rate marked belt is refused", async () => {
+    const s = await runSetup();
+    const { ride: r } = ok(await startRide({ ...s, mode: "indoor", clientId: cid() }));
+    later(61_000);
+    const v = ok(await getRide({ rideId: r.id }))!;
+    const t = rideTimeline(v.plan, v.events, Date.now());
+    const res = await logWorkoutSet({ ...stepSave(s, 0, t.steps[0]), avgHr: 140, sources: { durationSeconds: "clock", avgHr: "belt" } });
+    expect(res.success).toBe(false);
+    expect(await db.select().from(workoutSets).where(eq(workoutSets.sessionId, s.sessionId))).toEqual([]);
+  });
+
+  it("is refused on a bike step", async () => {
+    const b = await rideSetup();
+    ok(await startRide({ ...b, mode: "indoor", clientId: cid() }));
+    later(61_000);
+    const res = await logWorkoutSet({
+      sessionId: b.sessionId, exerciseId: bike, setNumber: 1, programSetId: b.setIds[0], actualReps: 0, weightKg: 0, durationSeconds: 60, restTimeSeconds: 0,
+      isCompleted: true, stepStatus: "done", distanceMeters: 500, sources: { durationSeconds: "clock", distanceMeters: "belt" },
+    });
+    expect(res.success).toBe(false);
+  });
+});
+
 describe("the end reason (R15)", () => {
   it("is set on a run that ended early, and on nothing else", async () => {
     const s = await runSetup();
@@ -225,6 +249,19 @@ describe("the brick (4.7)", () => {
     // Over 60 min after the ride, T2 does not show.
     later(80 * MIN);
     expect((await brickRideView(me, r.programId))?.t2From).toBeNull();
+  });
+
+  it("a ride of the brick's program yesterday evening is not today's brick ride", async () => {
+    vi.setSystemTime(new Date("2026-11-19T20:00:00Z"));
+    const b = await rideSetup();
+    const r = await runSetup();
+    const { ride: br } = ok(await startRide({ ...b, mode: "indoor", clientId: cid() }));
+    vi.setSystemTime(new Date("2026-11-19T20:10:00Z"));
+    ok(await sendRideEvent({ rideId: br.id, clientId: cid(), kind: "end", expectedSeq: 1 }));
+    // 10 h later it is the next day in Oslo; today's ride has not started.
+    vi.setSystemTime(new Date("2026-11-20T06:00:00Z"));
+    await plannedBrick(b.programId, r.programId);
+    expect(await brickRideOf(me, r.programId)).toBeNull();
   });
 
   it("a run in no brick links to no ride", async () => {
