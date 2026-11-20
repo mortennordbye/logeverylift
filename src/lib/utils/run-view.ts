@@ -207,11 +207,15 @@ export function plannedRunNumbers(plan: RidePlan): RunNumbers {
   );
   let meters: number | null = 0;
   const zoneSeconds = [0, 0, 0, 0, 0];
+  // The belt of the step before, for a step that keeps it (the 20 min of a treadmill run test): the estimate counts it at that belt.
+  let lastBelt: number | null = null;
   for (const { s, sec } of timed) {
+    const belt = s.run?.belt ?? (s.run?.carry ? lastBelt : null);
+    if (s.run?.belt != null) lastBelt = s.run.belt;
     if (s.run?.meters != null) meters = meters === null ? null : meters + s.run.meters;
     else if (sec === null) meters = null;
     else {
-      const speed = plan.mode === "indoor" ? (s.run?.belt ? s.run.belt / 36 : null) : speedOf(s, th);
+      const speed = plan.mode === "indoor" ? (belt ? belt / 36 : null) : speedOf(s, th);
       meters = meters === null || speed === null ? null : meters + speed * sec;
     }
     const zone = runStepZone(s.step, th);

@@ -1,5 +1,5 @@
 import { buildRunPlan } from "@/lib/utils/run-plan";
-import { runStepRows } from "@/lib/utils/run-view";
+import { plannedRunNumbers, runStepRows } from "@/lib/utils/run-view";
 import { runScreen } from "@/lib/utils/run-screen";
 import { rideTimeline, type RideEventInput, type RidePlan } from "@/lib/utils/ride-timeline";
 import { workoutToRows } from "@/lib/utils/program-steps";
@@ -100,6 +100,14 @@ describe("the 20 min step of a treadmill test keeps the belt", () => {
     expect(screen.cue).toBeNull();
   });
 
+  it("the planned km count the 20 min at the 10 min belt", () => {
+    // 15 min warm-up, the 30 min at 10.0 km/h (5 km), 10 min easy: the total is known.
+    const n = plannedRunNumbers(p);
+    expect(n.km).not.toBeNull();
+    const withoutTest = plannedRunNumbers({ ...p, steps: p.steps.filter((_, i) => i !== 7 && i !== 8) }).km!;
+    expect(n.km! - withoutTest).toBeCloseTo(5, 1);
+  });
+
   it("an outdoor test has no carry", () => {
     expect(plan("outdoor").steps.every((s) => !s.run?.carry)).toBe(true);
   });
@@ -162,6 +170,35 @@ describe("runTestResult", () => {
     expect(r).toMatchObject({ lthr: 176, speed: null, meters30: null });
     expect(r.checks.evenPace).toBeNull();
     expect(runTestThresholds(r).map((x) => x.kind)).toEqual(["lthr_run"]);
+  });
+
+  it("a treadmill distance typed or from Garmin counts with no belt tap; the plan's belt alone does not", () => {
+    for (const source of ["typed", "garmin"] as const) {
+      const src = { sources: { distanceMeters: source } };
+      const r = runTestResult(input({ beltEvents: false }, { first: src, last: src }))!;
+      expect(r.speed).not.toBeNull();
+      expect(r.meters30).toBe(5750);
+    }
+    const belt = { sources: { distanceMeters: "belt" as const } };
+    expect(runTestResult(input({ beltEvents: false }, { first: belt, last: belt }))?.speed).toBeNull();
+  });
+
+  it("Stop test in the cool-down: the 20 min step is done, so the test still gives a result to save", () => {
+    const p = plan("outdoor");
+    // 15 min warm-up, the 30 min test, then pause and stop 2 min into the cool-down.
+    const t = rideTimeline(p, [ev("start", 0), ev("pause", 2820), ev("end", 2830)], at(2900));
+    // Ended in the last step, so the run counts as finished; the cool-down is partial.
+    expect(t.status).toBe("finished");
+    expect(t.steps.find((s) => s.index === 9)?.status).toBe("partial");
+    const logs = Object.fromEntries(
+      t.steps.map((s) => [s.programSetId, log({ status: s.status, durationSeconds: s.activeSeconds, distanceMeters: s.index === 7 ? 1900 : s.index === 8 ? 3800 : null, avgHr: s.index === 8 ? 176 : null })]),
+    );
+    expect(t.steps.find((s) => s.index === 8)?.status).toBe("done");
+    expect(runTestResult({ ...input({ plan: p, beltEvents: false }), logs, timing: t.steps })).toMatchObject({ lthr: 176, meters30: 5700 });
+    // Stopped inside the 20 min: no result.
+    const early = rideTimeline(p, [ev("start", 0), ev("pause", 2000), ev("end", 2010)], at(2100));
+    const earlyLogs = Object.fromEntries(early.steps.map((s) => [s.programSetId, log({ status: s.status, durationSeconds: s.activeSeconds, avgHr: 176 })]));
+    expect(runTestResult({ ...input({ plan: p, beltEvents: false }), logs: earlyLogs, timing: early.steps })).toBeNull();
   });
 
   it("outdoors the pace counts with no belt; with no distance it gives LTHR only", () => {
