@@ -147,8 +147,8 @@ export function runPushSchedule(plan: RidePlan, t: RideTimeline, now: number, op
     const b = blockOf(i);
     return !!b && steps[i].step.type === "work" && !steps.slice(i + 1).some((p) => p.run?.block === b && p.step.type === "work");
   };
-  // A block is one step, "Strides", as the step list shows it.
-  const name = (i: number) => (blockOf(i) ? "Strides" : runStepTitle(steps[i], th));
+  // The step that just ended: a stride is "Strides", as the step list names the block; the recovery after it is its own step.
+  const name = (i: number) => (blockOf(i) && steps[i].step.type === "work" ? "Strides" : runStepTitle(steps[i], th));
   const stepOf = (i: number) => `Step ${rows[i] + 1} of ${rowCount}`;
   // Active seconds at an alert's time: the run has no pause until then, as a pause rewrites the alerts.
   const brickEasyAt = (at: number) => !!opts.brick && t.activeSeconds + (at - now) / 1000 < BRICK_EASY_S;

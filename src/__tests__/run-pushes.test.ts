@@ -41,7 +41,8 @@ describe("runPushSchedule", () => {
       { sendAt: 3600, kind: "step", title: "13.0 km/h · Strides 6 × 30 s · 1 min 30 s easy between", body: "Step 3 of 4 · Steady done", stepIndex: 2 },
       // The end of the 6th stride: the recovery after it.
       { sendAt: 4230, kind: "step", title: "7.0 km/h · Easy · 1 min 30 s", body: "Step 3 of 4 · Strides done", stepIndex: 13 },
-      { sendAt: 4320, kind: "step", title: "5.5 km/h · Cool-down · 3 min", body: "Step 4 of 4 · Strides done", stepIndex: 14 },
+      // The recovery after the last stride ends: the step that just ended is named, not the block again.
+      { sendAt: 4320, kind: "step", title: "5.5 km/h · Cool-down · 3 min", body: "Step 4 of 4 · Easy done", stepIndex: 14 },
       { sendAt: 4440, kind: "minute_left", title: "1 min left · last step", body: "Step 4 of 4 · Cool-down", stepIndex: 14 },
       { sendAt: 4500, kind: "done", title: "Run done", body: "Step 4 of 4 · Cool-down done", stepIndex: 14 },
     ]);
@@ -69,6 +70,24 @@ describe("runPushSchedule", () => {
       [4320, "step", 14],
       [4440, "minute_left", 14],
       [4500, "done", 14],
+    ]);
+  });
+
+  it("a single skip inside the block: the run moves on to the next step of the block", () => {
+    // Skip stride 6 (4200 to 4230): its recovery runs from 4210 to 4300, so the 4230 alert goes.
+    const last = schedule(treadmill, [ev("skip", 4210, undefined, treadmill.steps[12].key)], 4211);
+    expect(last.map((r) => [r.sendAt, r.kind, r.stepIndex, r.body])).toEqual([
+      [4300, "step", 14, "Step 4 of 4 · Easy done"],
+      [4420, "minute_left", 14, "Step 4 of 4 · Cool-down"],
+      [4480, "done", 14, "Step 4 of 4 · Cool-down done"],
+    ]);
+    // Skip stride 3 (3840 to 3870) at 3850: the block's end and every alert after it come 20 s sooner.
+    const mid = schedule(treadmill, [ev("skip", 3850, undefined, treadmill.steps[6].key)], 3851);
+    expect(mid.map((r) => [r.sendAt, r.kind, r.stepIndex])).toEqual([
+      [4210, "step", 13],
+      [4300, "step", 14],
+      [4420, "minute_left", 14],
+      [4480, "done", 14],
     ]);
   });
 
@@ -159,9 +178,28 @@ describe("runPushSchedule", () => {
     expect(schedule(treadmill, [ev("end", 100)], 150)).toEqual([]);
   });
 
-  it("no colons or em dashes in any run alert", () => {
-    for (const plan of [treadmill, outdoor]) {
-      for (const s of [1, 3850]) for (const r of schedule(plan, [], s)) expect(`${r.title} ${r.body}`).not.toMatch(/[:—]/);
+  it("no punctuation colons or em dashes in any run alert; a colon inside a pace (5:36) is a number", () => {
+    const w = tree({
+      v: 2,
+      sport: "run",
+      name: "Intervals",
+      steps: [
+        { type: "warmup", end: { type: "time", seconds: 600 }, target: { metric: "hr", anchor: "lthr", zone: 1 } },
+        {
+          type: "repeat",
+          count: 4,
+          steps: [
+            { type: "work", end: { type: "time", seconds: 240 }, target: { metric: "pace", anchor: "threshold_pace", low: 96, high: 101 } },
+            { type: "recovery", end: { type: "time", seconds: 120 }, target: { metric: "rpe", anchor: "absolute", low: 2, high: 2 } },
+          ],
+        },
+      ],
+    });
+    const pace = buildRunPlan(w, ids(w), OWNER, "outdoor");
+    const paceRows = schedule(pace, [], 1);
+    expect(paceRows.some((r) => /\d:\d\d-\d:\d\d \/km/.test(r.title))).toBe(true);
+    for (const plan of [treadmill, outdoor, pace]) {
+      for (const s of [1, 3850]) for (const r of schedule(plan, [], s)) expect(`${r.title} ${r.body}`).not.toMatch(/(?<!\d):|:(?!\d)|—/);
     }
   });
 
