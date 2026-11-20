@@ -41,7 +41,7 @@ import { reanchoredPeaks } from "@/lib/utils/periodization";
 import { REP_RANGE_MESSAGE, repRangeIsWellFormed } from "@/lib/validators/workout";
 import { StepRowsError, settleStepRows } from "@/lib/program-steps-db";
 import { workoutToRows } from "@/lib/utils/program-steps";
-import { RIDE_TESTS, parseWorkout, programStepFieldsSchema, type Workout } from "@/lib/utils/workout-steps";
+import { RIDE_TESTS, inclinePercentSchema, parseWorkout, programStepFieldsSchema, type Workout } from "@/lib/utils/workout-steps";
 import { ftpTestWorkout } from "@/lib/utils/ftp-tests";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { and, asc, eq, inArray, isNull, or } from "drizzle-orm";
@@ -95,7 +95,7 @@ const setShape = z
     weightKg: z.number().nonnegative().max(9999).nullable().optional(),
     durationSeconds: z.number().int().positive().nullable().optional(),
     distanceMeters: z.number().int().positive().nullable().optional(),
-    inclinePercent: z.number().int().min(0).max(30).nullable().optional(),
+    inclinePercent: inclinePercentSchema.nullable().optional(),
     targetHeartRateZone: z.number().int().min(1).max(5).nullable().optional(),
     sessionRole: z.enum(["work"]).nullable().optional(),
     startDelaySeconds: z.number().int().min(0).max(60).nullable().optional(),

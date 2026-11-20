@@ -96,7 +96,7 @@ export async function stepLabels(userId: string, programExerciseId: number): Pro
   for (const { set } of rows) {
     const of = set.blockId != null ? rounds.get(set.blockId) : undefined;
     // The indoor targets: the main one (a target or a ramp) and its cap.
-    const step = stepOfRow(set as StepRow);
+    const step = stepOfRow(set as StepRow, sport);
     const main = step && resolveStepTarget(step, sport, anchors, units);
     const text = [main?.text, step?.target2 && resolveTarget(step.target2, sport, anchors, units).text].filter((t): t is string => !!t);
     out[set.id] = { title: `${KIND_WORD[set.stepKind!]}${of ? ` · ${set.blockRound}/${of}` : ""}`, target: text.length ? text.join(" · ") : null };

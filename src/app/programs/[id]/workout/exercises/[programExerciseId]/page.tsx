@@ -18,6 +18,7 @@ import { offersSaveTheRide, resultSteps, rideSummary } from "@/lib/utils/ride-re
 import { pushPublicKey } from "@/lib/push";
 import { getUserSettings } from "@/lib/user-settings";
 import { requireSession } from "@/lib/utils/session";
+import { rideTestOf } from "@/lib/utils/workout-steps";
 import { notFound } from "next/navigation";
 
 type Props = {
@@ -72,7 +73,7 @@ export default async function WorkoutExerciseSetsPage({ params, searchParams }: 
         />
       );
     }
-    const bike = await bikeExerciseView(user.id, peId, pe.exercise.name, sets, pe.rideTest);
+    const bike = await bikeExerciseView(user.id, peId, pe.exercise.name, sets, rideTestOf(pe.rideTest) ?? null);
     if (bike && hand === "1" && !bike.liveRide) {
       const byHand = await handResultsView(user.id, programId, pe.exercise.name, sets, mode === "outdoor" || mode === "indoor" ? mode : bike.defaultMode);
       if (byHand) {

@@ -170,11 +170,12 @@ describe("edit_program_exercise with bike steps", () => {
       [slots[0].programExerciseId, { workout: tree(step({ ramp: { anchor: "ftp", from: 50, to: 70 }, target: { metric: "power", anchor: "ftp", zone: 2 } })) }, "give a target or a ramp, not both"],
       [slots[0].programExerciseId, { workout: tree(step({ free: true, target: { metric: "power", anchor: "ftp", zone: 2 } })) }, "a free step has no target"],
       [runSlot.programExerciseId, { workout: { v: 2, sport: "run", name: "x", steps: [step({ ramp: { anchor: "ftp", from: 50, to: 70 } })] } }, "ramp is only for bike steps"],
-      [runSlot.programExerciseId, { workout: { v: 2, sport: "run", name: "x", test: "ramp", steps: [step({})] } }, "only for bike workouts"],
-      [runSlot.programExerciseId, { workout: { v: 2, sport: "run", name: "x", steps: [step({ outdoor: { metric: "rpe", anchor: "absolute", low: 3, high: 4 } })] } }, "outdoor is only for bike steps"],
+      [runSlot.programExerciseId, { workout: { v: 2, sport: "run", name: "x", test: "ramp", steps: [step({})] } }, "a run test is 30min"],
+      // A run takes an outdoor target now (docs/plans/run-logger.md, step 0); a bike takes no belt or incline.
+      [slots[0].programExerciseId, { workout: tree(step({ target: { metric: "power", anchor: "ftp", zone: 2 }, incline: 1 })) }, "incline is only for run steps"],
       [runSlot.programExerciseId, { sets: [{ setNumber: 1, stepKind: "work", durationSeconds: 600, free: true }] }, "free is only for bike steps"],
       // A bike tree sent to a run exercise is checked as the run it is stored as.
-      [runSlot.programExerciseId, { workout: tree(step({}), { test: "ramp" }) }, "only for bike workouts"],
+      [runSlot.programExerciseId, { workout: tree(step({}), { test: "ramp" }) }, "a run test is 30min"],
     ];
     for (const [id, body, reason] of cases) {
       const r = await write(id, body);

@@ -34,7 +34,7 @@ import {
 } from "@/lib/utils/progression";
 import type { ResultSource } from "@/db/schema/workout-sets";
 import { NUDGE_CAP_W, EXTEND_MAX_S } from "@/lib/utils/ride-timeline";
-import { RIDE_TESTS, programStepFieldsSchema } from "@/lib/utils/workout-steps";
+import { WORKOUT_TESTS, inclinePercentSchema, programStepFieldsSchema } from "@/lib/utils/workout-steps";
 import { z } from "zod";
 
 export const WORKOUT_FEELINGS = ["Tired", "OK", "Good", "Awesome"] as const;
@@ -110,7 +110,7 @@ export const logWorkoutSetSchema = z.object({
     .max(1000, "Weight must be under 1000kg"),
   durationSeconds: z.number().int().min(0).optional(),
   distanceMeters: z.number().int().min(0).nullable().optional(),
-  inclinePercent: z.number().int().min(0).max(30).optional(),
+  inclinePercent: inclinePercentSchema.optional(),
   heartRateZone: z.number().int().min(1).max(5).optional(),
   // Reps In Reserve — the primary effort input (0 = to failure, 5 = 5+ left).
   // When present, the server derives rpe from it (rpe = clamp(10 - rir, 1, 10)).
@@ -431,7 +431,7 @@ const programSetFields = z.object({
   weightKg: z.number().min(0).max(1000).optional(),
   durationSeconds: z.number().int().min(0).optional(),
   distanceMeters: z.number().int().min(0).optional(),
-  inclinePercent: z.number().int().min(0).max(30).optional(),
+  inclinePercent: inclinePercentSchema.optional(),
   targetHeartRateZone: z.number().int().min(1).max(5).optional(),
   restTimeSeconds: z.number().int().min(0).max(3600).default(0),
   setType: z.enum(SET_TYPES).default("working"),
@@ -647,7 +647,7 @@ const importProgramEntrySchema = z.object({
             }),
           ),
           poolM: z.number().min(10).max(100).optional().catch(undefined),
-          rideTest: z.enum(RIDE_TESTS).optional().catch(undefined),
+          rideTest: z.enum(WORKOUT_TESTS).optional().catch(undefined),
         }),
       )
       .max(50),

@@ -22,7 +22,7 @@ import { RAMP_FTP_FACTOR, thresholdRangeError } from "@/lib/utils/thresholds";
 import { FTP_FACTOR } from "@/lib/garmin/analytics/trends";
 import type { StepLog } from "@/lib/utils/ride-results";
 import type { RidePlan, RidePlanStep } from "@/lib/utils/ride-timeline";
-import type { RideTest, Workout, WorkoutStep } from "@/lib/utils/workout-steps";
+import { rideTestOf, type RideTest, type Workout, type WorkoutStep, type WorkoutTest } from "@/lib/utils/workout-steps";
 
 export const TEST_NAME: Record<RideTest, string> = { ramp: "Ramp test", "20min": "20 min test" };
 
@@ -72,7 +72,7 @@ export function rampEffort(i: number, n: number): number {
 }
 
 /** In a ramp test, a work step is one of the 1 min steps: Lap or End ride on it ends the test. */
-export function isRampTestStep(test: RideTest | undefined, step: Pick<RidePlanStep, "step">): boolean {
+export function isRampTestStep(test: WorkoutTest | undefined, step: Pick<RidePlanStep, "step">): boolean {
   return test === "ramp" && step.step.type === "work";
 }
 
@@ -107,11 +107,11 @@ export type FtpTestResult = {
  * estimate. A 20 min test needs its all-out step done.
  */
 export function ftpTestResult(
-  plan: Pick<RidePlan, "steps"> & { test?: RideTest },
+  plan: Pick<RidePlan, "steps"> & { test?: WorkoutTest },
   logs: Record<number, Pick<StepLog, "status" | "avgPower">>,
   stream: TestStreamPower | null = null,
 ): FtpTestResult | null {
-  const test = plan.test;
+  const test = rideTestOf(plan.test);
   if (!test) return null;
   let power: number | null = null;
   let basis: FtpTestResult["basis"] = "typed";
@@ -160,15 +160,16 @@ export type FtpTestView = {
 
 /** What the summary and get_ride show of a test ride; null when the ride is no test. `saved` is false until the server checks the rows. */
 export function ftpTestView(
-  plan: Pick<RidePlan, "steps"> & { test?: RideTest },
+  plan: Pick<RidePlan, "steps"> & { test?: WorkoutTest },
   logs: Record<number, Pick<StepLog, "status" | "avgPower">>,
   stream: TestStreamPower | null,
   currentFtp: number | null,
 ): FtpTestView | null {
-  if (!plan.test) return null;
+  const test = rideTestOf(plan.test);
+  if (!test) return null;
   const result = ftpTestResult(plan, logs, stream);
   const current = currentFtp != null ? Math.round(currentFtp) : null;
-  return { test: plan.test, result, currentFtp: current, saved: false };
+  return { test, result, currentFtp: current, saved: false };
 }
 
 /** The threshold field test a test ride saves as: its protocol and the input it takes. */

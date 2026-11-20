@@ -52,15 +52,15 @@ describe("the step schema", () => {
       sport: "run",
       name: "Run",
       test: "ramp",
-      steps: [{ type: "work", end: { type: "lap" }, ramp: { anchor: "ftp", from: 50, to: 70 }, free: true, outdoor: OUTDOOR }],
+      steps: [{ type: "work", end: { type: "lap" }, ramp: { anchor: "ftp", from: 50, to: 70 }, free: true }],
     });
     expect(!run.ok && run.errors.map((e) => `${e.path} ${e.message}`)).toEqual(
-      expect.arrayContaining([
-        "test only for bike workouts",
-        "steps[0].ramp ramp is only for bike steps",
-        "steps[0].free free is only for bike steps",
-        "steps[0].outdoor outdoor is only for bike steps",
-      ]),
+      expect.arrayContaining(["test a run test is 30min", "steps[0].ramp ramp is only for bike steps", "steps[0].free free is only for bike steps"]),
+    );
+    // A run takes an outdoor target and the run test (docs/plans/run-logger.md, step 0); a swim takes neither.
+    const swim = parseWorkout({ v: 2, sport: "swim", name: "Swim", test: "30min", steps: [{ type: "work", end: { type: "lap" }, outdoor: OUTDOOR }] });
+    expect(!swim.ok && swim.errors.map((e) => `${e.path} ${e.message}`)).toEqual(
+      expect.arrayContaining(["test only for bike and run workouts", "steps[0].outdoor outdoor is only for bike and run steps"]),
     );
   });
 

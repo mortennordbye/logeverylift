@@ -72,7 +72,7 @@ export async function plannedStepSnapshot(ex: Executor, programSetId: number, us
     .innerJoin(exercises, eq(exercises.id, programExercises.exerciseId))
     .where(eq(programSets.id, programSetId));
   if (!row?.discipline) return null;
-  const step = stepOfRow(row.set as StepRow);
+  const step = stepOfRow(row.set as StepRow, row.discipline);
   if (!step) return null;
   const { thresholdValues } = await import("@/lib/session-compliance");
   return { v: 2, sport: row.discipline, step, blockId: row.set.blockId, blockRound: row.set.blockRound, thresholds: await thresholdValues(userId) };
@@ -109,7 +109,6 @@ export async function replaceExerciseSteps(tx: Tx, programExerciseId: number, wo
       weightKg: null,
       targetRir: null,
       startDelaySeconds: null,
-      inclinePercent: null,
       targetHeartRateZone: null,
       setType: "working",
       // The tree has no rest after a step (a rest is a step of its own), so the
@@ -214,7 +213,6 @@ async function plainBikeSetsToSteps(tx: Tx, programExerciseId: number, slot: Bik
       weightKg: null,
       targetRir: null,
       startDelaySeconds: null,
-      inclinePercent: null,
       targetHeartRateZone: null,
       setType: "working",
       // The rest is a step of its own now; the workout screen would add the row's too.

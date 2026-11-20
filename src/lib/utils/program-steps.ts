@@ -52,6 +52,9 @@ export type StepRow = {
   ramp: unknown;
   free: boolean;
   outdoorTarget: unknown;
+  // Run only (docs/plans/run-logger.md, step 0): a treadmill step's incline in % and its belt in km/h.
+  inclinePercent: number | null;
+  beltKmh: number | null;
 };
 
 /** The step fields of a row, as written: everything StepRow has except id and setNumber. */
@@ -75,6 +78,8 @@ export const EMPTY_STEP_FIELDS: StepFields = {
   ramp: null,
   free: false,
   outdoorTarget: null,
+  inclinePercent: null,
+  beltKmh: null,
 };
 
 /** The program_sets columns that make a row a step, for every path that copies sets field by field. */
@@ -93,6 +98,7 @@ export const STEP_FIELD_KEYS = [
   "ramp",
   "free",
   "outdoorTarget",
+  "beltKmh",
 ] as const satisfies readonly (keyof StepFields)[];
 
 /** The step columns of a row (the end columns are copied with the set's own fields). */
@@ -118,8 +124,12 @@ function targetsOf(r: StepRow): { target?: WorkoutTarget; target2?: WorkoutTarge
   };
 }
 
-/** One row as a tree step. Problems with the end are returned, not thrown. */
-function rowStep(r: StepRow): { step: WorkoutStep } | { problem: string } {
+/**
+ * One row as a tree step. Problems with the end are returned, not thrown. A
+ * row's incline and belt are run step fields; another sport's row keeps its
+ * incline to itself, as it did before steps had one.
+ */
+function rowStep(r: StepRow, sport: WorkoutSport | null): { step: WorkoutStep } | { problem: string } {
   const ends = [r.endsOnLap, r.durationSeconds != null && r.durationSeconds > 0, r.distanceMeters != null && r.distanceMeters > 0].filter(Boolean).length;
   if (ends !== 1) return { problem: "give exactly one end: time, distance or lap" };
   const end: WorkoutStep["end"] = r.endsOnLap
@@ -139,15 +149,17 @@ function rowStep(r: StepRow): { step: WorkoutStep } | { problem: string } {
     ...(r.ramp != null && { ramp: r.ramp as WorkoutRamp }),
     ...(r.free && { free: true as const }),
     ...(r.outdoorTarget != null && { outdoor: r.outdoorTarget as WorkoutTarget }),
+    ...(sport === "run" && r.inclinePercent != null && { incline: r.inclinePercent }),
+    ...(sport === "run" && r.beltKmh != null && { belt: r.beltKmh }),
   };
   if ((r.cadenceLow == null) !== (r.cadenceHigh == null)) return { problem: "give both cadence bounds" };
   return { step };
 }
 
-/** One step row as a tree step, or null when its end is broken. */
-export function stepOfRow(r: StepRow): WorkoutStep | null {
+/** One step row as a tree step, or null when its end is broken. `sport` is the exercise's: only a run step reads incline and belt. */
+export function stepOfRow(r: StepRow, sport: WorkoutSport | null = null): WorkoutStep | null {
   if (r.stepKind == null) return null;
-  const s = rowStep(r);
+  const s = rowStep(r, sport);
   return "step" in s ? s.step : null;
 }
 
@@ -197,7 +209,7 @@ export function buildWorkout(
     }
     if (r.blockId == null) {
       if (r.blockRound != null) problems.push({ setNumber: r.setNumber, message: "a round needs a block" });
-      const s = rowStep(r);
+      const s = rowStep(r, meta.sport);
       if ("problem" in s) problems.push({ setNumber: r.setNumber, message: s.problem });
       else {
         nodes.push(s.step);
@@ -237,14 +249,14 @@ export function buildWorkout(
     const first = rounds.get(1) ?? [];
     const firstSteps: WorkoutStep[] = [];
     for (const x of first) {
-      const s = rowStep(x);
+      const s = rowStep(x, meta.sport);
       if ("problem" in s) problems.push({ setNumber: x.setNumber, message: s.problem });
       else firstSteps.push(s.step);
     }
     for (const [n, list] of rounds) {
       if (n === 1) continue;
       const same = list.length === first.length && list.every((x, k) => {
-        const s = rowStep(x);
+        const s = rowStep(x, meta.sport);
         return "step" in s && firstSteps[k] !== undefined && sameStep(s.step, firstSteps[k]);
       });
       if (!same) problems.push({ setNumber: list[0].setNumber, message: `round ${n} of the repeat block differs from round 1` });
@@ -337,6 +349,8 @@ export function workoutToRows(w: Workout): (StepFields & { setNumber: number })[
     ramp: s.ramp ?? null,
     free: s.free ?? false,
     outdoorTarget: s.outdoor ?? null,
+    inclinePercent: s.incline ?? null,
+    beltKmh: s.belt ?? null,
   });
   let block = 0;
   for (const n of w.steps) {
