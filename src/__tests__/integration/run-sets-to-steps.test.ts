@@ -85,7 +85,7 @@ describe("migrateRunSetsToSteps", () => {
     expect(rows.map((r) => [r.setNumber, r.stepKind, r.durationSeconds, r.distanceMeters, r.targets, r.inclinePercent, r.restTimeSeconds, r.targetHeartRateZone])).toEqual([
       [1, "warmup", 600, null, [z(1)], 1, 0, null],
       [2, "rest", 60, null, null, null, 0, null],
-      [3, "work", 1500, null, [{ metric: "pace", anchor: "absolute", low: 3.267, high: 3.4 }, z(2)], null, 0, null],
+      [3, "work", 1500, null, [z(2), { metric: "pace", anchor: "absolute", low: 3.267, high: 3.4 }], null, 0, null],
       [4, "rest", 90, null, null, null, 0, null],
       [5, "work", null, 1000, [z(4)], null, 0, null],
       [6, "rest", 120, null, null, null, 0, null],
@@ -170,6 +170,53 @@ describe("migrateRunSetsToSteps", () => {
     expect(rep.targetHeartRateZone).toBeNull();
     expect(rows.every((r) => r.restTimeSeconds === 0)).toBe(true);
     expect([rows[5].stepKind, rows[5].durationSeconds]).toEqual(["rest", recipe.restSeconds]);
+  });
+});
+
+describe("step 1 review fixes", () => {
+  const cycleFor = async (programId: number) => {
+    const [c] = await db.insert(trainingCycles).values({ userId: me, name: "Block", durationWeeks: 8, status: "active", startDate: "2026-11-02", goal: "build" }).returning();
+    await db.insert(trainingCycleSlots).values({ trainingCycleId: c.id, dayOfWeek: 2, programId });
+    await syncPeriodizedTargets(c.id, me, [{ programId }], 6, 8, "build", "intermediate");
+  };
+  const recipe = () => intervalPhaseRecipe(cycleLoad({ goal: "build", athleteLevel: "intermediate" }, 6, 8).phase);
+
+  it("the weekly sync moves the zone of a tempo set with time and distance", async () => {
+    const { program, slots } = await createProgram(me, [
+      { exerciseId: run, sets: [{ targetReps: null, weightKg: null, durationSeconds: 1200, distanceMeters: 4000, targetHeartRateZone: 4, sessionRole: "work", peakDurationSeconds: 1200, restTimeSeconds: 0 }] },
+    ]);
+    await migrateRunSetsToSteps();
+    await cycleFor(program.id);
+    const [tempo] = await liveSets(slots[0].programExerciseId);
+    expect((tempo.targets as { zone?: number }[])[0]).toEqual(z(recipe().zone));
+  });
+
+  it("a run slot that already held steps with a rest on a row gets a rest step the sync fills", async () => {
+    const { program, slots } = await createProgram(me, [
+      {
+        exerciseId: run,
+        sets: [
+          { targetReps: null, weightKg: null, stepKind: "work", durationSeconds: 300, targets: [z(4)], sessionRole: "work", peakDurationSeconds: 300, restTimeSeconds: 120 },
+          { targetReps: null, weightKg: null, stepKind: "recovery", durationSeconds: 600, targets: [z(1)], restTimeSeconds: 0 },
+        ],
+      },
+    ]);
+    await migrateRunSetsToSteps();
+    await cycleFor(program.id);
+    const rows = await liveSets(slots[0].programExerciseId);
+    expect(rows.map((r) => [r.stepKind, r.restTimeSeconds])).toEqual([
+      ["work", 0],
+      ["rest", 0],
+      ["recovery", 0],
+    ]);
+    expect(rows[1].durationSeconds).toBe(recipe().restSeconds);
+  });
+
+  it("a slot no step can hold stays plain and does not count as moved", async () => {
+    const { slots } = await createProgram(me, [{ exerciseId: run, sets: [{ targetReps: null, weightKg: null, durationSeconds: 13 * 3600, restTimeSeconds: 0 }] }]);
+    expect((await migrateRunSetsToSteps()).moved).toBe(0);
+    expect((await migrateRunSetsToSteps()).moved).toBe(0);
+    expect((await liveSets(slots[0].programExerciseId))[0].stepKind).toBeNull();
   });
 });
 

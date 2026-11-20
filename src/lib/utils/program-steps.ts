@@ -392,8 +392,8 @@ const PLAIN_RUN_PACE_BAND = 0.02;
  *
  * A run (docs/plans/run-logger.md, step 1): a set with time and distance ends
  * on its time, unless its anchor is the distance alone, and gets the pace of
- * distance over time as its target, the zone as its cap. Its incline becomes
- * the step's incline.
+ * distance over time as a target: the second one when the set has a zone,
+ * which stays the main target. Its incline becomes the step's incline.
  */
 export function plainSetsToWorkout(sets: PlainEnduranceSet[], meta: { sport: WorkoutSport; name: string; poolLengthM?: number | null }): Workout {
   const steps: WorkoutStep[] = [...sets]
@@ -419,7 +419,9 @@ export function plainSetsToWorkout(sets: PlainEnduranceSet[], meta: { sport: Wor
         speed != null && speed >= 0.3 && speed <= 12
           ? { metric: "pace", anchor: "absolute", low: round3(Math.max(0.3, speed * (1 - PLAIN_RUN_PACE_BAND))), high: round3(Math.min(12, speed * (1 + PLAIN_RUN_PACE_BAND))) }
           : undefined;
-      const [target, target2] = pace ? [pace, zoneTarget] : [zoneTarget, undefined];
+      // The zone stays the main target, so the weekly sync still moves it and
+      // the limits judge it; the set's own pace is the second target.
+      const [target, target2] = zoneTarget ? [zoneTarget, pace] : [pace, undefined];
       const incline = run && s.inclinePercent != null ? s.inclinePercent : undefined;
       return { type, end, ...(target && { target }), ...(target2 && { target2 }), ...(incline !== undefined && { incline }) };
     });

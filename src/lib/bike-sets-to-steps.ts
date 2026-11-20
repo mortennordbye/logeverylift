@@ -20,7 +20,7 @@ import { exercises, planRevisions, programExercises, programSets, programs, user
 import { liveProgramExercises, liveProgramSets, livePrograms } from "@/lib/plan-live";
 import { planWrite } from "@/lib/plan-revisions";
 import { recentOpenWorkoutOn, settleStepRows } from "@/lib/program-steps-db";
-import { and, eq, isNull, notExists } from "drizzle-orm";
+import { and, eq, gt, isNull, notExists, or } from "drizzle-orm";
 
 export const BIKE_STEPS_REASON = "Bike sets became steps";
 export const RUN_STEPS_REASON = "Run sets became steps";
@@ -46,7 +46,9 @@ async function migrateSetsToSteps(sport: "bike" | "run", opts: { userId?: string
         eq(users.enduranceEnabled, true),
         opts.userId ? eq(users.id, opts.userId) : undefined,
         eq(exercises.discipline, sport),
-        isNull(programSets.stepKind),
+        // A run also moves the rest on a row of a slot that already held steps
+        // (run-logger, step 1), so the weekly sync finds its rest step.
+        sport === "run" ? or(isNull(programSets.stepKind), gt(programSets.restTimeSeconds, 0)) : isNull(programSets.stepKind),
         notExists(
           db
             .select({ id: planRevisions.id })
@@ -76,10 +78,12 @@ async function migrateSetsToSteps(sport: "bike" | "run", opts: { userId?: string
           .from(programExercises)
           .innerJoin(exercises, eq(exercises.id, programExercises.exerciseId))
           .where(and(eq(programExercises.programId, programId), liveProgramExercises, eq(exercises.discipline, sport)));
-        for (const s of slots) await settleStepRows(w.tx, s.id);
-        return true;
+        let changed = false;
+        for (const s of slots) changed = (await settleStepRows(w.tx, s.id)) || changed;
+        return changed ? "moved" : "left";
       });
-      counts[result ? "moved" : "waiting"]++;
+      // A program whose slots no step can hold is left plain: not moved, and read again next boot.
+      if (result !== "left") counts[result ? "moved" : "waiting"]++;
     } catch (err) {
       counts.failed++;
       console.error(`${tag} program failed`, { programId, error: err instanceof Error ? err.message : "unknown" });

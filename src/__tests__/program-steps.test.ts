@@ -210,9 +210,10 @@ describe("plainSetsToWorkout", () => {
       ],
       { sport: "run", name: "Run" },
     );
-    // 5000 m in 25 min is 3.333 m/s, as a range 2% each side; the zone stays as the cap.
+    // 5000 m in 25 min is 3.333 m/s, as a range 2% each side. The zone stays the main target, so the
+    // weekly sync still moves it and the limits judge it; the pace is the second target.
     expect(w.steps).toEqual([
-      { type: "work", end: { type: "time", seconds: 1500 }, target: { metric: "pace", anchor: "absolute", low: 3.267, high: 3.4 }, target2: { metric: "hr", anchor: "lthr", zone: 2 } },
+      { type: "work", end: { type: "time", seconds: 1500 }, target: { metric: "hr", anchor: "lthr", zone: 2 }, target2: { metric: "pace", anchor: "absolute", low: 3.267, high: 3.4 } },
       { type: "work", end: { type: "time", seconds: 1200 }, target: { metric: "pace", anchor: "absolute", low: 2.45, high: 2.55 } },
     ]);
     expect(parseWorkout(w).ok).toBe(true);
@@ -222,6 +223,13 @@ describe("plainSetsToWorkout", () => {
     const { plainSetsToWorkout } = await import("@/lib/utils/program-steps");
     const w = plainSetsToWorkout([{ setNumber: 1, distanceMeters: 10000, durationSeconds: 3600, peakDistanceMeters: 10000, targetHeartRateZone: null, sessionRole: null }], { sport: "run", name: "Run" });
     expect(w.steps[0]).toMatchObject({ end: { type: "distance", meters: 10000 }, target: { metric: "pace", anchor: "absolute" } });
+  });
+
+  it("a zone 4 tempo with time and distance stays hard with no threshold pace", async () => {
+    const { plainSetsToWorkout } = await import("@/lib/utils/program-steps");
+    const { isHardWorkout } = await import("@/lib/utils/workout-steps");
+    const tempo = { setNumber: 1, distanceMeters: 4000, durationSeconds: 1200, targetHeartRateZone: 4, sessionRole: "work" };
+    expect(isHardWorkout(plainSetsToWorkout([tempo], { sport: "run", name: "Run" }), {})).toBe(true);
   });
 
   it("a run set's incline becomes the step's incline; a ride ignores it", async () => {
