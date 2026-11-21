@@ -159,14 +159,16 @@ function TargetCard({ s, compact = false }: { s: RideScreen; compact?: boolean }
 }
 
 /**
- * "Work · 1 of 2 · 15 min" that wraps only between its parts, each part with
- * the dot before it, so a narrow phone never leaves "min" alone on a line.
+ * "Work · 1 of 2 · 15 min" that wraps only between its parts, each dot kept
+ * with the part before it, so a narrow phone never leaves "min" alone on a
+ * line and no line starts with a dot (as on the Plan screens).
  */
 export function DotParts({ text }: { text: string }) {
-  return text.split(" · ").map((p, i) => (
+  const parts = text.split(" · ");
+  return parts.map((p, i) => (
     <span key={i}>
       {i > 0 && " "}
-      <span className="whitespace-nowrap">{i > 0 ? `· ${p}` : p}</span>
+      <span className="whitespace-nowrap">{i < parts.length - 1 ? `${p} ·` : p}</span>
     </span>
   ));
 }

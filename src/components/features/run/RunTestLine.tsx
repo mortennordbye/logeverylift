@@ -63,12 +63,12 @@ export function RunTestLine({ rideId, test }: { rideId: number; test: RunTestVie
             "Choose the new values"
           ) : (
             <>
-              New {r.speed !== null && <>threshold pace <span className="whitespace-nowrap">{pace(r.speed)}</span></>}
+              {/* The dot stays with the pace before it, so a wrap never starts a line with it (as on the Plan screens). */}
+              New {r.speed !== null && <>threshold pace <span className="whitespace-nowrap">{`${pace(r.speed)}${r.lthr !== null ? " ·" : ""}`}</span></>}
               {r.lthr !== null && (
                 <>
                   {r.speed !== null && " "}
-                  {/* The dot stays with LTHR, so a wrap never leaves it at the end of a line. */}
-                  <span className="whitespace-nowrap">{`${r.speed !== null ? "· " : ""}LTHR ${r.lthr}`}</span>
+                  <span className="whitespace-nowrap">LTHR {r.lthr}</span>
                 </>
               )}
             </>
