@@ -109,8 +109,12 @@ export function rideScreen(plan: RidePlan, t: RideTimeline, units: Units = DEFAU
   // The Next card stays one line: the target without its words.
   const next = after ? { title: `${after.title} · ${after.time}`, target: after.target?.replace(/ · easy spin$/, "") ?? null } : { title: "Finish", target: null };
 
-  // The chart gives each step its width; the bars here are its height in a small strip.
-  const chart = rideChart(plan);
+  // The chart gives each step its width, with the +1 min of each step taken so far, so the strip matches the total.
+  const extended = new Map(t.steps.map((r) => [r.index, r.extendedSeconds]));
+  extended.set(cur.index, cur.extendedSeconds);
+  const drawn: RidePlan = { ...plan, steps: plan.steps.map((p, i) => (p.seconds !== null && extended.get(i) ? { ...p, seconds: p.seconds + extended.get(i)! } : p)) };
+  // The bars here are its height in a small strip.
+  const chart = rideChart(drawn);
   const bars = chart.bars.map((b, i) => ({ key: b.key, x: b.x, w: b.w, h: Math.max(4, 100 - Math.min(b.y, b.y2)), current: i === cur.index }));
   const b = chart.bars[cur.index];
   const length = s.seconds !== null ? s.seconds + cur.extendedSeconds : s.estSeconds;
