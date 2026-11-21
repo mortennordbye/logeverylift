@@ -35,7 +35,7 @@ export function ConsentChecks({ value, onChange }: { value: ConsentState; onChan
           onChange={(e) => onChange({ ...value, healthData: e.target.checked })}
         />
         <span>
-          I consent to LogEveryLift storing my training and body data, such as body weight, heart rate zones,
+          I consent to LogEveryLift storing my training and body data, such as body weight, body measurements, heart rate zones,
           readiness, injuries, sick periods, gut symptoms after fueled sessions, sweat tests and notes, which can say
           something about my health.
         </span>

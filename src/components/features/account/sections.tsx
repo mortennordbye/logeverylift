@@ -52,6 +52,7 @@ import { setAiConsent } from "@/lib/actions/legal";
 import { setGarminSync, takeGarminField } from "@/lib/actions/garmin";
 import { showGarminSays, sourceLine, type FieldSource, type SyncedField } from "@/lib/utils/field-sources";
 import type { Goal } from "@/lib/utils/goals";
+import { formatDateShort } from "@/lib/utils/format";
 import { STRENGTH_GOAL_LABEL } from "@/lib/utils/strength-goal";
 import { THRESHOLD_LABEL, currentThresholds, formatThreshold, thresholdWarnings } from "@/lib/utils/thresholds";
 import type { Units } from "@/lib/utils/units";
@@ -71,6 +72,8 @@ export type AccountData = {
   birthYear: number | null;
   heightCm: number | null;
   weightKg: number | null;
+  /** The date of the latest body measurement, or null. */
+  lastMeasuredOn: string | null;
   /** Premium with Garmin enabled: the only users who see Garmin text. */
   premium: boolean;
   /** null hides the Garmin section: not Premium, or Garmin not connected. */
@@ -252,6 +255,12 @@ export const SECTIONS: Section[] = [
         value: (d) => (d.weightKg != null ? `${d.weightKg} kg` : notSet),
         note: (d) => (d.premium && d.weightSource ? sourceLine(d.weightSource) : null),
         editor: (d, done) => <NumberStep field="weightKg" label="Body weight" initial={d.weightKg} unit="kg" placeholder="80" onSaved={done} />,
+      },
+      {
+        id: "measurements",
+        label: "Measurements",
+        value: (d) => (d.lastMeasuredOn ? formatDateShort(d.lastMeasuredOn) : notSet),
+        href: "/more/account/measurements",
       },
       {
         id: "injuries",

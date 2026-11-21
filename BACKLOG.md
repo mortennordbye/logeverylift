@@ -28,6 +28,18 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** The run logger being live, then the owner asking for one of them.
 - **Touchpoints:** `src/lib/utils/discipline.ts` (units), `src/lib/garmin/fit.ts` (run dynamics streams), `src/lib/mcp/tools/endurance-app.ts` (fuel), the run exercise screens the brief adds.
 
+### Body measurements in inches
+- **What:** Show and type body measurements in inches for users who chose miles (`user.distanceUnit` `mi`): the summary, the log steps (the − 0.5 and + 0.5 buttons become a quarter inch), the part page, the Done screen and the length field. Store cm as now and convert on read and write.
+- **Why deferred:** Decision 14 of docs/plans/body-measurements.md: cm only in the first build.
+- **Unblocked by:** Nothing. Decide the step size and rounding for inches.
+- **Touchpoints:** `src/lib/utils/body-measurements.ts` (`formatCm`, `formatChange`), `src/components/features/measurements/` (all three clients), `src/lib/actions/body-measurements.ts` (stays in cm), `src/lib/utils/units.ts`.
+
+### The AI coach (MCP) reading body measurements
+- **What:** An MCP tool that reads the user's body measurements and the ratios (and maybe writes a log on the user's instruction), so the coach can use waist and body fat trends.
+- **Why deferred:** Decision 14 of docs/plans/body-measurements.md: no MCP tools in the first build.
+- **Unblocked by:** The owner's go, then the `privacy-compliance` skill: the inventory and the policy now say a connected assistant cannot read measurements, so both change with the tool.
+- **Touchpoints:** `src/lib/mcp/tools/` (a new tool beside `profile.ts`), `src/lib/mcp/scopes.ts`, `src/lib/actions/body-measurements.ts`, `src/lib/utils/body-measurements.ts` (`bodyRatios`), `docs/privacy/data-inventory.md`, `src/app/privacy/page.tsx`.
+
 ### Ride GPS track and map from Garmin
 - **What:** Show an outdoor ride's track on a map in its summary, from the Garmin activity the fill matched (the stream holds `lat` and `lng`).
 - **Why deferred:** Section 7 of docs/plans/bike-ride-logger.md: out of scope for this build.

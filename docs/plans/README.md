@@ -28,6 +28,7 @@ when the brief was written.
 | 7 | [Web push and reminders](web-push-and-reminders.md) | todo | yes | yes (rest timer) |
 | 8 | [Garmin deep data](garmin-deep-data.md) | phase 1 merged to main (#208, #215) | yes | no |
 | 9 | [MCP access: scopes, revoke, instructions, resources](mcp-access.md) (endurance plan B2, B3) | done | data migration only | no |
+| 10 | [Body measurements](body-measurements.md) | done | yes | no |
 | 10 | [Home screen widgets](../home-widgets-audit.md) (audit, catalogue and build brief; section 6 is the brief, one PR) | phases 1a and 1b built (registry, edit mode, Recent PRs, Friends' activity, Garmin readiness); locked redesign and phase 2 widgets built (Streak, Body weight, Training load, Weekly sets, Race countdown); other phase 2 widgets todo | yes | yes (home start entries) |
 | 11 | [Back navigation](back-navigation.md) (Back goes where you came from) | done (#238) | no | yes (set pages' Back) |
 | 12 | [Plan tab redesign](plan-tab-redesign.md) (Cycles becomes Plan; four packages) | done (#247) | no | no |

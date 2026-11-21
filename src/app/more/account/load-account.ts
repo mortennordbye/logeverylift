@@ -2,7 +2,7 @@ import type { AccountData } from "@/components/features/account/sections";
 import { parseUserGoals } from "@/lib/utils/goals";
 import { db } from "@/db";
 import { users } from "@/db/schema/users";
-import { garminConnections } from "@/db/schema";
+import { bodyMeasurements, garminConnections } from "@/db/schema";
 import { getThresholdsData } from "@/lib/actions/athlete-profile";
 import { getAthleteProfile, listDeletedInjuries, listInjuries } from "@/lib/athlete-profile";
 import { enduranceEnabledFor } from "@/lib/endurance";
@@ -14,7 +14,7 @@ import { addDaysStr } from "@/lib/utils/seasons";
 import { CONSISTENCY_WEEKS, consistency, mondayOf } from "@/lib/utils/session-compliance";
 import { requireSession } from "@/lib/utils/session";
 import { DEFAULT_UNITS } from "@/lib/utils/units";
-import { eq } from "drizzle-orm";
+import { eq, max } from "drizzle-orm";
 
 import { garminAllowed } from "@/lib/garmin/access";
 import { garminProfile } from "@/lib/garmin/sync-from-garmin";
@@ -27,7 +27,7 @@ export async function loadAccountData() {
   const userId = session.user.id;
   // Every Garmin line and switch is for Premium users only; the switch also needs a connection.
   const premium = garminAllowed(session.user.role);
-  const [user, [garmin], endurance, today, numbers, weight, garminData] = await Promise.all([
+  const [user, [garmin], endurance, today, numbers, weight, garminData, [measured]] = await Promise.all([
     db.query.users.findFirst({ where: eq(users.id, userId) }),
     premium
       ? db.select({ syncFromGarmin: garminConnections.syncFromGarmin }).from(garminConnections).where(eq(garminConnections.userId, userId))
@@ -37,6 +37,7 @@ export async function loadAccountData() {
     getThresholdsData(),
     premium ? weightSource(userId) : null,
     premium ? garminProfile(userId) : null,
+    db.select({ on: max(bodyMeasurements.measuredOn) }).from(bodyMeasurements).where(eq(bodyMeasurements.userId, userId)),
   ]);
   const monday = mondayOf(today);
   // The athlete rows show only with the endurance switch on (D18).
@@ -75,6 +76,7 @@ export async function loadAccountData() {
       birthYear: user?.birthYear ?? null,
       heightCm: user?.heightCm ?? null,
       weightKg: user?.weightKg ?? null,
+      lastMeasuredOn: measured?.on ?? null,
       premium,
       garminSync: garmin ? garmin.syncFromGarmin : null,
       weightSource: weight,
