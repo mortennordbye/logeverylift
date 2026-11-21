@@ -368,7 +368,8 @@ export function runSummary(plan: RidePlan, logs: Record<number, RunStepLog>, opt
   // A load that rounds to 0 (a run of seconds) says nothing.
   if (numbers.load && Math.round(numbers.load.value) > 0) tiles.push({ label: "Load", value: `${Math.round(numbers.load.value)}`, est: true });
   if (stream?.drift) tiles.push({ label: "Drift", value: `${Math.round(stream.drift.pct)}%`, ...(stream.drift.steady && { sub: "steady" }) });
-  if (effort !== null) tiles.push({ label: "Effort", value: `${effort}` });
+  // The mockup's six tiles end in Drift; Effort stands in for it until the stream brings Drift, so a row is never one tile alone.
+  if (effort !== null && !stream?.drift) tiles.push({ label: "Effort", value: `${effort}` });
 
   const rowOf = runRowOfStep(plan);
   const rows: RunSummaryRow[] = [];

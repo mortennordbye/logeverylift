@@ -165,6 +165,15 @@ describe("the summary", () => {
     expect(runSummary(plan, logs, { beltEvents: true }).planOnly).toBe(false);
   });
 
+  it("with Drift from the stream the tiles are the mockup's six: Effort makes way", () => {
+    const stream = {
+      numbers: { seconds: 4500, gapSPerKm: null, intensityFactor: null, load: null, hrZoneMinutes: [10, 20, 0, 0, 0], drift: { pct: 3.2, steady: true, efFirst: 0.016, efSecond: 0.0155 }, onTarget: {}, timeOnTarget: null },
+      chart: null,
+    };
+    const s = runSummary(plan, ranLogs(), { beltEvents: true, stream });
+    expect(s.tiles.map((t) => t.label)).toEqual(["Time", "Distance", "Pace", "Avg HR", "Load", "Drift"]);
+  });
+
   it("a run too short for a pace load, with a distance and no effort, asks only for the effort", () => {
     const s = runSummary(plan, { 100: log(80, 8.2, { rpe: null }) }, { beltEvents: true });
     expect(s.numbers.load).toBeNull();
