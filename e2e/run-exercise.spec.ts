@@ -76,7 +76,7 @@ test("an endurance user's run exercise shows the run, changes mode and surface, 
   await expect(page.getByTestId("run-summary")).toHaveText("75 min · load about 70 · threshold 5:39 /km");
   await expect(page.getByTestId("ride-profile")).toBeVisible();
   await expect(page.getByTestId("run-stats")).toContainText("10.1");
-  await expect(page.getByTestId("run-step-detail")).toHaveText(["Belt 7.5 km/h · incline 1%", "HR under 160 · start 8.2 km/h", "30 s · 13.0 km/h · 1:30 easy between", "Walk 5.5 km/h"]);
+  await expect(page.getByTestId("run-step-detail")).toHaveText(["Belt 7.5 km/h · incline 1%", "HR under 162 · start 8.2 km/h", "30 s · 13.0 km/h · 1:30 easy between", "Walk 5.5 km/h"]);
   await expect(page.getByTestId("step-alerts")).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Log by hand" })).toHaveAttribute("href", `/programs/${programId}/workout/exercises/${peId}?hand=1`);
 
@@ -84,7 +84,7 @@ test("an endurance user's run exercise shows the run, changes mode and surface, 
   await page.getByRole("button", { name: "Change" }).click();
   await page.getByTestId("run-mode-sheet").getByRole("button", { name: "Outdoor" }).click();
   await expect(page.getByTestId("run-mode")).toHaveText("Outdoor");
-  await expect(page.getByTestId("run-step-detail")).toHaveText(["HR under 151", "HR under 160", "30 s · Fast and relaxed · 1:30 easy between", "Effort 1-2"]);
+  await expect(page.getByTestId("run-step-detail")).toHaveText(["HR under 153", "HR under 162", "30 s · Fast and relaxed · 1:30 easy between", "Effort 1-2"]);
   await expect(page.getByTestId("step-alerts")).toContainText("Keep the screen on for beeps, or follow your watch");
   await page.getByRole("button", { name: "Trail or snow" }).click();
   await expect(page.getByRole("button", { name: "Trail or snow" })).toHaveAttribute("aria-pressed", "true");
@@ -121,7 +121,7 @@ test("with no threshold pace the treadmill run asks for it, and Log by hand open
   }
   await expect(screen.getByTestId("no-threshold-pace")).toContainText("Set your threshold pace to see belt speeds");
   await expect(screen.getByRole("link", { name: "Set pace" })).toHaveAttribute("href", "/more/account/training-numbers");
-  await expect(screen.getByTestId("run-step-detail").nth(1)).toHaveText("HR under 160 · set the belt by feel");
+  await expect(screen.getByTestId("run-step-detail").nth(1)).toHaveText("HR under 162 · set the belt by feel");
   await expect(screen.getByTestId("run-summary")).toHaveText("75 min · load about 70 · LTHR 180");
 
   await screen.getByRole("link", { name: "Log by hand" }).click();

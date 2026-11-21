@@ -64,7 +64,7 @@ describe("RunExercise", () => {
     expect(screen.getByTestId("ride-profile")).toBeTruthy();
     expect(screen.getByTestId("run-stats").textContent).toBe("10.1km est.70load50 minin Z2");
     expect(screen.getByTestId("run-zones")).toBeTruthy();
-    expect(details()).toEqual(["Belt 7.5 km/h · incline 1%", "HR under 160 · start 8.2 km/h", "30 s · 13.0 km/h · 1:30 easy between", "Walk 5.5 km/h"]);
+    expect(details()).toEqual(["Belt 7.5 km/h · incline 1%", "HR under 162 · start 8.2 km/h", "30 s · 13.0 km/h · 1:30 easy between", "Walk 5.5 km/h"]);
     expect(screen.queryByTestId("no-threshold-pace")).toBeNull();
     // A treadmill keeps the phone on the console: no alerts row (4.6 is outdoor).
     expect(screen.queryByTestId("step-alerts")).toBeNull();
@@ -75,7 +75,7 @@ describe("RunExercise", () => {
       screenOf(data(OWNER, { defaultMode: "outdoor" }));
       expect(screen.getByTestId("run-mode").textContent).toBe("Outdoor");
       expect(screen.getByTestId("run-summary").textContent).toBe("75 min · load about 70 · LTHR 180");
-      expect(details()).toEqual(["HR under 151", "HR under 160", "30 s · Fast and relaxed · 1:30 easy between", "Effort 1-2"]);
+      expect(details()).toEqual(["HR under 153", "HR under 162", "30 s · Fast and relaxed · 1:30 easy between", "Effort 1-2"]);
       fireEvent.click(screen.getByRole("button", { name: "Change" }));
       const sheet = screen.getByTestId("run-mode-sheet");
       expect(sheet.querySelector("[aria-pressed=true]")!.textContent).toBe("Outdoor");
@@ -117,7 +117,7 @@ describe("RunExercise", () => {
       screenOf(data({ lthr_run: 180 }));
       expect(screen.getByTestId("no-threshold-pace").textContent).toBe("Set your threshold paceto see belt speedsSet pace".replace("paceto", "pace to"));
       expect(screen.getByRole("link", { name: "Set pace" }).getAttribute("href")).toBe("/more/account/training-numbers");
-      expect(details()[1]).toBe("HR under 160 · set the belt by feel");
+      expect(details()[1]).toBe("HR under 162 · set the belt by feel");
       expect(screen.getByTestId("run-summary").textContent).toBe("75 min · load about 70 · LTHR 180");
     });
 

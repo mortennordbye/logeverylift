@@ -122,8 +122,8 @@ describe("the summary", () => {
       { zone: 1, m: 63 },
     ]);
     expect(s.rows.map((r) => [r.title, r.plan, r.done, r.mark])).toEqual([
-      ["Warm-up", "7.5 · HR 151", "7.5 · HR 124", null],
-      ["Steady", "8.2 · HR 160", "8.5 · HR 146", null],
+      ["Warm-up", "7.5 · HR 153", "7.5 · HR 124", null],
+      ["Steady", "8.2 · HR 162", "8.5 · HR 146", null],
       ["Strides", "6 × 30 s", "5 of 6", null],
       ["Cool-down", "5.5 · Z1", "5.5 · HR 118", null],
     ]);
@@ -249,5 +249,19 @@ describe("step 7: outdoors with Garmin's pace", () => {
     expect(slow.rows[0].mark).toBe("↓");
     const inside = runSummary(out, { 1: garmin(300, 1000 / 340), 2: garmin(300, 2) }, { beltEvents: false });
     expect(inside.rows[0].mark).toBeNull();
+  });
+});
+
+describe("heart rate caps use the zone edges (final review)", () => {
+  it("the cap text and the arrow agree with runHrZoneOf at LTHR 180", async () => {
+    const { runHrZoneOf } = await import("@/lib/utils/workout-steps");
+    const { runZoneCapText } = await import("@/lib/utils/run-view");
+    // Z1 ends where 85% starts (153), Z2 where 90% starts (162).
+    expect([152, 153, 161, 162].map((bpm) => runHrZoneOf((bpm / 180) * 100))).toEqual([1, 2, 2, 3]);
+    expect(runZoneCapText(1, OWNER)).toBe("HR under 153");
+    expect(runZoneCapText(2, OWNER)).toBe("HR under 162");
+    // The 50 min steady (Z2 cap): 161 is still Z2 and passes, 162 is Z3 and gets the up arrow.
+    expect(runSummary(plan, { 101: log(3000, 8.2, { avgHr: 161 }) }, { beltEvents: true }).rows[1].mark).toBeNull();
+    expect(runSummary(plan, { 101: log(3000, 8.2, { avgHr: 162 }) }, { beltEvents: true }).rows[1].mark).toBe("↑");
   });
 });

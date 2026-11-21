@@ -193,7 +193,7 @@ describe("get_ride on a run", () => {
     expect(stride.block).not.toBeNull();
     expect(stride.planned).toMatchObject({ beltKmh: 13 });
     const zone = ride.steps.at(-2);
-    expect(zone.planned).toMatchObject({ beltKmh: 8.2, beltFrom: "zone", target: "HR under 160" });
+    expect(zone.planned).toMatchObject({ beltKmh: 8.2, beltFrom: "zone", target: "HR under 162" });
     expect(ride.steps.at(-1).planned).toMatchObject({ beltKmh: null });
     expect(ride.steps.at(-1).done).toMatchObject({ distanceMeters: null, beltKmh: null });
 

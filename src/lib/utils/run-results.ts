@@ -201,11 +201,11 @@ export type RunSummary = {
   noLoadReason: "numbers" | "effort" | "short" | null;
 };
 
-/** "HR under 160" → a cap at 160; "HR 153-160" → a range. Read from the words the plan column shows, so the arrow judges what the runner sees. */
+/** "HR under 162" → a cap, 161 the highest that passes; "HR 153-161" → a range. Read from the words the plan column shows, so the arrow judges what the runner sees. */
 function hrBand(text: string | null): { low: number | null; high: number | null; cap: boolean } | null {
   if (!text) return null;
   let m = /^HR under (\d+)$/.exec(text);
-  if (m) return { low: null, high: Number(m[1]), cap: true };
+  if (m) return { low: null, high: Number(m[1]) - 1, cap: true };
   m = /^HR (\d+)-(\d+)$/.exec(text);
   if (m) return { low: Number(m[1]), high: Number(m[2]), cap: false };
   m = /^HR (\d+) or more$/.exec(text);
@@ -222,10 +222,10 @@ function hrTextOf(s: RidePlanStep, plan: RidePlan): string | null {
   return [o.main, o.second].find((t) => t?.startsWith("HR ")) ?? null;
 }
 
-/** "HR 160" for a cap (the footnote says a cap passes under it), "HR 153-160" for a range. */
+/** "HR 162" for a cap (the footnote says a cap passes under it), "HR 153-161" for a range. */
 const shortHr = (t: string) => t.replace(/^HR under /, "HR ");
 
-/** The plan column: belt and heart rate on a treadmill ("8.2 · HR 160"), the outdoor target outdoors ("5:35-5:59", "HR 160"). */
+/** The plan column: belt and heart rate on a treadmill ("8.2 · HR 162"), the outdoor target outdoors ("5:35-5:59", "HR 162"). */
 function planText(s: RidePlanStep, plan: RidePlan): string | null {
   const th = plan.thresholds;
   const hr = hrTextOf(s, plan);

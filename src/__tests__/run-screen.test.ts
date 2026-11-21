@@ -37,7 +37,7 @@ describe("runScreen on a treadmill", () => {
     expect(s.clock).toBe("9:30");
     expect(s.treadmill).toEqual({ belt: 7.5, planBelt: 7.5, incline: 1 });
     expect(s.second).toEqual([
-      { label: "HR", value: "under 151" },
+      { label: "HR", value: "under 153" },
       { label: "Pace", value: "8:00 /km" },
     ]);
     expect(s.next).toEqual({ title: "Steady · 50:00", target: "8.2 km/h" });
@@ -93,10 +93,10 @@ describe("runScreen outdoors", () => {
   it("shows the outdoor target big, with Lap", () => {
     const s = screenAt(outdoor, 30);
     expect(s.header).toBe("Outdoor · step 1 of 4");
-    expect(s.target).toEqual({ value: "under 151", unit: "bpm" });
+    expect(s.target).toEqual({ value: "under 153", unit: "bpm" });
     expect(s.treadmill).toBeNull();
     expect(s.lap).toBe(true);
-    expect(s.next.target).toBe("HR under 160");
+    expect(s.next.target).toBe("HR under 162");
   });
 
   it("a distance step ends on its estimate: 1 km · about its time", () => {
@@ -110,9 +110,9 @@ describe("runScreen outdoors", () => {
     expect(s.target).toEqual({ value: "Effort 4-5", unit: null });
     expect(s.second).toEqual([
       { label: "Short quick steps", value: "" },
-      { label: "HR", value: "under 160" },
+      { label: "HR", value: "under 162" },
     ]);
-    expect(screenAt(outdoor, 700, [], { brick: true }).target).toEqual({ value: "under 160", unit: "bpm" });
+    expect(screenAt(outdoor, 700, [], { brick: true }).target).toEqual({ value: "under 162", unit: "bpm" });
     // On a treadmill the belt stays the main target; the effort and the cue go on the second line.
     expect(screenAt(treadmill, 30, [], { brick: true }).second.slice(0, 2)).toEqual([
       { label: "Effort", value: "4-5" },

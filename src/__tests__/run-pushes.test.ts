@@ -51,8 +51,8 @@ describe("runPushSchedule", () => {
   it("outdoors: the target of 4.2 first", () => {
     const titles = schedule(outdoor, [], 1).map((r) => r.title);
     expect(titles).toEqual([
-      "1 min left · next HR under 160 · Steady",
-      "HR under 160 · Steady · 50 min",
+      "1 min left · next HR under 162 · Steady",
+      "HR under 162 · Steady · 50 min",
       "1 min left · next Fast and relaxed · Strides 6 × 30 s",
       "Fast and relaxed · Strides 6 × 30 s · 1 min 30 s easy between",
       "Easy jog or walk · Easy · 1 min 30 s",
@@ -169,8 +169,8 @@ describe("runPushSchedule", () => {
     });
     const p = buildRunPlan(w, ids(w), OWNER, "outdoor");
     const steps = schedule(p, [], 1, { brick: true }).filter((r) => r.kind === "step");
-    expect(steps.map((r) => r.title)).toEqual(["Effort 4-5 · Steady · 10 min", "HR under 160 · Steady · 10 min"]);
-    expect(schedule(p, [], 1).filter((r) => r.kind === "step")[0].title).toBe("HR under 160 · Steady · 10 min");
+    expect(steps.map((r) => r.title)).toEqual(["Effort 4-5 · Steady · 10 min", "HR under 162 · Steady · 10 min"]);
+    expect(schedule(p, [], 1).filter((r) => r.kind === "step")[0].title).toBe("HR under 162 · Steady · 10 min");
   });
 
   it("none while paused or after the end", () => {

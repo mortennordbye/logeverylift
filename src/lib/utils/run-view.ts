@@ -16,7 +16,7 @@ import { zoneWholeMinutes } from "@/lib/utils/run-numbers";
 import { hrTargetZone, WALK_BELT_KMH } from "@/lib/utils/run-plan";
 import { minSec } from "@/lib/utils/thresholds";
 import { plannedLoad } from "@/lib/utils/training-load";
-import { mainTarget, resolveTarget, RUN_PACE_ZONES, targetLabel, type ThresholdValues, type Workout, type WorkoutStep } from "@/lib/utils/workout-steps";
+import { mainTarget, resolveTarget, runHrZoneBpm, RUN_PACE_ZONES, targetLabel, type ThresholdValues, type Workout, type WorkoutStep } from "@/lib/utils/workout-steps";
 
 // ── Mode ─────────────────────────────────────────────────────────────────────
 
@@ -87,11 +87,17 @@ const hrText = (low: number | null, high: number | null, cap: boolean) => {
   return r(low) === r(high) ? `HR ${r(low)}` : `HR ${r(low)}-${r(high)}`;
 };
 
-/** A heart rate zone as words: "HR under 160" for a cap, "HR 153-160" for a range, an effort with no run LTHR (4.2). */
+/**
+ * A heart rate zone as words: "HR under 162" for a cap, "HR 153-161" for a
+ * range, an effort with no run LTHR (4.2). The numbers are the zone's edges as
+ * `runHrZoneOf` counts them, so a cap's number is the first bpm of the next zone.
+ */
 function zoneHrText(zone: number, cap: boolean, thresholds: ThresholdValues): string {
   if (!thresholds.lthr_run) return `Effort ${EFFORT_OF_ZONE[zone - 1]}`;
-  const r = resolveTarget({ metric: "hr", anchor: "lthr", zone }, "run", thresholds);
-  return hrText(r.low, r.high, cap) ?? `Z${zone} HR`;
+  const r = runHrZoneBpm(zone, thresholds.lthr_run);
+  if (r.high === null) return `HR ${r.low} or more`;
+  if (cap || r.low === null) return `HR under ${r.high + 1}`;
+  return `HR ${r.low}-${r.high}`;
 }
 
 /** The text of a heart rate target: by its zone when it has one, else its own bpm. */
@@ -290,7 +296,7 @@ export type RunStepRow = {
   n: number;
   /** "Warm-up", "Steady", "Work · 2 of 4", "Strides 6 ×". */
   title: string;
-  /** "Belt 7.5 km/h · incline 1%", "HR under 160 · start 8.2 km/h"; outdoors the target. */
+  /** "Belt 7.5 km/h · incline 1%", "HR under 162 · start 8.2 km/h"; outdoors the target. */
   detail: string | null;
   note: string | null;
   /** "10:00", "1 km", "to lap". */
@@ -338,12 +344,12 @@ export function runStepTitle(s: RidePlanStep, th: ThresholdValues): string {
   return `${word}${s.round && s.step.type !== "recovery" && s.step.type !== "rest" ? ` · ${s.round.index} of ${s.round.of}` : ""}`;
 }
 
-/** A step's main target as words ("HR under 160", "5:35-5:59 /km", "Effort 9"), as the step list says it on a treadmill. */
+/** A step's main target as words ("HR under 162", "5:35-5:59 /km", "Effort 9"), as the step list says it on a treadmill. */
 export function runTargetText(s: RidePlanStep, th: ThresholdValues): string | null {
   return targetText(s, runStepZone(s.step, th), th);
 }
 
-/** The cap at the top of a heart rate zone ("HR under 160"), or its effort with no run LTHR (4.2). */
+/** The cap at the top of a heart rate zone ("HR under 162"), or its effort with no run LTHR (4.2). */
 export function runZoneCapText(zone: number, th: ThresholdValues): string {
   return zoneHrText(zone, true, th);
 }

@@ -414,6 +414,17 @@ export function runHrZoneOf(pctLthr: number): number {
 }
 
 /**
+ * The whole heart rates (bpm) of a run zone as `runHrZoneOf` counts them: its
+ * first and last bpm, null for an open end. At LTHR 180, Z2 is 153 to 161.
+ */
+export function runHrZoneBpm(zone: number, lthr: number): { low: number | null; high: number | null } {
+  const first = (pct: number) => Math.ceil((lthr * pct) / 100 - 1e-9);
+  const prev = RUN_HR_ZONES[zone - 2]?.[1] ?? null;
+  const top = RUN_HR_ZONES[zone - 1][1];
+  return { low: prev === null ? null : first(prev + 1), high: top === null ? null : first(top + 1) - 1 };
+}
+
+/**
  * Run pace zones (Friel), as % of threshold pace *time*: a higher number is
  * slower (docs/plans/run-logger.md, 4.2). [fast, slow]; null is an open end.
  * Z5 has three parts. Friel's bounds overlap at Z4 and Z5a; kept as he gives them.

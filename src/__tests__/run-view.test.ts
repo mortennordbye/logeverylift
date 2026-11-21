@@ -37,7 +37,7 @@ describe("runStepRows on a treadmill", () => {
     const rows = runStepRows(plan(BASE_RUN, OWNER, "indoor"));
     expect(rows.map((r) => [r.title, r.detail, r.time, r.chip])).toEqual([
       ["Warm-up", "Belt 7.5 km/h · incline 1%", "10:00", "Z1"],
-      ["Steady", "HR under 160 · start 8.2 km/h", "50:00", "Z2"],
+      ["Steady", "HR under 162 · start 8.2 km/h", "50:00", "Z2"],
       ["Strides 6 ×", "30 s · 13.0 km/h · 1:30 easy between", "12:00", "Fast"],
       ["Cool-down", "Walk 5.5 km/h", "3:00", "Z1"],
     ]);
@@ -46,7 +46,7 @@ describe("runStepRows on a treadmill", () => {
 
   it("with no threshold pace: a heart rate step has no start speed, a written belt and the walk stay", () => {
     const rows = runStepRows(plan(BASE_RUN, { lthr_run: 180 }, "indoor"));
-    expect(rows.map((r) => r.detail)).toEqual(["Belt 7.5 km/h · incline 1%", "HR under 160 · set the belt by feel", "30 s · 13.0 km/h · 1:30 easy between", "Walk 5.5 km/h"]);
+    expect(rows.map((r) => r.detail)).toEqual(["Belt 7.5 km/h · incline 1%", "HR under 162 · set the belt by feel", "30 s · 13.0 km/h · 1:30 easy between", "Walk 5.5 km/h"]);
   });
 
   it("with no LTHR: heart rate targets show as effort (4.2)", () => {
@@ -77,7 +77,7 @@ describe("runStepRows on a treadmill", () => {
 describe("outdoor targets (4.2)", () => {
   it("caps easy steps, gives strides effort and a recovery the easy jog", () => {
     const rows = runStepRows(plan(BASE_RUN, OWNER, "outdoor"));
-    expect(rows.map((r) => r.detail)).toEqual(["HR under 151", "HR under 160", "30 s · Fast and relaxed · 1:30 easy between", "Effort 1-2"]);
+    expect(rows.map((r) => r.detail)).toEqual(["HR under 153", "HR under 162", "30 s · Fast and relaxed · 1:30 easy between", "Effort 1-2"]);
   });
 
   it("work of zone 3 to 5 for 3 min or more: a pace range with heart rate as the second line; on Trail or snow the heart rate", () => {
@@ -94,16 +94,16 @@ describe("outdoor targets (4.2)", () => {
     };
     const road = plan(w, OWNER, "outdoor");
     expect(road.steps.map((s) => runOutdoorText(s, OWNER, "road"))).toEqual([
-      { main: "5:36-5:56 /km", second: "HR 171-178" },
-      { main: "5:32-5:46 /km", second: "HR 171-178" },
+      { main: "5:36-5:56 /km", second: "HR 171-179" },
+      { main: "5:32-5:46 /km", second: "HR 171-179" },
       { main: "Hard", second: null },
       { main: "Easy jog or walk", second: null },
     ]);
     const trail = plan(w, OWNER, "outdoor", "trail");
-    expect(trail.steps.slice(0, 2).map((s) => runOutdoorText(s, OWNER, "trail").main)).toEqual(["HR 171-178", "HR 171-178"]);
+    expect(trail.steps.slice(0, 2).map((s) => runOutdoorText(s, OWNER, "trail").main)).toEqual(["HR 171-179", "HR 171-179"]);
     // No threshold pace: the pace step in % of it, the heart rate step as heart rate.
     const noPace = plan(w, { lthr_run: 180 }, "outdoor");
-    expect(noPace.steps.slice(0, 2).map((s) => runOutdoorText(s, { lthr_run: 180 }, "road").main)).toEqual(["HR 171-178", "98-102% threshold pace"]);
+    expect(noPace.steps.slice(0, 2).map((s) => runOutdoorText(s, { lthr_run: 180 }, "road").main)).toEqual(["HR 171-179", "98-102% threshold pace"]);
   });
 
   it("caps easy and long steps with heart rate, never pace, on both surfaces when there is an LTHR (R13, R14)", () => {
@@ -120,7 +120,7 @@ describe("outdoor targets (4.2)", () => {
       const p = plan(w, OWNER, "outdoor", surface);
       const rows = runStepRows(p, surface);
       // 75-80% of threshold speed is 129% of its pace time at the midpoint: Z1 (over 129%).
-      expect(rows.map((r) => r.detail)).toEqual(["HR under 151", "HR under 169"]);
+      expect(rows.map((r) => r.detail)).toEqual(["HR under 153", "HR under 171"]);
       expect(runChart(p).bars.map((b) => b.label).join(" ")).not.toContain("/km");
     }
     // With no LTHR: on Trail or snow an effort, on Road the pace as written.
@@ -132,7 +132,7 @@ describe("outdoor targets (4.2)", () => {
     const w = { v: 2, sport: "run", name: "Km", steps: [{ type: "work", end: { type: "distance", meters: 1000 }, target: { metric: "pace", anchor: "threshold_pace", low: 98, high: 102 } }] };
     const [row] = runStepRows(plan(w, OWNER, "outdoor"));
     expect(row.time).toBe("1 km");
-    expect(row.detail).toBe("5:32-5:46 /km · HR 171-178 · about 5:39");
+    expect(row.detail).toBe("5:32-5:46 /km · HR 171-179 · about 5:39");
   });
 });
 
@@ -172,7 +172,7 @@ describe("plannedRunNumbers and runChart", () => {
   it("draws a cap as a dashed line at the top of its zone and labels the wide bar", () => {
     const c = runChart(plan(BASE_RUN, OWNER, "indoor"));
     expect(c.ftpY).toBeNull();
-    expect(c.bars[1]).toMatchObject({ kind: "under", zone: 2, label: "Z2 · HR under 160" });
+    expect(c.bars[1]).toMatchObject({ kind: "under", zone: 2, label: "Z2 · HR under 162" });
     expect(c.bars[2]).toMatchObject({ kind: "range", zone: 5, label: null });
     expect(c.bands.map((b) => b.zone)).toEqual([1, 2, 3, 4]);
     expect(c.xTicks.at(-1)!.label).toBe("75 min");
