@@ -13,7 +13,7 @@ import { addDaysStr, dowOf, mondayOf } from "@/lib/utils/planned-sessions";
 import { effectivePriorities } from "@/lib/utils/session-compliance";
 import { shortDay } from "@/lib/utils/seasons";
 import { STRENGTH_GOAL_LABEL, strengthDefault, type StrengthPhase } from "@/lib/utils/strength-goal";
-import { hardTarget, paceTargetSpeed, rowMainTarget, type ThresholdValues, type Workout, type WorkoutTarget } from "@/lib/utils/workout-steps";
+import { hardTarget, isStrides, paceTargetSpeed, rowMainTarget, type ThresholdValues, type Workout, type WorkoutTarget } from "@/lib/utils/workout-steps";
 
 export const LIMIT_RULES = [
   "long_run_cap",
@@ -168,20 +168,27 @@ export type IntensitySet = {
   blockId?: number | null;
   targets?: unknown;
   ramp?: unknown;
+  // A work step's time, for strides (isStrides). Absent reads as not on time.
+  durationSeconds?: number | null;
 };
 
 /**
  * A session is hard when an endurance set in it is an interval rep or targets
  * zone 4-5. A step (a set with a step kind) follows isHardWorkout instead: a
- * work step inside a repeat block, or a work step whose main target is zone 4
- * or above. Its sessionRole only says the weekly sync owns it.
+ * work step inside a repeat block that is not strides, or a work step whose
+ * main target is zone 4 or above. Its sessionRole only says the weekly sync owns it.
  */
 export function isHardSession(sets: IntensitySet[], thresholds: ThresholdValues = {}): boolean {
+  const reps = new Map<number, (number | null)[]>();
+  for (const s of sets) {
+    if (s.discipline == null || s.stepKind !== "work" || s.blockId == null) continue;
+    reps.set(s.blockId, [...(reps.get(s.blockId) ?? []), s.durationSeconds ?? null]);
+  }
   return sets.some((s) => {
     if (s.discipline == null) return false;
     if (s.stepKind != null) {
       if (s.stepKind !== "work") return false;
-      if (s.blockId != null) return true;
+      if (s.blockId != null) return !isStrides(reps.get(s.blockId)!);
       const main = rowMainTarget(s);
       return main !== undefined && hardTarget(main, s.discipline, thresholds);
     }

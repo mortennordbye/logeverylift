@@ -162,3 +162,22 @@ describe("remainingAfterOverride", () => {
     );
   });
 });
+
+describe("isHardSession and strides", () => {
+  const z2 = { discipline: "run" as const, sessionRole: null, targetHeartRateZone: null, stepKind: "work", blockId: null, durationSeconds: 3000, targets: [{ metric: "hr", anchor: "lthr", zone: 2 }] };
+  const rounds = (n: number, workS: number | null) =>
+    Array.from({ length: n }, () => [
+      { discipline: "run" as const, sessionRole: null, targetHeartRateZone: null, stepKind: "work", blockId: 1, durationSeconds: workS, targets: [{ metric: "rpe", anchor: "absolute", low: 8, high: 8 }] },
+      { discipline: "run" as const, sessionRole: null, targetHeartRateZone: null, stepKind: "recovery", blockId: 1, durationSeconds: 90, targets: null },
+    ]).flat();
+
+  it("short strides in an easy run are not hard", () => {
+    expect(isHardSession([z2, ...rounds(6, 20)])).toBe(false);
+  });
+
+  it("short reps with more work in total, longer reps, and reps with no time are still hard", () => {
+    expect(isHardSession([z2, ...rounds(10, 30)])).toBe(true);
+    expect(isHardSession([z2, ...rounds(6, 45)])).toBe(true);
+    expect(isHardSession([z2, ...rounds(6, null)])).toBe(true);
+  });
+});

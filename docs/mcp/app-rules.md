@@ -240,7 +240,9 @@ lasts only until that writer runs again.
   - `hard_sessions_per_week`: at most 3 interval sessions (a `work` set or zone 4-5 on an
     endurance set) in a weekday cycle's week (Coach convention; what counts as hard is
     Inference): the active cycle and a draft scheduled to start. Rotation cycles have no fixed
-    week and are not counted.
+    week and are not counted. Strides are not intervals: a repeat whose work steps each end on
+    time at 30 s or less, with 3 min of work or less over all rounds, does not make a session
+    hard (`isStrides` in `src/lib/utils/workout-steps.ts`).
   - `hard_after_low_readiness`: no hard session added on a low-readiness day or the day after.
     A low-readiness day has HRV below the athlete's band on that day and the day before, and
     resting HR up on that day (two agreeing signals; Study for the method, thresholds Coach
