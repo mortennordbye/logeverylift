@@ -36,6 +36,7 @@ import {
 } from "@/lib/utils/ride-stream";
 import type { RideEventInput, RidePlan, RideStepResult } from "@/lib/utils/ride-timeline";
 import { gapSpeed } from "@/lib/utils/run-gap";
+import { zoneWholeMinutes } from "@/lib/utils/run-numbers";
 import { minSec } from "@/lib/utils/thresholds";
 import { IF_RANGE } from "@/lib/utils/training-load";
 import { runHrZoneOf } from "@/lib/utils/workout-steps";
@@ -296,7 +297,7 @@ export function runStreamNumbers(input: RunStreamInput): RunStreamNumbers {
     gapSPerKm: !treadmill && gapMeters > 0 ? gapSeconds / (gapMeters / 1000) : null,
     intensityFactor,
     load,
-    hrZoneMinutes: zoneSeconds.map((z) => Math.round(z / 60)),
+    hrZoneMinutes: zoneWholeMinutes(zoneSeconds),
     drift: decoupling(input, gap, d),
     onTarget,
     timeOnTarget: targetCounted > 0 ? Math.round((targetInside / targetCounted) * 100) : null,

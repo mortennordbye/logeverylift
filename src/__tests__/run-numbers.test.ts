@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { rideTimeline, type RideEventInput } from "@/lib/utils/ride-timeline";
 import { buildRunPlan } from "@/lib/utils/run-plan";
 import { adjustedGrade, gapSpeed } from "@/lib/utils/run-gap";
-import { doneRunNumbers, paceText } from "@/lib/utils/run-numbers";
+import { doneRunNumbers, paceText, zoneWholeMinutes } from "@/lib/utils/run-numbers";
 import { beltResults } from "@/lib/utils/run-screen";
 import { runPaceLoad } from "@/lib/utils/training-load";
 import { parseWorkout, type ThresholdValues, type Workout } from "@/lib/utils/workout-steps";
@@ -70,6 +70,16 @@ describe("the mockup run (section 7, unit test 13)", () => {
     const expected = ((7.5 / thr) ** 2 * 600 + (8 / thr) ** 2 * 3000 + 6 * ((13 / thr) ** 2 * 20 + (7 / thr) ** 2 * 100)) / 36 + walk;
     expect(n.load!.value).toBeCloseTo(expected, 0);
     expect(n.intensityFactor).toBeCloseTo(Math.sqrt(n.load!.value / 125), 3);
+  });
+});
+
+describe("time in heart rate zones", () => {
+  it("whole minutes that add up to the run's minutes, not one more for each half minute", () => {
+    // 17.5, 21.5, 16.5 and 10.5 min: 66 min, which rounding each would make 68.
+    const m = zoneWholeMinutes([1050, 1290, 990, 630, 0]);
+    expect(m.reduce((a, b) => a + b, 0)).toBe(66);
+    expect(m.every((x, i) => Math.abs(x - [1050, 1290, 990, 630, 0][i] / 60) < 1)).toBe(true);
+    expect(zoneWholeMinutes([600, 0, 0, 0, 0])).toEqual([10, 0, 0, 0, 0]);
   });
 });
 

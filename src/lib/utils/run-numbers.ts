@@ -99,5 +99,22 @@ export function doneRunNumbers(
   const zoneSeconds = [0, 0, 0, 0, 0];
   if (opts.lthr) for (const s of hr) zoneSeconds[runHrZoneOf((s.avgHr / opts.lthr) * 100) - 1] += s.seconds;
 
-  return { seconds, meters, paceSPerKm, gapSPerKm, avgHr, intensityFactor, load, hrZoneMinutes: zoneSeconds.map((z) => Math.round(z / 60)) };
+  return { seconds, meters, paceSPerKm, gapSPerKm, avgHr, intensityFactor, load, hrZoneMinutes: zoneWholeMinutes(zoneSeconds) };
+}
+
+/**
+ * Seconds per zone as whole minutes that add up to the whole run's minutes:
+ * each zone takes its whole minutes, and the minutes left go to the zones
+ * with the largest rest (rounding each zone alone gave 67 min for a 66 min run).
+ */
+export function zoneWholeMinutes(seconds: number[]): number[] {
+  const exact = seconds.map((s) => s / 60);
+  const out = exact.map(Math.floor);
+  let left = Math.round(exact.reduce((a, b) => a + b, 0)) - out.reduce((a, b) => a + b, 0);
+  for (const i of exact.map((m, i) => i).sort((a, b) => exact[b] - out[b] - (exact[a] - out[a]))) {
+    if (left <= 0) break;
+    out[i] += 1;
+    left -= 1;
+  }
+  return out;
 }

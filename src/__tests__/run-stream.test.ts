@@ -115,8 +115,8 @@ describe("outdoor GAP, IF and load from the stream (4.9)", () => {
 
   it("time in heart rate zones from the 1 s stream (Friel, run LTHR 180)", () => {
     const n = runStreamNumbers(input(stream((t) => ({ speed: 2.5, hr: t < 1950 ? 140 : 160 }))));
-    // 140 is 78% (zone 1), 160 is 89% (zone 2).
-    expect(n.hrZoneMinutes).toEqual([33, 33, 0, 0, 0]);
+    // 140 is 78% (zone 1), 160 is 89% (zone 2): 32.5 min each, 65 min in all.
+    expect(n.hrZoneMinutes).toEqual([33, 32, 0, 0, 0]);
   });
 
   it("time on target: the share of a step's seconds inside its heart rate cap", () => {
