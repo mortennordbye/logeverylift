@@ -31,7 +31,9 @@ export default function PrivacyPage() {
         </li>
         <li>
           <strong>Profile, if you fill it in:</strong> gender, year of birth, height, body weight, training goals and
-          experience level, and your body weight history.
+          experience level, and your body weight history. Body measurements you log (neck, shoulders, chest, waist,
+          hips, arms, legs and their lengths, in cm, with a date) and their history. Body ratios and the body fat
+          estimate are calculated from them when you look and are not stored.
         </li>
         <li>
           <strong>Training:</strong> workouts, sets, reps, weights, durations, distances, heart rate zones, effort
@@ -123,7 +125,7 @@ export default function PrivacyPage() {
         </li>
       </ul>
       <p>
-        Body weight, heart rate, readiness, how you felt, thresholds, injuries, sick periods, gut symptoms, sweat tests and free-text notes, coach memory and reasons for a missed session included, can reveal things about your health.
+        Body weight, body measurements, heart rate, readiness, how you felt, thresholds, injuries, sick periods, gut symptoms, sweat tests and free-text notes, coach memory and reasons for a missed session included, can reveal things about your health.
         We treat all of it as health data under GDPR Article 9 and process it only with your explicit consent, which
         you give when you create your account.
       </p>
@@ -217,7 +219,7 @@ export default function PrivacyPage() {
         they also see your completed workouts: the program, date, duration, how you felt, each exercise with its sets
         (weight, reps, time, distance), your personal records, streak and weekly volume. Your notes, effort ratings,
         heart rate zones, readiness, thresholds, athlete profile, injuries, sick periods, missed sessions, step results,
-        fuel logs, sweat tests, race plans,
+        body measurements, fuel logs, sweat tests, race plans,
         training load and how well you follow your plan are never shown to them. A planned session you mark as done shows to them as any other completed
         workout.
       </p>
@@ -273,6 +275,9 @@ export default function PrivacyPage() {
           it is deleted for good. A one-day copy of a program goes when its session goes back to the plan or is removed.
         </li>
         <li>
+          Body measurements: until you delete them or your account.
+        </li>
+        <li>
           Fuel logs, fuel products, sweat tests and race plans: until you delete them or your account. Fuel logs on
           Garmin sessions also go when you delete your Garmin data.
         </li>
@@ -304,7 +309,7 @@ export default function PrivacyPage() {
           <strong>Correct it:</strong> edit your profile, workouts and sets in the app.
         </li>
         <li>
-          <strong>Delete it:</strong> Account → Delete Account, or delete single body weight entries and workouts.
+          <strong>Delete it:</strong> Account → Delete Account, or delete single body weight entries, body measurements and workouts.
         </li>
         <li>
           <strong>Withdraw consent:</strong> for AI editing, turn it off in Account; for health data, delete your
