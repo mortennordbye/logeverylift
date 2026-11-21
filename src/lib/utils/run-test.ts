@@ -171,7 +171,7 @@ function band(r: Pick<RunTestResult, "lthr" | "speed">, current: RunTestCurrent)
  * The LTHR and threshold pace a run test gives, or null: not a test, the
  * 20 min step not done or paused more than 60 s, or neither value in range.
  * A treadmill test with no belt tap and only the plan's belt meters gives
- * LTHR only.
+ * LTHR only, and so does an outdoor test whose distance is a typed total.
  */
 export function runTestResult(input: RunTestInput): RunTestResult | null {
   const { plan, logs, timing } = input;
@@ -197,7 +197,9 @@ export function runTestResult(input: RunTestInput): RunTestResult | null {
   let evenPace: boolean | null = null;
   // On a treadmill with no belt tap, the belt's meters are the plan's (as the summary says, "no belt changes"); a typed, Garmin or assistant distance is a measure.
   const measured = (l: RunTestLog | undefined) => !!l?.sources?.distanceMeters && l.sources.distanceMeters !== "belt";
-  const paceCounts = plan.mode !== "indoor" || input.beltEvents || (measured(first) && measured(last));
+  // Outdoors a typed distance is one total spread over the run by time (the results table), so its pace is the whole run's, not the test's.
+  const spread = (l: RunTestLog | undefined) => l?.sources?.distanceMeters === "typed";
+  const paceCounts = plan.mode !== "indoor" ? !spread(first) && !spread(last) : input.beltEvents || (measured(first) && measured(last));
   if (paceCounts && first?.status === "done" && first.distanceMeters && first.durationSeconds && last.distanceMeters && last.durationSeconds) {
     const s = (first.distanceMeters + last.distanceMeters) / (first.durationSeconds + last.durationSeconds);
     const m = Math.round(s * 1800);

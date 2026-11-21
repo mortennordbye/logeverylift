@@ -207,6 +207,14 @@ describe("runTestResult", () => {
     expect(runTestResult(input(out, { first: { distanceMeters: null } }))).toMatchObject({ lthr: 176, speed: null });
   });
 
+  it("outdoors a distance spread from one typed total gives LTHR only: its pace is the whole run's", async () => {
+    const out = { plan: plan("outdoor"), beltEvents: false };
+    const typed = { sources: { distanceMeters: "typed" as const } };
+    expect(runTestResult(input(out, { first: typed, last: typed }))).toMatchObject({ lthr: 176, speed: null, meters30: null });
+    const garmin = { sources: { distanceMeters: "garmin" as const } };
+    expect(runTestResult(input(out, { first: garmin, last: garmin }))?.meters30).toBe(5750);
+  });
+
   it("out of range: a heart rate over 210 or a pace slower than 10:00 /km is left out; both out gives nothing", () => {
     expect(runTestResult(input({}, { last: { avgHr: 215 } }))).toMatchObject({ lthr: null, hr20: null });
     expect(runTestResult(input({}, { first: { distanceMeters: 900 }, last: { distanceMeters: 1900 } }))).toMatchObject({ speed: null, lthr: 176 });
