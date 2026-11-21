@@ -158,6 +158,19 @@ function TargetCard({ s, compact = false }: { s: RideScreen; compact?: boolean }
   );
 }
 
+/**
+ * "Work · 1 of 2 · 15 min" that wraps only between its parts, each part with
+ * the dot before it, so a narrow phone never leaves "min" alone on a line.
+ */
+export function DotParts({ text }: { text: string }) {
+  return text.split(" · ").map((p, i) => (
+    <span key={i}>
+      {i > 0 && " "}
+      <span className="whitespace-nowrap">{i > 0 ? `· ${p}` : p}</span>
+    </span>
+  ));
+}
+
 function NextCard({ s }: { s: RideScreen }) {
   return (
     <div
@@ -166,7 +179,7 @@ function NextCard({ s }: { s: RideScreen }) {
       data-last-minute={s.lastMinute ? "true" : undefined}
     >
       <span className="min-w-0 py-2">
-        <span className="text-muted-foreground">Next</span> {s.next.title}
+        <span className="text-muted-foreground">Next</span> <DotParts text={s.next.title} />
       </span>
       {s.next.target && <span className="shrink-0 py-2 tabular-nums">{s.next.target}</span>}
     </div>

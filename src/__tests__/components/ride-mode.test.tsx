@@ -142,6 +142,8 @@ describe("RideMode", () => {
     expect(text("ride-target-value")).toBe("135-146");
     expect(text("ride-second")).toBe("Cadence 85-95HR 139-152");
     expect(text("ride-next")).toContain("Easy · 5 min");
+    // At 320 px the title wraps only between its parts: "5 min" never breaks, and its dot goes with it.
+    expect(screen.getByText("· 5 min").className).toContain("whitespace-nowrap");
     expect(screen.queryByRole("button", { name: "Lap" })).toBeNull();
     expect(screen.queryByTestId("ride-prompt")).toBeNull();
   });

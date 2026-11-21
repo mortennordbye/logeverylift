@@ -17,7 +17,7 @@
  * and the results table opens.
  */
 
-import { BTN, HoldToSkip, UNDO_MS, useLandscape } from "@/components/features/bike/RideMode";
+import { BTN, DotParts, HoldToSkip, UNDO_MS, useLandscape } from "@/components/features/bike/RideMode";
 import { useRide, type RideTap } from "@/components/features/bike/useRide";
 import { usePendingQueue, useWorkoutSetWriter } from "@/contexts/pending-queue-context";
 import { useWorkoutSession } from "@/contexts/workout-session-context";
@@ -491,7 +491,7 @@ export function RunMode({
       ) : (
         <>
           <span className="min-w-0 py-2">
-            <span className="text-muted-foreground">Next</span> {s.next.title}
+            <span className="text-muted-foreground">Next</span> <DotParts text={s.next.title} />
           </span>
           {s.next.target && <span className="shrink-0 py-2 tabular-nums">{s.next.target}</span>}
         </>
