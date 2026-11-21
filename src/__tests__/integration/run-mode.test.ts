@@ -62,7 +62,7 @@ async function plannedBrick(rideProgramId: number, runProgramId: number) {
 }
 
 /** What run mode saves when a treadmill step ends (RunMode's saveStep). */
-function stepSave(s: { sessionId: number; setIds: number[] }, index: number, r: Pick<RideStepResult, "activeSeconds" | "distanceM" | "inclinePct">) {
+function stepSave(s: { sessionId: number; setIds: number[] }, index: number, r: Pick<RideStepResult, "activeSeconds" | "distanceM" | "inclinePct" | "avgSpeed">) {
   const b = beltResults(r);
   return {
     sessionId: s.sessionId,
