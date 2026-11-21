@@ -37,7 +37,12 @@ test("a user on an old consent version gets a clean consent page and returns hom
     const abortedPrefetch = m.text().includes("?_rsc=") && m.text().includes("due to access control checks");
     if (m.type() === "error" && !abortedPrefetch && !m.text().includes('"interactive-widget" not recognized')) errors.push(m.text());
   });
-  page.on("pageerror", (e) => errors.push(e.message));
+  // WebKit can also raise the cut-off prefetch as a page error, as e2e/fixtures/test.ts allows.
+  page.on("pageerror", (e) => {
+    const text = `${e.message}\n${e.stack ?? ""}`;
+    if (text.includes("?_rsc=") && text.includes("due to access control checks")) return;
+    errors.push(e.message);
+  });
   const email = e2eUser(testInfo.parallelIndex).email;
   await testDb().update(users).set({ termsVersion: "2026-10-25" }).where(eq(users.email, email));
 
