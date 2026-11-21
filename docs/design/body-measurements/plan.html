@@ -1,0 +1,425 @@
+<title>Body Measurements Plan</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap">
+<style>
+/* Layout: one reading column of plan text, phone mockups in a wrapping row under each step */
+:root {
+  --bg: #f6f7f8; --fg: #16181b; --muted: #6a7078; --line: #dde0e4;
+  --card: #ffffff; --accent: #2f6fdf; --phone: #ffffff; --chip: #eef0f3; --good: #1f8a4c;
+  --fig: #d9dde3; --fig2: #c7ccd4; --figline: #ffffff; --lead: #9aa1aa; --onaccent: #ffffff; --warn: #b45f06;
+  --body: "Inter", system-ui, -apple-system, sans-serif;
+  --display: "Space Grotesk", "Inter", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #101215; --fg: #eceef1; --muted: #9aa1aa; --line: #2a2e34;
+  --card: #171a1e; --accent: #6d9cf0; --phone: #000000; --chip: #1f2328; --good: #4cc27f; --fig: #2b3037; --fig2: #3a414a; --figline: #171a1e; --lead: #5f666f; --onaccent: #0c1020; --warn: #f0a24a; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #101215; --fg: #eceef1; --muted: #9aa1aa; --line: #2a2e34;
+  --card: #171a1e; --accent: #6d9cf0; --phone: #000000; --chip: #1f2328; --good: #4cc27f; --fig: #2b3037; --fig2: #3a414a; --figline: #171a1e; --lead: #5f666f; --onaccent: #0c1020; --warn: #f0a24a; color-scheme: dark }
+body { background: var(--bg); color: var(--fg); font-family: var(--body); line-height: 1.55; }
+.wrap { max-width: 980px; margin: 0 auto; padding-block: 32px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; line-height: 1.2; }
+h1 { font-size: 2rem; margin: 0 0 6px; }
+h2 { font-size: 1.35rem; margin: 40px 0 10px; padding-top: 20px; border-top: 1px solid var(--line); }
+h3 { font-size: 1.05rem; margin: 22px 0 6px; }
+p, li { max-width: 68ch; }
+.lede { color: var(--muted); margin: 0 0 8px; }
+.tag { display: inline-block; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; font-weight: 600;
+  padding: 2px 8px; border-radius: 99px; background: var(--chip); color: var(--muted); }
+.tag.ask { background: var(--accent); color: #fff; }
+.phones { display: flex; flex-wrap: wrap; gap: 20px; margin: 16px 0; align-items: flex-start; }
+.ph { width: 290px; max-width: 100%; }
+.ph .cap { font-size: 12px; color: var(--muted); margin-bottom: 6px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.screen { background: var(--phone); border: 1px solid var(--line); border-radius: 28px; padding: 18px 14px 20px; min-height: 420px; overflow: hidden; font-size: 13px; }
+.screen .back { color: var(--accent); font-size: 13px; }
+.screen .h { font-family: var(--display); font-size: 24px; font-weight: 700; margin: 6px 0 12px; }
+.grp { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 14px 4px 6px; }
+.list { background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.row { display: flex; justify-content: space-between; gap: 8px; padding: 11px 12px; border-top: 1px solid var(--line); min-height: 20px; }
+.row:first-child { border-top: 0; }
+.row .v { color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+.row.new { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 10px; }
+.row .d { font-size: 11px; color: var(--good); margin-left: 6px; }
+.btn { display: block; text-align: center; background: var(--fg); color: var(--bg); border-radius: 12px; padding: 12px; font-weight: 600; margin-top: 14px; }
+.field { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; border-top: 1px solid var(--line); }
+.field:first-child { border-top: 0; }
+.in { width: 64px; text-align: right; border: 1px solid var(--line); border-radius: 8px; padding: 4px 6px; color: var(--muted); font-variant-numeric: tabular-nums; background: var(--bg); }
+.pair { display: flex; gap: 6px; }
+.pair .in { width: 50px; }
+.small { font-size: 11px; color: var(--muted); }
+.chart { width: 100%; height: 110px; display: block; }
+ol li, ul li { margin: 4px 0; }
+.box { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin: 12px 0; }
+.box p { margin: 6px 0; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.tw { overflow-x: auto; }
+.bodymaps { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin: 16px 0; }
+.mapcard { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 14px; min-width: 0; }
+.mapcard .cap { font-size: 12px; color: var(--muted); font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.bodymap { width: 100%; height: auto; display: block; font-family: var(--body); }
+.mini { width: 110px; height: 220px; flex: none; font-family: var(--body); }
+.mapwrap { display: flex; gap: 8px; align-items: center; margin-bottom: 4px; }
+.gcards { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 12px; margin: 12px 0; }
+.gcard { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px; display: flex; gap: 12px; min-width: 0; }
+.gpic { flex: none; width: 88px; display: flex; align-items: flex-start; justify-content: center; }
+.crop { width: 88px; height: 88px; background: var(--bg); border-radius: 10px; }
+.lennum { width: 88px; height: 88px; border-radius: 10px; background: var(--bg); display: grid; place-items: center; font-family: var(--display); font-size: 28px; font-weight: 700; color: var(--accent); }
+.gtext { min-width: 0; font-size: 13.5px; }
+.gtext h4 { margin: 0 0 4px; font-family: var(--display); font-size: 15px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.gtext .num { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 99px; background: var(--accent); color: var(--onaccent); font-size: 11px; }
+.gtext .lr { font-family: var(--body); font-weight: 500; font-size: 11px; color: var(--muted); }
+.gtext p, .gtext ol { margin: 4px 0; }
+.gtext ol { padding-left: 18px; }
+.where { color: var(--fg); }
+.tip { color: var(--muted); }
+.howto .pcrop { width: 100%; height: 120px; background: var(--bg); border-radius: 12px; display: block; margin: 6px 0; }
+.howto ol { padding-left: 16px; margin: 4px 0; }
+.qm { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); font-size: 10px; margin-left: 4px; }
+.pmap { width: 100%; height: auto; display: block; margin: 8px 0 2px; font-family: var(--body); }
+.seg { display: flex; background: var(--chip); border-radius: 10px; padding: 3px; gap: 2px; margin: 10px 0 2px; font-size: 11.5px; }
+.seg span { flex: 1; text-align: center; padding: 6px 2px; border-radius: 8px; color: var(--muted); }
+.seg .on { background: var(--card); color: var(--fg); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+.center { text-align: center; }
+.row2 { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-top: 1px solid var(--line); }
+.row2:first-child { border-top: 0; }
+.row2 .nm { flex: 1; min-width: 0; }
+.row2 .vv { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.row2 .cg { font-size: 11px; color: var(--muted); }
+.flag { font-size: 11px; color: var(--warn); margin-top: 1px; }
+.flag.mute { color: var(--muted); }
+.spark { width: 48px; height: 20px; flex: none; }
+.tag.prop { background: transparent; border: 1px solid var(--accent); color: var(--accent); font-size: 9.5px; padding: 0 6px; vertical-align: 1px; }
+.topbar { display: flex; justify-content: space-between; align-items: center; font-size: 13px; }
+.topbar .x { color: var(--accent); }
+.prog { height: 4px; background: var(--chip); border-radius: 99px; margin: 8px 0 10px; overflow: hidden; }
+.prog i { display: block; height: 100%; background: var(--accent); border-radius: 99px; }
+.sh { font-family: var(--display); font-size: 22px; font-weight: 700; margin: 2px 0 0; }
+.big { display: flex; align-items: baseline; justify-content: center; gap: 6px; margin: 10px 0 2px; font-variant-numeric: tabular-nums; }
+.big .num { font-family: var(--display); font-size: 40px; font-weight: 700; border-bottom: 2px solid var(--accent); padding: 0 6px; line-height: 1.1; }
+.big .sel { background: color-mix(in srgb, var(--accent) 25%, transparent); border-radius: 4px; }
+.big .u { color: var(--muted); font-size: 16px; }
+.quick { display: grid; grid-template-columns: 1fr 1.2fr 1fr; gap: 6px; margin: 10px 0 8px; }
+.quick span { text-align: center; padding: 9px 0; border-radius: 10px; background: var(--chip); font-weight: 600; font-size: 13px; }
+.actions { display: grid; grid-template-columns: 1fr 2fr; gap: 8px; }
+.actions span { text-align: center; padding: 11px 0; border-radius: 12px; font-weight: 600; }
+.actions .skip { color: var(--muted); border: 1px solid var(--line); }
+.actions .next { background: var(--fg); color: var(--bg); }
+.kp { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin-top: 10px; padding: 6px; background: var(--chip); border-radius: 12px; }
+.kp span { text-align: center; padding: 7px 0; background: var(--card); border-radius: 7px; font-size: 15px; }
+.kp span.k { background: transparent; color: var(--muted); font-size: 13px; }
+.link { color: var(--accent); font-size: 12px; }
+.done { text-align: center; margin: 8px 0 12px; }
+.done .ok { display: inline-grid; place-items: center; width: 44px; height: 44px; border-radius: 99px; background: var(--accent); color: var(--onaccent); font-size: 22px; font-weight: 700; }
+code { font-size: 12.5px; background: var(--chip); padding: 1px 5px; border-radius: 5px; }
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><g id="bm-fig"><path d="M84 30a16 21 0 1 0 32 0a16 21 0 1 0 -32 0Z" fill="var(--fig)"/><path d="M90 49.5L89 69.5A11 11 0 1 0 111 69.5L110 49.5A10 10 0 0 0 90 49.5Z" fill="var(--fig)"/><path d="M100 62C97 62.7 88 64.5 82 66C76 67.5 69 68.7 64 71C59 73.3 54.5 75.8 52 80C49.5 84.2 48.3 90.7 49 96C49.7 101.3 53.2 108 56 112C58.8 116 63.5 115 66 120C68.5 125 70 134.3 71 142C72 149.7 72.3 158.3 72 166C71.7 173.7 69.3 181.3 69 188C68.7 194.7 67.2 201.7 70 206C72.8 210.3 81 213 86 214C91 215 97.7 212.3 100 212C102.3 211.7 97.7 211.7 100 212C102.3 212.3 109 215 114 214C119 213 127.2 210.3 130 206C132.8 201.7 131.3 194.7 131 188C130.7 181.3 128.3 173.7 128 166C127.7 158.3 128 149.7 129 142C130 134.3 131.5 125 134 120C136.5 115 141.2 116 144 112C146.8 108 150.3 101.3 151 96C151.7 90.7 150.5 84.2 148 80C145.5 75.8 141 73.3 136 71C131 68.7 124 67.5 118 66C112 64.5 103 62.7 100 62C97 61.3 103 61.3 100 62Z" fill="var(--fig)"/><path d="M48 89.7L46 159.8A8 8 0 0 0 62 160.7L68 90.9A10 10 0 1 0 48 89.7Z" fill="var(--fig)"/><path d="M132 90.9L138 160.7A8 8 0 0 0 154 159.8L152 89.7A10 10 0 1 0 132 90.9Z" fill="var(--fig)"/><path d="M46 159.9L45.5 226A5.5 5.5 0 0 0 56.5 226.5L62 160.7A8 8 0 1 0 46 159.9Z" fill="var(--fig)"/><path d="M138 160.7L143.5 226.5A5.5 5.5 0 0 0 154.5 226L154 159.9A8 8 0 1 0 138 160.7Z" fill="var(--fig)"/><path d="M44 240a6 12 0 1 0 12 0a6 12 0 1 0 -12 0Z" fill="var(--fig)"/><path d="M144 240a6 12 0 1 0 12 0a6 12 0 1 0 -12 0Z" fill="var(--fig)"/><path d="M67 207.1L72 284.6A10 10 0 0 0 91.9 285.2L100.9 208A17 17 0 1 0 67 207.1Z" fill="var(--fig)"/><path d="M99.1 208L108.1 285.2A10 10 0 0 0 128 284.6L133 207.1A17 17 0 1 0 99.1 208Z" fill="var(--fig)"/><path d="M72 284.1L73 366.1A6 6 0 0 0 85 366.5L92 284.9A10 10 0 1 0 72 284.1Z" fill="var(--fig)"/><path d="M108 284.9L115 366.5A6 6 0 0 0 127 366.1L128 284.1A10 10 0 1 0 108 284.9Z" fill="var(--fig)"/><path d="M68 377a9 6 0 1 0 18 0a9 6 0 1 0 -18 0Z" fill="var(--fig)"/><path d="M114 377a9 6 0 1 0 18 0a9 6 0 1 0 -18 0Z" fill="var(--fig)"/><path d="M91 60C89 59.5 83.8 64 80 66C76.2 68 68 70.8 68 72C68 73.2 76 73.5 80 73C84 72.5 90.2 71.2 92 69C93.8 66.8 93 60.5 91 60Z" fill="var(--fig2)"/><path d="M109 60C111 59.5 116.2 64 120 66C123.8 68 132 70.8 132 72C132 73.2 124 73.5 120 73C116 72.5 109.8 71.2 108 69C106.2 66.8 107 60.5 109 60Z" fill="var(--fig2)"/><path d="M66 72C63.2 71.5 57.8 74 55 77C52.2 80 49.8 85.2 49 90C48.2 94.8 49 101.7 50 106C51 110.3 53.2 116 55 116C56.8 116 59.2 110 61 106C62.8 102 64.2 96.3 66 92C67.8 87.7 72 83.3 72 80C72 76.7 68.8 72.5 66 72Z" fill="var(--fig2)"/><path d="M134 72C136.8 71.5 142.2 74 145 77C147.8 80 150.2 85.2 151 90C151.8 94.8 151 101.7 150 106C149 110.3 146.8 116 145 116C143.2 116 140.8 110 139 106C137.2 102 135.8 96.3 134 92C132.2 87.7 128 83.3 128 80C128 76.7 131.2 72.5 134 72Z" fill="var(--fig2)"/><path d="M98 76C95.7 69.5 88.3 73.3 84 74C79.7 74.7 74.8 76.7 72 80C69.2 83.3 67.2 89.3 67 94C66.8 98.7 68.5 104.3 71 108C73.5 111.7 77.5 115.2 82 116C86.5 116.8 95.3 119.7 98 113C100.7 106.3 100.3 82.5 98 76Z" fill="var(--fig2)"/><path d="M102 76C104.3 69.5 111.7 73.3 116 74C120.3 74.7 125.2 76.7 128 80C130.8 83.3 132.8 89.3 133 94C133.2 98.7 131.5 104.3 129 108C126.5 111.7 122.5 115.2 118 116C113.5 116.8 104.7 119.7 102 113C99.3 106.3 99.7 82.5 102 76Z" fill="var(--fig2)"/><path d="M59 114C57.3 115.2 54.3 119.7 53 124C51.7 128.3 51 135 51 140C51 145 51.8 151 53 154C54.2 157 56.3 159 58 158C59.7 157 62 152.7 63 148C64 143.3 64 135.2 64 130C64 124.8 63.8 119.7 63 117C62.2 114.3 60.7 112.8 59 114Z" fill="var(--fig2)"/><path d="M141 114C142.7 115.2 145.7 119.7 147 124C148.3 128.3 149 135 149 140C149 145 148.2 151 147 154C145.8 157 143.7 159 142 158C140.3 157 138 152.7 137 148C136 143.3 136 135.2 136 130C136 124.8 136.2 119.7 137 117C137.8 114.3 139.3 112.8 141 114Z" fill="var(--fig2)"/><path d="M52 166C49.8 168 48 174.3 47 180C46 185.7 45.7 193.3 46 200C46.3 206.7 47.8 216.3 49 220C50.2 223.7 51.7 224.7 53 222C54.3 219.3 55.8 210.3 57 204C58.2 197.7 59.5 190 60 184C60.5 178 61.3 171 60 168C58.7 165 54.2 164 52 166Z" fill="var(--fig2)"/><path d="M148 166C150.2 168 152 174.3 153 180C154 185.7 154.3 193.3 154 200C153.7 206.7 152.2 216.3 151 220C149.8 223.7 148.3 224.7 147 222C145.7 219.3 144.2 210.3 143 204C141.8 197.7 140.5 190 140 184C139.5 178 138.7 171 140 168C141.3 165 145.8 164 148 166Z" fill="var(--fig2)"/><path d="M98 121C96.3 108.8 89.8 119.5 88 123C86.2 126.5 87 134.8 87 142C87 149.2 87.5 158.3 88 166C88.5 173.7 88.3 183 90 188C91.7 193 96.7 207.2 98 196C99.3 184.8 99.7 133.2 98 121Z" fill="var(--fig2)"/><path d="M102 121C103.7 108.8 110.2 119.5 112 123C113.8 126.5 113 134.8 113 142C113 149.2 112.5 158.3 112 166C111.5 173.7 111.7 183 110 188C108.3 193 103.3 207.2 102 196C100.7 184.8 100.3 133.2 102 121Z" fill="var(--fig2)"/><path d="M84 126C82.3 125 77.7 129.3 76 134C74.3 138.7 73.8 147 74 154C74.2 161 75.3 170 77 176C78.7 182 82.5 191.7 84 190C85.5 188.3 85.7 174.3 86 166C86.3 157.7 86.3 146.7 86 140C85.7 133.3 85.7 127 84 126Z" fill="var(--fig2)"/><path d="M116 126C117.7 125 122.3 129.3 124 134C125.7 138.7 126.2 147 126 154C125.8 161 124.7 170 123 176C121.3 182 117.5 191.7 116 190C114.5 188.3 114.3 174.3 114 166C113.7 157.7 113.7 146.7 114 140C114.3 133.3 114.3 127 116 126Z" fill="var(--fig2)"/><path d="M78 208C75.3 211.3 72.5 219 71 226C69.5 233 68.8 242.7 69 250C69.2 257.3 70.2 265 72 270C73.8 275 77.2 279 80 280C82.8 281 86.7 280 89 276C91.3 272 92.8 263.3 94 256C95.2 248.7 96 239.3 96 232C96 224.7 95.5 216.3 94 212C92.5 207.7 89.7 206.7 87 206C84.3 205.3 80.7 204.7 78 208Z" fill="var(--fig2)"/><path d="M122 208C124.7 211.3 127.5 219 129 226C130.5 233 131.2 242.7 131 250C130.8 257.3 129.8 265 128 270C126.2 275 122.8 279 120 280C117.2 281 113.3 280 111 276C108.7 272 107.2 263.3 106 256C104.8 248.7 104 239.3 104 232C104 224.7 104.5 216.3 106 212C107.5 207.7 110.3 206.7 113 206C115.7 205.3 119.3 204.7 122 208Z" fill="var(--fig2)"/><path d="M75 294C72.5 295.3 70.8 304 70 310C69.2 316 69.5 323.3 70 330C70.5 336.7 71.7 345 73 350C74.3 355 76.3 360.3 78 360C79.7 359.7 81.7 353.7 83 348C84.3 342.3 85.7 333.7 86 326C86.3 318.3 86.8 307.3 85 302C83.2 296.7 77.5 292.7 75 294Z" fill="var(--fig2)"/><path d="M125 294C127.5 295.3 129.2 304 130 310C130.8 316 130.5 323.3 130 330C129.5 336.7 128.3 345 127 350C125.7 355 123.7 360.3 122 360C120.3 359.7 118.3 353.7 117 348C115.7 342.3 114.3 333.7 114 326C113.7 318.3 113.2 307.3 115 302C116.8 296.7 122.5 292.7 125 294Z" fill="var(--fig2)"/><path d="M88 143L112 143" fill="none" stroke="var(--figline)" stroke-width="1.2"/><path d="M88.5 165L111.5 165" fill="none" stroke="var(--figline)" stroke-width="1.2"/><path d="M100 121L100 194" fill="none" stroke="var(--figline)" stroke-width="1.2"/><path d="M84 212Q80 244 84 276" fill="none" stroke="var(--figline)" stroke-width="1.2"/><path d="M116 212Q120 244 116 276" fill="none" stroke="var(--figline)" stroke-width="1.2"/><path d="M92 236Q90 258 88 276" fill="none" stroke="var(--figline)" stroke-width="1.2"/><path d="M108 236Q110 258 112 276" fill="none" stroke="var(--figline)" stroke-width="1.2"/></g></defs></svg>
+<div class="wrap">
+  <span class="tag">Plan · waiting for your yes</span>
+  <h1>Body measurements</h1>
+  <p class="lede">A place under Account where you store your body measurements in cm, with a date on each log, so you see a history and a trend for each body part.</p>
+
+  <h2>What changes and why</h2>
+  <ul>
+    <li>Now the app keeps only height and body weight. Weight has a history. Nothing else about your body is stored.</li>
+    <li>After this change, Account › Body and health has a new row, <b>Measurements</b>. It opens a page with all your body measurements.</li>
+    <li>Two kinds of measurement, as we agreed.
+      <ul>
+        <li><b>Circumferences</b> (change with training) · neck, shoulders, chest, waist, hips, upper arm, forearm, thigh, calf. The arm and leg parts have a left and a right value. Each one has a history and a trend.</li>
+        <li><b>Lengths</b> (do not change in an adult) · arm length, leg length, inseam. The page shows the latest value only.</li>
+      </ul>
+    </li>
+    <li>Your old list fits in. Height stays where it is now.</li>
+  </ul>
+
+  <h2>Body map</h2>
+  <p>The app uses the front body figure that it already shows for muscles. Each measurement has a number. The same number shows on the Measurements page, in the log sheet and in the guide.</p>
+  <div class="bodymaps">
+    <div class="mapcard"><div class="cap">Circumference · 1 to 9 · tape around the body</div><svg class="bodymap" viewBox="0 0 440 400" role="img" aria-label="Front body figure with nine tape lines: neck, shoulders, chest, waist, hips, upper arm, forearm, thigh and calf">
+<use href="#bm-fig" x="120" y="0"/>
+<g transform="translate(120 0)"><path d="M89 58A11.000000000000005 2 0 0 1 111 58" fill="none" stroke="var(--accent)" stroke-width="1.08" stroke-dasharray="2 2" opacity=".8"/><path d="M89 58A11.000000000000005 2 0 0 0 111 58" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round"/></g><g transform="translate(120 0)"><path d="M46.9 92A53.1 6.372 0 0 1 153.1 92" fill="none" stroke="var(--accent)" stroke-width="1.08" stroke-dasharray="2 2" opacity=".8"/><path d="M46.9 92A53.1 6.372 0 0 0 153.1 92" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round"/></g><g transform="translate(120 0)"><path d="M66.4 104A33.6 4.032 0 0 1 133.6 104" fill="none" stroke="var(--accent)" stroke-width="1.08" stroke-dasharray="2 2" opacity=".8"/><path d="M66.4 104A33.6 4.032 0 0 0 133.6 104" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round"/></g><g transform="translate(120 0)"><path d="M70.9 150A29.1 3.492 0 0 1 129.1 150" fill="none" stroke="var(--accent)" stroke-width="1.08" stroke-dasharray="2 2" opacity=".8"/><path d="M70.9 150A29.1 3.492 0 0 0 129.1 150" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round"/></g><g transform="translate(120 0)"><path d="M66.9 200A33.1 3.972 0 0 1 133.1 200" fill="none" stroke="var(--accent)" stroke-width="1.08" stroke-dasharray="2 2" opacity=".8"/><path d="M66.9 200A33.1 3.972 0 0 0 133.1 200" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round"/></g><g transform="translate(120 0)"><path d="M46.3 128A9.500000000000002 2 0 0 1 65.3 128" fill="none" stroke="var(--accent)" stroke-width="1.08" stroke-dasharray="2 2" opacity=".8"/><path d="M46.3 128A9.500000000000002 2 0 0 0 65.3 128" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round"/></g><g transform="translate(120 0)"><path d="M45.3 174A8.1 2 0 0 1 61.5 174" fill="none" stroke="var(--accent)" stroke-width="1.08" stroke-dasharray="2 2" opacity=".8"/><path d="M45.3 174A8.1 2 0 0 0 61.5 174" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round"/></g><g transform="translate(120 0)"><path d="M68.5 238A14.700000000000001 2 0 0 1 97.89999999999999 238" fill="none" stroke="var(--accent)" stroke-width="1.08" stroke-dasharray="2 2" opacity=".8"/><path d="M68.5 238A14.700000000000001 2 0 0 0 97.89999999999999 238" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round"/></g><g transform="translate(120 0)"><path d="M71.80000000000001 322A8.749999999999998 2 0 0 1 89.3 322" fill="none" stroke="var(--accent)" stroke-width="1.08" stroke-dasharray="2 2" opacity=".8"/><path d="M71.80000000000001 322A8.749999999999998 2 0 0 0 89.3 322" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round"/></g>
+<polyline points="231.9,58 312,58 322,50 328,50" fill="none" stroke="var(--lead)" stroke-width=".8"/><circle cx="336" cy="50" r="8" fill="var(--accent)"/><text x="336" y="53.4" text-anchor="middle" font-size="9.2" font-weight="700" fill="var(--onaccent)">1</text><text x="349" y="54" text-anchor="start" font-size="12" font-weight="600" fill="var(--fg)">Neck</text><polyline points="166,92 128,92 118,88 112,88" fill="none" stroke="var(--lead)" stroke-width=".8"/><circle cx="104" cy="88" r="8" fill="var(--accent)"/><text x="104" y="91.4" text-anchor="middle" font-size="9.2" font-weight="700" fill="var(--onaccent)">2</text><text x="91" y="92" text-anchor="end" font-size="12" font-weight="600" fill="var(--fg)">Shoulders</text><polyline points="254.5,104 312,104 322,100 328,100" fill="none" stroke="var(--lead)" stroke-width=".8"/><circle cx="336" cy="100" r="8" fill="var(--accent)"/><text x="336" y="103.4" text-anchor="middle" font-size="9.2" font-weight="700" fill="var(--onaccent)">3</text><text x="349" y="104" text-anchor="start" font-size="12" font-weight="600" fill="var(--fg)">Chest</text><polyline points="250,150 312,150 322,150 328,150" fill="none" stroke="var(--lead)" stroke-width=".8"/><circle cx="336" cy="150" r="8" fill="var(--accent)"/><text x="336" y="153.4" text-anchor="middle" font-size="9.2" font-weight="700" fill="var(--onaccent)">4</text><text x="349" y="154" text-anchor="start" font-size="12" font-weight="600" fill="var(--fg)">Waist</text><polyline points="254,200 312,200 322,200 328,200" fill="none" stroke="var(--lead)" stroke-width=".8"/><circle cx="336" cy="200" r="8" fill="var(--accent)"/><text x="336" y="203.4" text-anchor="middle" font-size="9.2" font-weight="700" fill="var(--onaccent)">5</text><text x="349" y="204" text-anchor="start" font-size="12" font-weight="600" fill="var(--fg)">Hips</text><polyline points="165.4,128 128,128 118,130 112,130" fill="none" stroke="var(--lead)" stroke-width=".8"/><circle cx="104" cy="130" r="8" fill="var(--accent)"/><text x="104" y="133.4" text-anchor="middle" font-size="9.2" font-weight="700" fill="var(--onaccent)">6</text><text x="91" y="134" text-anchor="end" font-size="12" font-weight="600" fill="var(--fg)">Upper arm</text><text x="91" y="147" text-anchor="end" font-size="9.5" fill="var(--muted)">left and right</text><polyline points="164.4,174 128,174 118,176 112,176" fill="none" stroke="var(--lead)" stroke-width=".8"/><circle cx="104" cy="176" r="8" fill="var(--accent)"/><text x="104" y="179.4" text-anchor="middle" font-size="9.2" font-weight="700" fill="var(--onaccent)">7</text><text x="91" y="180" text-anchor="end" font-size="12" font-weight="600" fill="var(--fg)">Forearm</text><text x="91" y="193" text-anchor="end" font-size="9.5" fill="var(--muted)">left and right</text><polyline points="187.6,238 128,238 118,238 112,238" fill="none" stroke="var(--lead)" stroke-width=".8"/><circle cx="104" cy="238" r="8" fill="var(--accent)"/><text x="104" y="241.4" text-anchor="middle" font-size="9.2" font-weight="700" fill="var(--onaccent)">8</text><text x="91" y="242" text-anchor="end" font-size="12" font-weight="600" fill="var(--fg)">Thigh</text><text x="91" y="255" text-anchor="end" font-size="9.5" fill="var(--muted)">left and right</text><polyline points="190.9,322 128,322 118,322 112,322" fill="none" stroke="var(--lead)" stroke-width=".8"/><circle cx="104" cy="322" r="8" fill="var(--accent)"/><text x="104" y="325.4" text-anchor="middle" font-size="9.2" font-weight="700" fill="var(--onaccent)">9</text><text x="91" y="326" text-anchor="end" font-size="12" font-weight="600" fill="var(--fg)">Calf</text><text x="91" y="339" text-anchor="end" font-size="9.5" fill="var(--muted)">left and right</text>
+</svg></div>
+    <div class="mapcard"><div class="cap">Length · 10 to 12 · tape along the body</div><svg class="bodymap" viewBox="0 0 440 400" role="img" aria-label="Front body figure with length lines: arm length, leg length and inseam, and height for reference">
+<use href="#bm-fig" x="120" y="0"/>
+<line x1="126" y1="384" x2="310" y2="384" stroke="var(--lead)" stroke-width="1"/>
+<line x1="220" y1="9" x2="126" y2="9" stroke="var(--lead)" stroke-width=".8" stroke-dasharray="2 2"/><line x1="130" y1="9" x2="130" y2="384" stroke="var(--muted)" stroke-width="1"/><line x1="126" y1="9" x2="134" y2="9" stroke="var(--muted)" stroke-width="1"/><line x1="126" y1="384" x2="134" y2="384" stroke="var(--muted)" stroke-width="1"/>
+<text x="124" y="196" text-anchor="end" font-size="11" fill="var(--muted)">Height</text>
+<text x="124" y="209" text-anchor="end" font-size="9.5" fill="var(--muted)">in profile now</text>
+<line x1="171" y1="79" x2="150" y2="79" stroke="var(--lead)" stroke-width=".8" stroke-dasharray="2 2"/><line x1="169" y1="227" x2="150" y2="227" stroke="var(--lead)" stroke-width=".8" stroke-dasharray="2 2"/><line x1="154" y1="79" x2="154" y2="227" stroke="var(--accent)" stroke-width="1.4"/><line x1="150" y1="79" x2="158" y2="79" stroke="var(--accent)" stroke-width="1.4"/><line x1="150" y1="227" x2="158" y2="227" stroke="var(--accent)" stroke-width="1.4"/>
+<polyline points="150,153 112,120" fill="none" stroke="var(--lead)" stroke-width=".8"/>
+<circle cx="104" cy="120" r="8" fill="var(--accent)"/><text x="104" y="123.4" text-anchor="middle" font-size="9.2" font-weight="700" fill="var(--onaccent)">10</text><text x="91" y="124" text-anchor="end" font-size="12" font-weight="600" fill="var(--fg)">Arm length</text>
+<line x1="249" y1="150" x2="300" y2="150" stroke="var(--lead)" stroke-width=".8" stroke-dasharray="2 2"/><line x1="296" y1="150" x2="296" y2="384" stroke="var(--accent)" stroke-width="1.4"/><line x1="292" y1="150" x2="300" y2="150" stroke="var(--accent)" stroke-width="1.4"/><line x1="292" y1="384" x2="300" y2="384" stroke="var(--accent)" stroke-width="1.4"/>
+<polyline points="304,250 328,250" fill="none" stroke="var(--lead)" stroke-width=".8"/>
+<circle cx="336" cy="250" r="8" fill="var(--accent)"/><text x="336" y="253.4" text-anchor="middle" font-size="9.2" font-weight="700" fill="var(--onaccent)">11</text><text x="349" y="254" font-size="12" font-weight="600" fill="var(--fg)">Leg length</text>
+<text x="349" y="267" font-size="9.5" fill="var(--muted)">outside leg</text>
+<line x1="220" y1="214" x2="220" y2="384" stroke="var(--accent)" stroke-width="1.4"/><line x1="216" y1="214" x2="224" y2="214" stroke="var(--accent)" stroke-width="1.4"/><line x1="216" y1="384" x2="224" y2="384" stroke="var(--accent)" stroke-width="1.4"/>
+<polyline points="224,330 270,330 322,318 328,318" fill="none" stroke="var(--lead)" stroke-width=".8"/>
+<circle cx="336" cy="318" r="8" fill="var(--accent)"/><text x="336" y="321.4" text-anchor="middle" font-size="9.2" font-weight="700" fill="var(--onaccent)">12</text><text x="349" y="322" font-size="12" font-weight="600" fill="var(--fg)">Inseam</text>
+<text x="349" y="335" font-size="9.5" fill="var(--muted)">inside leg</text>
+</svg></div>
+  </div>
+  <p class="small">The full line is the tape at the front. The dashed line is the tape at the back. Parts 6 to 9 have a left and a right value.</p>
+
+  <h2>How to measure</h2>
+  <div class="box">
+    <p><b>Rules for each measurement</b></p>
+    <ul>
+      <li>Use a soft tape that does not stretch. Measure on the skin, not over clothes.</li>
+      <li>Measure in the morning, before you eat and before you train. Use the same conditions each time.</li>
+      <li>Stand straight and relaxed, with the feet together and the arms at the sides.</li>
+      <li>Keep the tape level with the floor. It must touch the skin all around, but not press into it.</li>
+      <li>Read the value at the end of a normal breath out. Read to 0.5 cm.</li>
+      <li>Measure two times. If the two values are more than 1 cm apart, measure a third time. Log the middle value.</li>
+      <li>Measure every 2 to 4 weeks. Changes of less than 1 cm from one log to the next are usually measurement noise.</li>
+    </ul>
+    <p class="small">The points and methods follow ISO 8559-1 (body dimensions for clothing) and the WHO method for the waist.</p>
+  </div>
+  <h3>Circumferences</h3>
+  <div class="gcards"><article class="gcard"><div class="gpic"><svg class="crop" viewBox="60 20 80 70" role="img" aria-label="Where to measure the neck">
+<use href="#bm-fig" x="0" y="0"/><path d="M89 58A11.000000000000005 2 0 0 1 111 58" fill="none" stroke="var(--accent)" stroke-width="0.96" stroke-dasharray="2 2" opacity=".8"/><path d="M89 58A11.000000000000005 2 0 0 0 111 58" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round"/></svg></div><div class="gtext">
+<h4><span class="num">1</span>Neck</h4>
+<p class="where">Just below the Adam's apple (larynx).</p><ol><li>Look straight ahead. Keep the shoulders down.</li><li>Put the tape around the neck. Let it go a little down at the front.</li><li>Do not tighten the neck.</li></ol><p class="tip"><b>Tip</b> · Do not swallow while you read the value.</p></div></article><article class="gcard"><div class="gpic"><svg class="crop" viewBox="30 50 140 90" role="img" aria-label="Where to measure the shoulders">
+<use href="#bm-fig" x="0" y="0"/><path d="M46.9 92A53.1 6.372 0 0 1 153.1 92" fill="none" stroke="var(--accent)" stroke-width="0.96" stroke-dasharray="2 2" opacity=".8"/><path d="M46.9 92A53.1 6.372 0 0 0 153.1 92" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round"/></svg></div><div class="gtext">
+<h4><span class="num">2</span>Shoulders</h4>
+<p class="where">Around the widest part of the shoulders, over the round shoulder muscle.</p><ol><li>Stand with the arms relaxed at the sides.</li><li>Put the tape around both shoulders and the upper back.</li><li>Breathe out normally, then read.</li></ol><p class="tip"><b>Tip</b> · Ask a helper. It is hard to keep the tape level at the back yourself.</p></div></article><article class="gcard"><div class="gpic"><svg class="crop" viewBox="40 60 120 90" role="img" aria-label="Where to measure the chest">
+<use href="#bm-fig" x="0" y="0"/><path d="M66.4 104A33.6 4.032 0 0 1 133.6 104" fill="none" stroke="var(--accent)" stroke-width="0.96" stroke-dasharray="2 2" opacity=".8"/><path d="M66.4 104A33.6 4.032 0 0 0 133.6 104" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round"/></svg></div><div class="gtext">
+<h4><span class="num">3</span>Chest</h4>
+<p class="where">Around the fullest part of the chest, at nipple level, under the armpits.</p><ol><li>Lift the arms a little. Put the tape around the chest and over the shoulder blades.</li><li>Lower the arms to the sides.</li><li>Breathe out normally, then read.</li></ol><p class="tip"><b>Tip</b> · Do not fill the lungs and do not tighten the chest.</p></div></article><article class="gcard"><div class="gpic"><svg class="crop" viewBox="40 110 120 90" role="img" aria-label="Where to measure the waist">
+<use href="#bm-fig" x="0" y="0"/><path d="M70.9 150A29.1 3.492 0 0 1 129.1 150" fill="none" stroke="var(--accent)" stroke-width="0.96" stroke-dasharray="2 2" opacity=".8"/><path d="M70.9 150A29.1 3.492 0 0 0 129.1 150" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round"/></svg></div><div class="gtext">
+<h4><span class="num">4</span>Waist</h4>
+<p class="where">Halfway between the lowest rib and the top of the hip bone. For most people this is the narrowest part, a little above the navel.</p><ol><li>Stand with the feet together and the stomach relaxed.</li><li>Put the tape around the waist, level with the floor.</li><li>Breathe out normally, then read at the end of the breath.</li></ol><p class="tip"><b>Tip</b> · Do not pull in the stomach. Use the same point each time.</p></div></article><article class="gcard"><div class="gpic"><svg class="crop" viewBox="40 160 120 90" role="img" aria-label="Where to measure the hips">
+<use href="#bm-fig" x="0" y="0"/><path d="M66.9 200A33.1 3.972 0 0 1 133.1 200" fill="none" stroke="var(--accent)" stroke-width="0.96" stroke-dasharray="2 2" opacity=".8"/><path d="M66.9 200A33.1 3.972 0 0 0 133.1 200" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round"/></svg></div><div class="gtext">
+<h4><span class="num">5</span>Hips</h4>
+<p class="where">Around the widest part of the buttocks.</p><ol><li>Stand with the feet together.</li><li>Put the tape around the hips and buttocks.</li><li>Move the tape up and down to find the widest part. Read there.</li></ol><p class="tip"><b>Tip</b> · Look at the side in a mirror to make sure the tape is level.</p></div></article><article class="gcard"><div class="gpic"><svg class="crop" viewBox="11 85 90 90" role="img" aria-label="Where to measure the upper arm">
+<use href="#bm-fig" x="0" y="0"/><path d="M46.3 128A9.500000000000002 2 0 0 1 65.3 128" fill="none" stroke="var(--accent)" stroke-width="0.96" stroke-dasharray="2 2" opacity=".8"/><path d="M46.3 128A9.500000000000002 2 0 0 0 65.3 128" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round"/></svg></div><div class="gtext">
+<h4><span class="num">6</span>Upper arm <span class="lr">left and right</span></h4>
+<p class="where">Halfway between the tip of the shoulder and the elbow.</p><ol><li>Let the arm hang relaxed. Do not tighten the muscle.</li><li>Put the tape around the arm, at a right angle to it.</li><li>Measure the left arm, then the right arm.</li></ol><p class="tip"><b>Tip</b> · Measure relaxed each time, so the values agree.</p></div></article><article class="gcard"><div class="gpic"><svg class="crop" viewBox="8 135 90 90" role="img" aria-label="Where to measure the forearm">
+<use href="#bm-fig" x="0" y="0"/><path d="M45.3 174A8.1 2 0 0 1 61.5 174" fill="none" stroke="var(--accent)" stroke-width="0.96" stroke-dasharray="2 2" opacity=".8"/><path d="M45.3 174A8.1 2 0 0 0 61.5 174" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round"/></svg></div><div class="gtext">
+<h4><span class="num">7</span>Forearm <span class="lr">left and right</span></h4>
+<p class="where">Around the widest part, just below the elbow.</p><ol><li>Let the arm hang. Turn the palm to the front. Open the hand.</li><li>Move the tape down from the elbow to find the widest part.</li><li>Measure the left arm, then the right arm.</li></ol><p class="tip"><b>Tip</b> · Do not make a fist.</p></div></article><article class="gcard"><div class="gpic"><svg class="crop" viewBox="40 195 100 90" role="img" aria-label="Where to measure the thigh">
+<use href="#bm-fig" x="0" y="0"/><path d="M68.5 238A14.700000000000001 2 0 0 1 97.89999999999999 238" fill="none" stroke="var(--accent)" stroke-width="0.96" stroke-dasharray="2 2" opacity=".8"/><path d="M68.5 238A14.700000000000001 2 0 0 0 97.89999999999999 238" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round"/></svg></div><div class="gtext">
+<h4><span class="num">8</span>Thigh <span class="lr">left and right</span></h4>
+<p class="where">Halfway between the groin crease and the top of the kneecap.</p><ol><li>Stand with the weight on both feet. Relax the leg.</li><li>Put the tape around the thigh, level with the floor.</li><li>Measure the left leg, then the right leg.</li></ol><p class="tip"><b>Tip</b> · Measure the distance from the kneecap once. Then use the same distance each time.</p></div></article><article class="gcard"><div class="gpic"><svg class="crop" viewBox="36 280 90 85" role="img" aria-label="Where to measure the calf">
+<use href="#bm-fig" x="0" y="0"/><path d="M71.80000000000001 322A8.749999999999998 2 0 0 1 89.3 322" fill="none" stroke="var(--accent)" stroke-width="0.96" stroke-dasharray="2 2" opacity=".8"/><path d="M71.80000000000001 322A8.749999999999998 2 0 0 0 89.3 322" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round"/></svg></div><div class="gtext">
+<h4><span class="num">9</span>Calf <span class="lr">left and right</span></h4>
+<p class="where">Around the widest part of the calf.</p><ol><li>Stand with the weight on both feet.</li><li>Move the tape up and down to find the widest part.</li><li>Measure the left leg, then the right leg.</li></ol><p class="tip"><b>Tip</b> · Do not stand on the toes.</p></div></article></div>
+<h3>Lengths</h3><div class="gcards"><article class="gcard"><div class="gpic"><div class="lennum">10</div></div><div class="gtext">
+<h4><span class="num">10</span>Arm length</h4>
+<p class="where">From the tip of the shoulder (the bony point at the top) to the wrist bone.</p><ol><li>Let the arm hang with a small bend at the elbow.</li><li>Hold the tape on the tip of the shoulder.</li><li>Go along the outside of the arm, over the elbow, to the wrist bone.</li></ol><p class="tip"><b>Tip</b> · A helper must do this one.</p></div></article><article class="gcard"><div class="gpic"><div class="lennum">11</div></div><div class="gtext">
+<h4><span class="num">11</span>Leg length</h4>
+<p class="where">From the waist at the side of the body down to the floor.</p><ol><li>Stand barefoot with the feet a little apart.</li><li>Hold the tape at the side of the waist.</li><li>Let it go straight down the outside of the leg to the floor.</li></ol><p class="tip"><b>Tip</b> · Use the same waist point as for measurement 4.</p></div></article><article class="gcard"><div class="gpic"><div class="lennum">12</div></div><div class="gtext">
+<h4><span class="num">12</span>Inseam</h4>
+<p class="where">From the crotch down to the floor, on the inside of the leg.</p><ol><li>Stand barefoot against a wall, with the feet 15 cm apart.</li><li>Push a book up between the legs, level with the floor. Mark the wall at the top of the book.</li><li>Measure from the mark to the floor.</li></ol><p class="tip"><b>Tip</b> · The book method is more accurate than holding the tape in the crotch.</p></div></article></div>
+  <p class="small">In the app, this guide shows when you tap a point on the body map, "How to measure" on a log step, or a body part.</p>
+
+  <h2>How it will look</h2>
+
+  <h3>1 · Account › Body and health</h3>
+  <div class="phones">
+    <div class="ph"><div class="cap">Before</div>
+      <div class="screen">
+        <div class="back">‹ Account</div>
+        <div class="h">Body and health</div>
+        <div class="list">
+          <div class="row"><span>Gender</span><span class="v">Male</span></div>
+          <div class="row"><span>Year of birth</span><span class="v">1990</span></div>
+          <div class="row"><span>Height</span><span class="v">185 cm</span></div>
+          <div class="row"><span>Body weight</span><span class="v">84 kg</span></div>
+          <div class="row"><span>Injuries and limits</span><span class="v">None</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="ph"><div class="cap">After</div>
+      <div class="screen">
+        <div class="back">‹ Account</div>
+        <div class="h">Body and health</div>
+        <div class="list">
+          <div class="row"><span>Gender</span><span class="v">Male</span></div>
+          <div class="row"><span>Year of birth</span><span class="v">1990</span></div>
+          <div class="row"><span>Height</span><span class="v">185 cm</span></div>
+          <div class="row"><span>Body weight</span><span class="v">84 kg</span></div>
+          <div class="row new"><span>Measurements</span><span class="v">21 Nov ›</span></div>
+          <div class="row"><span>Injuries and limits</span><span class="v">None</span></div>
+        </div>
+        <p class="small">The new row shows the date of the last log, or "Not set". It opens the Measurements page.</p>
+      </div>
+    </div>
+  </div>
+
+  <h3>2 · The Measurements page</h3>
+  <div class="phones">
+    <div class="ph"><div class="cap">With logs · new version</div>
+      <div class="screen">
+        <div class="back">‹ Body and health</div>
+        <div class="h">Measurements</div>
+        <div class="small">Last log 21 Nov · first log 3 Oct · example values</div>
+        <div class="seg" role="group" aria-label="Change since"><span class="on">First log</span><span>3 months</span><span>Last log</span></div>
+        <svg class="pmap" viewBox="0 0 340 392" role="img" aria-label="Body map with the latest value at each point">
+<use href="#bm-fig" x="80" y="0"/>
+<g transform="translate(80 0)"><path d="M89 58A11.000000000000005 2 0 0 1 111 58" fill="none" stroke="var(--accent)" stroke-width="1.2" stroke-dasharray="2 2" opacity=".8"/><path d="M89 58A11.000000000000005 2 0 0 0 111 58" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round"/></g><polyline points="190.4,58 246,50" fill="none" stroke="var(--lead)" stroke-width=".9"/><circle cx="190.4" cy="58" r="2.6" fill="var(--accent)"/><text x="254" y="46" text-anchor="start" font-size="11" fill="var(--muted)">Neck</text><text x="254" y="62" text-anchor="start" font-size="14.5" font-weight="700" fill="var(--fg)">39<tspan font-size="10.5" font-weight="500" fill="var(--muted)" dx="4">▲0.5</tspan></text><g transform="translate(80 0)"><path d="M46.9 92A53.1 6.372 0 0 1 153.1 92" fill="none" stroke="var(--accent)" stroke-width="1.2" stroke-dasharray="2 2" opacity=".8"/><path d="M46.9 92A53.1 6.372 0 0 0 153.1 92" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round"/></g><polyline points="127.5,92 114,88" fill="none" stroke="var(--lead)" stroke-width=".9"/><circle cx="127.5" cy="92" r="2.6" fill="var(--accent)"/><text x="106" y="84" text-anchor="end" font-size="11" fill="var(--muted)">Shoulders</text><text x="106" y="100" text-anchor="end" font-size="14.5" font-weight="700" fill="var(--fg)">122<tspan font-size="10.5" font-weight="500" fill="var(--muted)" dx="4">▲2.0</tspan></text><g transform="translate(80 0)"><path d="M66.4 104A33.6 4.032 0 0 1 133.6 104" fill="none" stroke="var(--accent)" stroke-width="1.2" stroke-dasharray="2 2" opacity=".8"/><path d="M66.4 104A33.6 4.032 0 0 0 133.6 104" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round"/></g><polyline points="213,104 246,100" fill="none" stroke="var(--lead)" stroke-width=".9"/><circle cx="213" cy="104" r="2.6" fill="var(--accent)"/><text x="254" y="96" text-anchor="start" font-size="11" fill="var(--muted)">Chest</text><text x="254" y="112" text-anchor="start" font-size="14.5" font-weight="700" fill="var(--fg)">114<tspan font-size="10.5" font-weight="500" fill="var(--muted)" dx="4">▲1.0</tspan></text><g transform="translate(80 0)"><path d="M70.9 150A29.1 3.492 0 0 1 129.1 150" fill="none" stroke="var(--accent)" stroke-width="1.2" stroke-dasharray="2 2" opacity=".8"/><path d="M70.9 150A29.1 3.492 0 0 0 129.1 150" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round"/></g><polyline points="208.5,150 246,150" fill="none" stroke="var(--lead)" stroke-width=".9"/><circle cx="208.5" cy="150" r="2.6" fill="var(--accent)"/><text x="254" y="146" text-anchor="start" font-size="11" fill="var(--muted)">Waist</text><text x="254" y="162" text-anchor="start" font-size="14.5" font-weight="700" fill="var(--fg)">90<tspan font-size="10.5" font-weight="500" fill="var(--muted)" dx="4">▼2.0</tspan></text><g transform="translate(80 0)"><path d="M66.9 200A33.1 3.972 0 0 1 133.1 200" fill="none" stroke="var(--accent)" stroke-width="1.2" stroke-dasharray="2 2" opacity=".8"/><path d="M66.9 200A33.1 3.972 0 0 0 133.1 200" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round"/></g><polyline points="212.5,200 246,200" fill="none" stroke="var(--lead)" stroke-width=".9"/><circle cx="212.5" cy="200" r="2.6" fill="var(--accent)"/><text x="254" y="196" text-anchor="start" font-size="11" fill="var(--muted)">Hips</text><text x="254" y="212" text-anchor="start" font-size="14.5" font-weight="700" fill="var(--fg)">104<tspan font-size="10.5" font-weight="500" fill="var(--muted)" dx="4">▼1.0</tspan></text><g transform="translate(80 0)"><path d="M46.3 128A9.500000000000002 2 0 0 1 65.3 128" fill="none" stroke="var(--accent)" stroke-width="1.2" stroke-dasharray="2 2" opacity=".8"/><path d="M46.3 128A9.500000000000002 2 0 0 0 65.3 128" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round"/></g><polyline points="126.9,128 114,130" fill="none" stroke="var(--lead)" stroke-width=".9"/><circle cx="126.9" cy="128" r="2.6" fill="var(--accent)"/><text x="106" y="126" text-anchor="end" font-size="11" fill="var(--muted)">Upper arm</text><text x="106" y="142" text-anchor="end" font-size="14.5" font-weight="700" fill="var(--fg)">36 · 36.5</text><g transform="translate(80 0)"><path d="M45.3 174A8.1 2 0 0 1 61.5 174" fill="none" stroke="var(--accent)" stroke-width="1.2" stroke-dasharray="2 2" opacity=".8"/><path d="M45.3 174A8.1 2 0 0 0 61.5 174" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round"/></g><polyline points="125.9,174 114,176" fill="none" stroke="var(--lead)" stroke-width=".9"/><circle cx="125.9" cy="174" r="2.6" fill="var(--accent)"/><text x="106" y="172" text-anchor="end" font-size="11" fill="var(--muted)">Forearm</text><text x="106" y="188" text-anchor="end" font-size="14.5" font-weight="700" fill="var(--fg)">30 · 30.5</text><g transform="translate(80 0)"><path d="M68.5 238A14.700000000000001 2 0 0 1 97.89999999999999 238" fill="none" stroke="var(--accent)" stroke-width="1.2" stroke-dasharray="2 2" opacity=".8"/><path d="M68.5 238A14.700000000000001 2 0 0 0 97.89999999999999 238" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round"/></g><polyline points="149.1,238 114,238" fill="none" stroke="var(--lead)" stroke-width=".9"/><circle cx="149.1" cy="238" r="2.6" fill="var(--accent)"/><text x="106" y="234" text-anchor="end" font-size="11" fill="var(--muted)">Thigh</text><text x="106" y="250" text-anchor="end" font-size="14.5" font-weight="700" fill="var(--fg)">60 · 60</text><g transform="translate(80 0)"><path d="M71.80000000000001 322A8.749999999999998 2 0 0 1 89.3 322" fill="none" stroke="var(--accent)" stroke-width="1.2" stroke-dasharray="2 2" opacity=".8"/><path d="M71.80000000000001 322A8.749999999999998 2 0 0 0 89.3 322" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round"/></g><polyline points="152.4,322 114,322" fill="none" stroke="var(--lead)" stroke-width=".9"/><circle cx="152.4" cy="322" r="2.6" fill="var(--accent)"/><text x="106" y="318" text-anchor="end" font-size="11" fill="var(--muted)">Calf</text><text x="106" y="334" text-anchor="end" font-size="14.5" font-weight="700" fill="var(--fg)">38.4 · 39.5</text>
+</svg>
+        <div class="small center">Tap a point to see how to measure it</div>
+        <div class="grp">Body ratios <span class="tag prop">Proposed</span></div>
+        <div class="list">
+          <div class="row2"><div class="nm">Waist to height<div class="flag mute">Under 0.5 · lower health risk</div></div><div class="vv"><div>0.49</div></div></div>
+          <div class="row2"><div class="nm">Waist to hips<div class="flag mute">WHO limit 0.90 for men, 0.85 for women</div></div><div class="vv"><div>0.87</div></div></div>
+          <div class="row2"><div class="nm">Shoulders to waist<div class="flag mute">Goes up when shoulders grow or waist drops</div></div><div class="vv"><div>1.36</div></div></div>
+          <div class="row2"><div class="nm">Body fat estimate<div class="flag mute">US Navy method · about ± 3 %</div></div><div class="vv"><div>18 %</div></div></div>
+        </div>
+        <div class="grp">Circumference · cm</div>
+        <div class="list"><div class="row2"><div class="nm">1 · Neck</div><svg class="spark" viewBox="0 0 48 20" aria-hidden="true"><polyline points="2,17 16.666666666666664,8.60000000000008 31.333333333333332,3 46,3" fill="none" stroke="var(--fg)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="46" cy="3" r="1.8" fill="var(--fg)"/></svg><div class="vv"><div>39 cm</div><div class="cg">▲0.5</div></div></div><div class="row2"><div class="nm">2 · Shoulders</div><svg class="spark" viewBox="0 0 48 20" aria-hidden="true"><polyline points="2,17 16.666666666666664,10 31.333333333333332,6.5 46,3" fill="none" stroke="var(--fg)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="46" cy="3" r="1.8" fill="var(--fg)"/></svg><div class="vv"><div>122 cm</div><div class="cg">▲2.0</div></div></div><div class="row2"><div class="nm">3 · Chest</div><svg class="spark" viewBox="0 0 48 20" aria-hidden="true"><polyline points="2,17 16.666666666666664,10 31.333333333333332,5.80000000000004 46,3" fill="none" stroke="var(--fg)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="46" cy="3" r="1.8" fill="var(--fg)"/></svg><div class="vv"><div>114 cm</div><div class="cg">▲1.0</div></div></div><div class="row2"><div class="nm">4 · Waist</div><svg class="spark" viewBox="0 0 48 20" aria-hidden="true"><polyline points="2,3 16.666666666666664,7.19999999999996 31.333333333333332,11.40000000000002 46,17" fill="none" stroke="var(--fg)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="46" cy="17" r="1.8" fill="var(--fg)"/></svg><div class="vv"><div>90 cm</div><div class="cg">▼2.0</div></div></div><div class="row2"><div class="nm">5 · Hips</div><svg class="spark" viewBox="0 0 48 20" aria-hidden="true"><polyline points="2,3 16.666666666666664,8.60000000000008 31.333333333333332,14.19999999999996 46,17" fill="none" stroke="var(--fg)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="46" cy="17" r="1.8" fill="var(--fg)"/></svg><div class="vv"><div>104 cm</div><div class="cg">▼1.0</div></div></div><div class="row2"><div class="nm">6 · Upper arm</div><svg class="spark" viewBox="0 0 48 20" aria-hidden="true"><polyline points="2,17 16.666666666666664,13.26666666666668 31.333333333333332,9.53333333333336 46,7.666666666666668" fill="none" stroke="var(--fg)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="46" cy="7.666666666666668" r="1.8" fill="var(--fg)"/><polyline points="2,12.333333333333334 16.666666666666664,7.666666666666668 31.333333333333332,5.799999999999972 46,3" fill="none" stroke="var(--muted)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="2 2"/><circle cx="46" cy="3" r="1.8" fill="var(--muted)"/></svg><div class="vv"><div>L 36 · R 36.5</div><div class="cg">▲1.0 · ▲1.0</div></div></div><div class="row2"><div class="nm">7 · Forearm</div><svg class="spark" viewBox="0 0 48 20" aria-hidden="true"><polyline points="2,17 16.666666666666664,12.79999999999999 31.333333333333332,10 46,10" fill="none" stroke="var(--fg)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="46" cy="10" r="1.8" fill="var(--fg)"/><polyline points="2,10 16.666666666666664,7.20000000000001 31.333333333333332,4.40000000000002 46,3" fill="none" stroke="var(--muted)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="2 2"/><circle cx="46" cy="3" r="1.8" fill="var(--muted)"/></svg><div class="vv"><div>L 30 · R 30.5</div><div class="cg">▲0.5 · ▲0.5</div></div></div><div class="row2"><div class="nm">8 · Thigh</div><svg class="spark" viewBox="0 0 48 20" aria-hidden="true"><polyline points="2,17 16.666666666666664,11.40000000000002 31.333333333333332,5.80000000000004 46,3" fill="none" stroke="var(--fg)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="46" cy="3" r="1.8" fill="var(--fg)"/><polyline points="2,10 16.666666666666664,5.80000000000004 31.333333333333332,3 46,3" fill="none" stroke="var(--muted)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="2 2"/><circle cx="46" cy="3" r="1.8" fill="var(--muted)"/></svg><div class="vv"><div>L 60 · R 60</div><div class="cg">▲1.0 · ▲0.5</div></div></div><div class="row2"><div class="nm">9 · Calf<div class="flag">Right is 1.1 cm bigger</div></div><svg class="spark" viewBox="0 0 48 20" aria-hidden="true"><polyline points="2,17 16.666666666666664,17 31.333333333333332,17 46,17" fill="none" stroke="var(--fg)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="46" cy="17" r="1.8" fill="var(--fg)"/><polyline points="2,6.8181818181817775 16.666666666666664,4.272727272727289 31.333333333333332,3 46,3" fill="none" stroke="var(--muted)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="2 2"/><circle cx="46" cy="3" r="1.8" fill="var(--muted)"/></svg><div class="vv"><div>L 38.4 · R 39.5</div><div class="cg">±0 · ▲0.3</div></div></div></div>
+        <div class="grp">Length · cm</div>
+        <div class="list">
+          <div class="row"><span>10 · Arm length</span><span class="v">63 cm</span></div>
+          <div class="row"><span>11 · Leg length</span><span class="v">100 cm</span></div>
+          <div class="row"><span>12 · Inseam</span><span class="v">74 cm</span></div>
+        </div>
+        <div class="small center" style="margin-top:12px">Next log from 5 Dec · every 2 to 4 weeks <span class="tag prop">Proposed</span></div>
+        <div class="btn">Log measurements</div>
+      </div>
+    </div>
+    <div class="ph"><div class="cap">No logs yet</div>
+      <div class="screen">
+        <div class="back">‹ Body and health</div>
+        <div class="h">Measurements</div>
+        <div class="box" style="margin-top:0">
+          <p><b>No measurements yet</b></p>
+          <p class="small">Measure with a soft tape, in the morning, before training. Log the parts you measured. You can leave the others empty.</p>
+        </div>
+        <div class="btn">Log measurements</div>
+      </div>
+    </div>
+  </div>
+  <p class="small">The map shows the latest value at each point. The arrow is the change since the date you pick at the top. The change has no green or red, because a bigger chest or a smaller waist is good for one person and bad for another. A left and right difference of 1 cm or more gets a note. Tap a point or a row to see how to measure it and its history.</p>
+
+  <h3>3 · How you log</h3>
+  <div class="phones">
+<div class="ph"><div class="cap">Step 4 · Waist</div><div class="screen">
+<div class="topbar"><span class="x">Cancel</span><span class="small">4 of 13</span></div>
+<div class="prog"><i style="width:30.76923076923077%"></i></div>
+<div class="sh">Waist</div><div class="small">Trunk · tape around the body</div>
+<div class="howto"><svg class="pcrop" viewBox="40 110 120 90" role="img" aria-label="Where to measure the waist">
+<use href="#bm-fig" x="0" y="0"/><path d="M70.9 150A29.1 3.492 0 0 1 129.1 150" fill="none" stroke="var(--accent)" stroke-width="0.96" stroke-dasharray="2 2" opacity=".8"/><path d="M70.9 150A29.1 3.492 0 0 0 129.1 150" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round"/></svg></div>
+<div class="small">Halfway between the lowest rib and the hip bone. <span class="link">How to measure ›</span></div>
+<div class="big"><span class="num"><span class="sel">90.8</span></span><span class="u">cm</span></div>
+<div class="small center">Last time 90.8 cm · 7 Nov</div>
+<div class="quick"><span>− 0.5</span><span>Same</span><span>+ 0.5</span></div>
+<div class="actions"><span class="skip">Skip</span><span class="next">Next</span></div>
+<div class="kp"><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span><span class="k">.</span><span>0</span><span class="k">⌫</span></div></div></div>
+<div class="ph"><div class="cap">Step 8 · Left upper arm</div><div class="screen">
+<div class="topbar"><span class="x">Cancel</span><span class="small">8 of 13</span></div>
+<div class="prog"><i style="width:61.53846153846154%"></i></div>
+<div class="sh">Upper arm · left</div><div class="small">Left arm · relaxed</div>
+<div class="howto"><svg class="pcrop" viewBox="99 85 90 90" role="img" aria-label="Where to measure the upper arm">
+<use href="#bm-fig" x="0" y="0"/><path d="M134.70000000000002 128A9.499999999999991 2 0 0 1 153.7 128" fill="none" stroke="var(--accent)" stroke-width="0.96" stroke-dasharray="2 2" opacity=".8"/><path d="M134.70000000000002 128A9.499999999999991 2 0 0 0 153.7 128" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round"/></svg></div>
+<div class="small">Halfway between the shoulder tip and the elbow. <span class="link">How to measure ›</span></div>
+<div class="big"><span class="num"><span class="sel">36.0</span></span><span class="u">cm</span></div>
+<div class="small center">Last time 35.8 cm · 7 Nov</div>
+<div class="quick"><span>− 0.5</span><span>Same</span><span>+ 0.5</span></div>
+<div class="actions"><span class="skip">Skip</span><span class="next">Next</span></div>
+<div class="kp"><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span><span class="k">.</span><span>0</span><span class="k">⌫</span></div></div></div>
+<div class="ph"><div class="cap">Done</div><div class="screen">
+<div class="done"><div class="ok">✓</div><div class="sh" style="margin-top:8px">Saved · 21 Nov</div><div class="small">12 of 13 parts · 1 skipped</div></div>
+<div class="list"><div class="row"><span>Neck</span><span class="v">39 cm <span class="small">±0</span></span></div><div class="row"><span>Shoulders</span><span class="v">Skipped</span></div><div class="row"><span>Chest</span><span class="v">114 cm <span class="small">▲0.2</span></span></div><div class="row"><span>Waist</span><span class="v">90 cm <span class="small">▼0.8</span></span></div><div class="row"><span>Hips</span><span class="v">104 cm <span class="small">▼0.2</span></span></div><div class="row"><span>Upper arm</span><span class="v">L 36 · R 36.5</span></div><div class="row"><span>Forearm</span><span class="v">L 30 · R 30.5</span></div><div class="row"><span>Thigh</span><span class="v">L 60 · R 60</span></div><div class="row"><span>Calf</span><span class="v">L 38.4 · R 39.5</span></div></div>
+<div class="small center" style="margin-top:8px">Tap a value to correct it</div>
+<div class="btn">Done</div></div></div>
+  </div>
+  <ul>
+    <li><b>One part per screen, in a fixed order.</b> First the tape around the trunk from the top down (neck, shoulders, chest, waist, hips). Then the right arm, the left arm, the right leg and the left leg. You do not move the tape back and forth, and you do not search a long form.</li>
+    <li><b>13 steps for circumference.</b> Each arm and leg part is its own step, right side first.</li>
+    <li><b>The number keypad opens at once.</b> The field starts with your last value, selected, so you type over it. Next on the keypad goes to the next step.</li>
+    <li><b>Fast buttons.</b> − 0.5 and + 0.5 change the last value. "Same" keeps the last value. Skip goes to the next part and saves nothing for this one.</li>
+    <li><b>Each step saves at once.</b> If you close the app in the middle, the values you entered are kept. Nothing is kept in the browser.</li>
+    <li><b>Lengths come only on your first log</b>, because they do not change. Later you change them on the Measurements page.</li>
+    <li><b>The date is today.</b> On the first step you can tap the date to log an old measurement (for example your old list).</li>
+    <li><b>"How to measure"</b> on each step opens the full guide for that part. The picture and one line of where to measure are always on the screen.</li>
+    <li><b>Done screen.</b> It shows all values of today with the change. Tap a value to correct it.</li>
+  </ul>
+
+  <h3>4 · A body part</h3>
+  <div class="phones">
+    <div class="ph"><div class="cap">Tap a row · Waist</div>
+      <div class="screen">
+        <div class="back">‹ Measurements</div>
+        <div class="h">Waist</div>
+        <div class="small">90 cm · −2.0 cm since 3 Oct</div>
+        <div class="grp">How to measure</div>
+        <div class="howto"><svg class="pcrop" viewBox="40 110 120 90" role="img" aria-label="Where to measure the waist">
+<use href="#bm-fig" x="0" y="0"/><path d="M70.9 150A29.1 3.492 0 0 1 129.1 150" fill="none" stroke="var(--accent)" stroke-width="0.96" stroke-dasharray="2 2" opacity=".8"/><path d="M70.9 150A29.1 3.492 0 0 0 129.1 150" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round"/></svg><p class="small"><b>Where</b> · Halfway between the lowest rib and the top of the hip bone. For most people this is the narrowest part, a little above the navel.</p>
+<ol class="small"><li>Stand with the feet together and the stomach relaxed.</li><li>Put the tape around the waist, level with the floor.</li><li>Breathe out normally, then read at the end of the breath.</li></ol><p class="small"><b>Tip</b> · Do not pull in the stomach. Use the same point each time.</p></div>
+        <div class="grp">History</div>
+        <svg class="chart" viewBox="0 0 260 110" role="img" aria-label="Waist trend from 92 to 90 cm">
+          <line x1="10" y1="20" x2="250" y2="20" stroke="var(--line)" stroke-width="1"/>
+          <line x1="10" y1="90" x2="250" y2="90" stroke="var(--line)" stroke-width="1"/>
+          <polyline points="14,24 92,40 170,62 246,86" fill="none" stroke="var(--fg)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="14" cy="24" r="3" fill="var(--fg)"/><circle cx="92" cy="40" r="3" fill="var(--fg)"/>
+          <circle cx="170" cy="62" r="3" fill="var(--fg)"/><circle cx="246" cy="86" r="4" fill="var(--fg)"/>
+          <text x="10" y="14" font-size="10" fill="var(--muted)">92</text>
+          <text x="10" y="106" font-size="10" fill="var(--muted)">90</text>
+        </svg>
+        <div class="list">
+          <div class="row"><span>21 Nov</span><span class="v">90 cm · Delete</span></div>
+          <div class="row"><span>7 Nov</span><span class="v">90.8 cm · Delete</span></div>
+          <div class="row"><span>21 Oct</span><span class="v">91.4 cm · Delete</span></div>
+          <div class="row"><span>3 Oct</span><span class="v">92 cm · Delete</span></div>
+        </div>
+        <p class="small">For a left and right part the chart has two lines, L and R.</p>
+      </div>
+    </div>
+  </div>
+  <ul>
+    <li>A second log on the same date replaces the values of that date.</li>
+    <li>To correct a wrong value, delete it in the history of that part and log it again.</li>
+  </ul>
+
+  <h2>How it is built</h2>
+  <div class="tw"><table>
+    <tr><th>Part</th><th>What</th></tr>
+    <tr><td>Data</td><td>A new table <code>body_measurement</code> · user, body part, side (left, right or none), value in cm, date. One row per value. It cascades when the account is deleted. A migration file in <code>drizzle/</code>.</td></tr>
+    <tr><td>Server Actions</td><td>Log a set of values for a date, delete one value, read all values. Each one checks the session and filters by the user. Values from 1 to 300 cm.</td></tr>
+    <tr><td>Screens</td><td>A new <code>href</code> row in Body and health (<code>sections.tsx</code>), a new page <code>/more/account/measurements</code>, and a page per body part. Reuse <code>BackLink</code>, the account row list, the bottom sheet and the weight chart style.</td></tr>
+    <tr><td>Body map and guide</td><td>The body map reuses the front figure of <code>MuscleMap</code> (<code>src/lib/exercise-art/muscle-map.ts</code>) and draws the tape lines over it. The guide text is one list in the code, with a number, the picture area and the steps for each part.</td></tr>
+    <tr><td>Privacy</td><td>Body measurements are health data. Add them to the data inventory, the privacy policy and the data export (<code>collectUserData</code>).</td></tr>
+    <tr><td>Tests</td><td>Integration tests for the actions (owner check, same-date replace, delete). One e2e spec that logs, reads back and deletes a value. Screenshots at 390 and 320 px.</td></tr>
+  </table></div>
+
+  <h2>Your decision</h2>
+  <div class="box">
+    <p><span class="tag ask">Decision</span></p>
+    <p>Body measurements are a new kind of health data. The privacy rule of this app says: name it in the policy, and ask every user to accept the consent again one time (raise <code>CONSENT_VERSION</code>). Each user then sees the consent page once on the next visit.</p>
+    <p><b>My recommendation · raise it.</b> The alternative is a policy update notice only, but then the consent that users gave does not name this data.</p>
+  </div>
+
+  <h2>What does not change</h2>
+  <ul>
+    <li>Height and body weight stay as they are, with the same rows and the same weight history.</li>
+    <li>No home widget, no chart on the Progress page, no Garmin sync of measurements.</li>
+    <li>The AI coach (MCP tools) does not read or write measurements in this change. That can be a later change.</li>
+    <li>Friends never see measurements.</li>
+  </ul>
+
+  <h2>Steps in order</h2>
+  <ol>
+    <li>Table, migration, Server Actions and integration tests.</li>
+    <li>The Measurements page and the new row in Body and health. Screenshot next to the picture above.</li>
+    <li>The step by step log flow and the Done screen. Screenshot.</li>
+    <li>The body part page with the guide, the chart and delete. Screenshot.</li>
+    <li>The body map and the guide on each log step. Screenshot.</li>
+    <li>Privacy · inventory, policy, export, version.</li>
+    <li>e2e spec, <code>pnpm verify</code>, screenshots at 390 and 320 px.</li>
+    <li>Pull request, CI, merge, check the deploy (not while you train).</li>
+  </ol>
+
+  <h2>How you check the result</h2>
+  <ol>
+    <li>Open Account › Body and health. The row Measurements is there and says "Not set".</li>
+    <li>Log your old list with an old date. Then log new values with today's date.</li>
+    <li>The page shows the latest values and the change. Tap Waist and see two points in the chart.</li>
+    <li>Delete one value. It goes from the history.</li>
+    <li>Download your data in Your data. The measurements are in the file.</li>
+  </ol>
+</div>
