@@ -23,9 +23,8 @@ import { runGarminView } from "@/lib/run-garmin";
 import { runThresholdTest } from "@/lib/run-test";
 import { getUserSettings } from "@/lib/user-settings";
 import { runTestCheckText, runTestThresholds } from "@/lib/utils/run-test";
-import { minSec } from "@/lib/utils/thresholds";
 import { rideTimeline, type RidePlan } from "@/lib/utils/ride-timeline";
-import { paceText } from "@/lib/utils/run-numbers";
+import { paceSeconds, paceText } from "@/lib/utils/run-numbers";
 import { runSummary, type RunStepLog } from "@/lib/utils/run-results";
 import { RUN_MODE_NAME, plannedRunNumbers, runOutdoorText, runRowOfStep, runStepTitle, runTargetText } from "@/lib/utils/run-view";
 import { and, asc, eq } from "drizzle-orm";
@@ -148,7 +147,7 @@ export async function runReport(userId: string, ride: typeof rides.$inferSelect)
           distanceMeters: log.distanceMeters,
           avgSpeed: r2(log.avgSpeed),
           ...(treadmill && { beltKmh: log.avgSpeed !== null ? kmh(log.avgSpeed) : null, inclinePercent: log.inclinePercent ?? null }),
-          paceSPerKm: log.distanceMeters && log.durationSeconds ? Math.round(log.durationSeconds / (log.distanceMeters / 1000)) : null,
+          paceSPerKm: log.distanceMeters && log.durationSeconds ? paceSeconds(log.durationSeconds / (log.distanceMeters / 1000)) : null,
           avgHr: log.avgHr,
           maxHr: log.maxHr,
           avgCadence: log.avgCadence,
@@ -167,10 +166,10 @@ export async function runReport(userId: string, ride: typeof rides.$inferSelect)
       // Totals count skipped steps too: a skipped step was still run (4.7).
       distanceMeters: n.meters,
       distanceSource: summary.distanceLine,
-      paceSPerKm: n.paceSPerKm === null ? null : Math.round(n.paceSPerKm),
+      paceSPerKm: n.paceSPerKm === null ? null : paceSeconds(n.paceSPerKm),
       pace: n.paceSPerKm === null ? null : paceText(n.paceSPerKm),
       // Grade-adjusted pace: on a treadmill from the belt and incline; outdoors from the Garmin stream's distance and altitude.
-      gapSPerKm: (treadmill || stream?.numbers.gapSPerKm != null) && n.gapSPerKm !== null ? Math.round(n.gapSPerKm) : null,
+      gapSPerKm: (treadmill || stream?.numbers.gapSPerKm != null) && n.gapSPerKm !== null ? paceSeconds(n.gapSPerKm) : null,
       avgHr: n.avgHr === null ? null : Math.round(n.avgHr),
       intensityFactor: r2(n.intensityFactor),
       load: n.load && {
@@ -196,9 +195,9 @@ export async function runReport(userId: string, ride: typeof rides.$inferSelect)
           test: plan.test,
           proposedLthr: test?.result?.lthr ?? null,
           proposedThresholdSpeed: test?.result?.speed != null ? r2(test.result.speed) : null,
-          proposedThresholdPace: test?.result?.speed != null ? `${minSec(1000 / test.result.speed)} /km` : null,
+          proposedThresholdPace: test?.result?.speed != null ? paceText(1000 / test.result.speed) : null,
           currentLthr: test?.current.lthr ?? null,
-          currentThresholdPace: test?.current.speed ? `${minSec(1000 / test.current.speed)} /km` : null,
+          currentThresholdPace: test?.current.speed ? paceText(1000 / test.current.speed) : null,
           // save: within 5 bpm and 3% of the current values; choose: 6 to 10 bpm or 3 to 8%; retest: further off ("Run the test again in 4 weeks").
           band: test?.result?.band ?? null,
           // A failed check: "Test may be invalid".

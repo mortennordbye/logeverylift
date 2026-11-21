@@ -12,7 +12,7 @@
 import type { RideMode, RunSurface } from "@/db/schema/rides";
 import { CHART, timeTicks, type ChartBar, type RideChart } from "@/lib/utils/bike-ride-view";
 import type { RidePlan, RidePlanStep } from "@/lib/utils/ride-timeline";
-import { zoneWholeMinutes } from "@/lib/utils/run-numbers";
+import { paceSeconds, paceText, zoneWholeMinutes } from "@/lib/utils/run-numbers";
 import { hrTargetZone, WALK_BELT_KMH } from "@/lib/utils/run-plan";
 import { minSec } from "@/lib/utils/thresholds";
 import { plannedLoad } from "@/lib/utils/training-load";
@@ -111,15 +111,15 @@ function hrTargetText(s: RidePlanStep, zone: number | null, cap: boolean, thresh
 
 /** "5:59-6:26 /km": a speed range (m/s), fast end first. */
 function paceRangeText(slow: number, fast: number): string {
-  const a = minSec(1000 / fast);
-  const b = minSec(1000 / slow);
+  const a = minSec(paceSeconds(1000 / fast));
+  const b = minSec(paceSeconds(1000 / slow));
   return a === b ? `${a} /km` : `${a}-${b} /km`;
 }
 
 /** The Friel pace range of a zone (Z5 is 5a and 5b) at this threshold speed. */
 function zonePaceText(zone: number, speed: number): string {
   const [fast, slow] = zone === 5 ? [90, 100] : RUN_PACE_ZONES[String(zone) as "1" | "2" | "3" | "4"];
-  if (slow === null) return `slower than ${minSec(1000 / ((speed * 100) / fast!))} /km`;
+  if (slow === null) return `slower than ${paceText(1000 / ((speed * 100) / fast!))}`;
   return paceRangeText((speed * 100) / slow, (speed * 100) / fast!);
 }
 
@@ -427,7 +427,7 @@ export function runStepRows(plan: RidePlan, surface: RunSurface = "road"): RunSt
 
 /** The number the mode's targets read first: on a treadmill "threshold 5:39 /km", else "LTHR 180"; outdoors the other way round. */
 export function runAnchorText(th: ThresholdValues, mode: RideMode): string | null {
-  const pace = th.run_threshold_pace ? `threshold ${minSec(1000 / th.run_threshold_pace)} /km` : null;
+  const pace = th.run_threshold_pace ? `threshold ${paceText(1000 / th.run_threshold_pace)}` : null;
   const lthr = th.lthr_run ? `LTHR ${Math.round(th.lthr_run)}` : null;
   return mode === "indoor" ? (pace ?? lthr) : (lthr ?? pace);
 }

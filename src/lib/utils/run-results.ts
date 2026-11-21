@@ -13,7 +13,7 @@ import type { RideMode } from "@/db/schema/rides";
 import { parseField, resultPayloads, rideEffort, type ResultEdits, type ResultSaveContext, type ResultStep, type StepLog } from "@/lib/utils/ride-results";
 import { rideClock } from "@/lib/utils/ride-screen";
 import type { RidePlan, RidePlanStep } from "@/lib/utils/ride-timeline";
-import { doneRunNumbers, paceText, type DoneRunNumbers } from "@/lib/utils/run-numbers";
+import { doneRunNumbers, paceSeconds, paceText, type DoneRunNumbers } from "@/lib/utils/run-numbers";
 import type { DoneChart } from "@/lib/utils/ride-stream";
 import type { RunStreamNumbers, StepBounds } from "@/lib/utils/run-stream";
 import { runOutdoorText, runRowOfStep, runStepTitle, runStepZone, runTargetText } from "@/lib/utils/run-view";
@@ -247,7 +247,7 @@ function doneText(log: StepLog | null, mode: RideMode): string {
   const hr = log.avgHr !== null ? `HR ${log.avgHr}` : null;
   const belt = beltOfLog(log);
   const pace =
-    mode === "outdoor" && log.distanceMeters && log.durationSeconds ? minSec(Math.floor(log.durationSeconds / (log.distanceMeters / 1000))) : null;
+    mode === "outdoor" && log.distanceMeters && log.durationSeconds ? minSec(paceSeconds(log.durationSeconds / (log.distanceMeters / 1000))) : null;
   return [mode === "indoor" ? (belt !== null ? belt.toFixed(1) : null) : pace, hr].filter(Boolean).join(" · ") || "–";
 }
 

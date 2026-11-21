@@ -94,8 +94,8 @@ describe("outdoor targets (4.2)", () => {
     };
     const road = plan(w, OWNER, "outdoor");
     expect(road.steps.map((s) => runOutdoorText(s, OWNER, "road"))).toEqual([
-      { main: "5:36-5:56 /km", second: "HR 171-179" },
-      { main: "5:32-5:46 /km", second: "HR 171-179" },
+      { main: "5:35-5:55 /km", second: "HR 171-179" },
+      { main: "5:32-5:45 /km", second: "HR 171-179" },
       { main: "Hard", second: null },
       { main: "Easy jog or walk", second: null },
     ]);
@@ -125,14 +125,14 @@ describe("outdoor targets (4.2)", () => {
     }
     // With no LTHR: on Trail or snow an effort, on Road the pace as written.
     expect(runStepRows(plan(w, { run_threshold_pace: OWNER.run_threshold_pace }, "outdoor", "trail"), "trail").map((r) => r.detail)).toEqual(["Effort 2", "Effort 5"]);
-    expect(runStepRows(plan(w, { run_threshold_pace: OWNER.run_threshold_pace }, "outdoor"), "road").map((r) => r.detail)).toEqual(["7:04-7:32 /km", "6:08-6:25 /km"]);
+    expect(runStepRows(plan(w, { run_threshold_pace: OWNER.run_threshold_pace }, "outdoor"), "road").map((r) => r.detail)).toEqual(["7:03-7:32 /km", "6:08-6:25 /km"]);
   });
 
   it("an outdoor distance step shows its estimate", () => {
     const w = { v: 2, sport: "run", name: "Km", steps: [{ type: "work", end: { type: "distance", meters: 1000 }, target: { metric: "pace", anchor: "threshold_pace", low: 98, high: 102 } }] };
     const [row] = runStepRows(plan(w, OWNER, "outdoor"));
     expect(row.time).toBe("1 km");
-    expect(row.detail).toBe("5:32-5:46 /km · HR 171-179 · about 5:39");
+    expect(row.detail).toBe("5:32-5:45 /km · HR 171-179 · about 5:39");
   });
 });
 

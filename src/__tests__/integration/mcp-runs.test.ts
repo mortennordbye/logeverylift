@@ -200,6 +200,8 @@ describe("get_ride on a run", () => {
     expect(ride.numbers).toMatchObject({ seconds: RUN_SECONDS, distanceSource: "Distance from the belt", stream: false, drift: null, timeOnTarget: null, zonesFrom: "steps" });
     expect(ride.numbers.distanceMeters).toBeGreaterThan(3000);
     expect(ride.numbers.gapSPerKm).toBeLessThanOrEqual(ride.numbers.paceSPerKm);
+    // One pace rule: the seconds and the words agree.
+    expect(`${Math.floor(ride.numbers.paceSPerKm / 60)}:${String(ride.numbers.paceSPerKm % 60).padStart(2, "0")} /km`).toBe(ride.numbers.pace);
     // The cool-down ran by feel, so distance covers under 90% of the time: no pace load, and no effort given.
     expect(ride.numbers.load).toBeNull();
   });

@@ -244,7 +244,7 @@ describe("step 7: outdoors with Garmin's pace", () => {
   it("a rep faster than its pace range shows ↑, slower ↓, inside none; its heart rate line does not judge it", () => {
     const fast = runSummary(out, { 1: garmin(300, 1000 / 328), 2: garmin(300, 2) }, { beltEvents: false });
     // The arrow sits on the pace it judges, not after the heart rate.
-    expect(fast.rows[0]).toMatchObject({ plan: "5:32-5:46", done: "5:27 · HR 172", mark: "↑", markOn: "speed" });
+    expect(fast.rows[0]).toMatchObject({ plan: "5:32-5:45", done: "5:27 · HR 172", mark: "↑", markOn: "speed" });
     const slow = runSummary(out, { 1: garmin(300, 1000 / 350), 2: garmin(300, 2) }, { beltEvents: false });
     expect(slow.rows[0].mark).toBe("↓");
     const inside = runSummary(out, { 1: garmin(300, 1000 / 340), 2: garmin(300, 2) }, { beltEvents: false });

@@ -13,12 +13,12 @@
 
 import { saveRunThreshold } from "@/lib/actions/run-test";
 import { runTestCheckText, type RunTestView } from "@/lib/utils/run-test";
-import { minSec } from "@/lib/utils/thresholds";
+import { paceText } from "@/lib/utils/run-numbers";
 import { callAction } from "@/lib/utils/stale-bundle";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-const pace = (speed: number | null) => (speed ? `${minSec(1000 / speed)} /km` : "–");
+const pace = (speed: number | null) => (speed ? paceText(1000 / speed) : "–");
 
 export function RunTestLine({ rideId, test }: { rideId: number; test: RunTestView }) {
   const router = useRouter();

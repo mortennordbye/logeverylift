@@ -155,3 +155,27 @@ describe("runPaceLoad with an incline (section 3)", () => {
     expect(hill!.intensityFactor / flat!.intensityFactor).toBeCloseTo(1.2364, 3);
   });
 });
+
+describe("one pace rule (final review)", () => {
+  it("cuts to the whole second, and a threshold stored as a real number keeps its second", async () => {
+    const { paceSeconds } = await import("@/lib/utils/run-numbers");
+    const { beltPace } = await import("@/lib/utils/run-screen");
+    expect(paceText(459.7)).toBe("7:39 /km");
+    expect(paceSeconds(459.7)).toBe(459);
+    // 5:45 /km stored in a real column reads back as 344.99999... s per km.
+    const stored = Math.fround(1000 / 345);
+    expect(paceText(1000 / stored)).toBe("5:45 /km");
+    expect(paceSeconds(1000 / stored)).toBe(345);
+    // A belt shows the pace the summary shows for the same belt.
+    for (const belt of [8.1, 8.5, 10.6, 13]) expect(beltPace(belt)).toBe(paceText(3600 / belt));
+  });
+
+  it("the pace ranges and the threshold line read paces by the same rule", async () => {
+    const { runOutdoorText } = await import("@/lib/utils/run-view");
+    // 5:45 /km stored as a real: 100% of it is 5:45, not 5:44 or 5:46.
+    const th = { run_threshold_pace: Math.fround(1000 / 345), lthr_run: 180 };
+    const w = tree({ v: 2, sport: "run", name: "T", steps: [{ type: "work", end: { type: "time", seconds: 900 }, target: { metric: "pace", anchor: "threshold_pace", low: 100, high: 100 } }] });
+    const p = buildRunPlan(w, [1], th, "outdoor");
+    expect(runOutdoorText(p.steps[0], th, "road").main).toBe("5:45 /km");
+  });
+});

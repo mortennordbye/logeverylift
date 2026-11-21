@@ -24,9 +24,19 @@ import { runHrZoneOf } from "@/lib/utils/workout-steps";
 /** Distance on steps that cover this share of the run's time gives a pace load, as power does for a ride. */
 export const DISTANCE_COVERAGE_MIN = 0.9;
 
-/** "7:39 /km": seconds per km, cut to the whole second as a watch shows it. */
+/**
+ * Seconds per km cut to the whole second, as a watch shows a pace: the one
+ * pace rule of every run screen, alert and `get_ride` field (459.7 is 7:39).
+ * A tenth of a millisecond of slack keeps a threshold stored as a real number
+ * on its second (5:45 /km reads back as 344.999997 s).
+ */
+export function paceSeconds(secondsPerKm: number): number {
+  return Math.floor(secondsPerKm + 1e-4);
+}
+
+/** "7:39 /km": a pace by `paceSeconds`. */
 export function paceText(secondsPerKm: number): string {
-  return `${minSec(Math.floor(secondsPerKm))} /km`;
+  return `${minSec(paceSeconds(secondsPerKm))} /km`;
 }
 
 /** One run step: its active seconds, meters when known, time-weighted incline in % and average heart rate. */
