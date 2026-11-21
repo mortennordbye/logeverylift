@@ -237,6 +237,8 @@ export type RideStepResult = {
   /** A run step's meters from the belt (null when the belt was never known) and its time-weighted incline in %. Absent on a ride. */
   distanceM?: number | null;
   inclinePct?: number | null;
+  /** A run step's average belt speed in m/s, from the meters and time before rounding (null when the belt was never known). */
+  avgSpeed?: number | null;
 };
 
 export type RideTimeline = {
@@ -420,7 +422,12 @@ export function rideTimeline(
     return { ...l, belt, distM: 0, distAtMs: 0, beltSeen: belt !== null, incline, inclineSum: 0, inclineMs: 0, inclineAtMs: 0 };
   };
   /** The run fields of a step that ends at `t`. */
-  const runResult = (l: Live, t: number) => (run ? { distanceM: l.beltSeen ? Math.round(distAt(l, t)) : null, inclinePct: inclineAvg(l, t) } : {});
+  const runResult = (l: Live, t: number) => {
+    if (!run) return {};
+    const ms = activeMs(l, t);
+    const m = l.beltSeen ? distAt(l, t) : null;
+    return { distanceM: m !== null ? Math.round(m) : null, inclinePct: inclineAvg(l, t), avgSpeed: m !== null && ms > 0 ? Math.round((m / ms) * 1e6) / 1000 : null };
+  };
 
   /** Close the current step at `t`; with a status, it is saved. */
   const close = (t: number, st: RideStepResult["status"] | null) => {

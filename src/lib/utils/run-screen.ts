@@ -210,7 +210,7 @@ export function beltToastText(kind: "belt" | "incline", tenths: number): string 
 }
 
 /** The belt fields a treadmill run step saves (4.7): meters, average speed in m/s and the time-weighted incline. */
-export function beltResults(r: Pick<RideStepResult, "distanceM" | "inclinePct" | "activeSeconds">): {
+export function beltResults(r: Pick<RideStepResult, "distanceM" | "inclinePct" | "activeSeconds"> & { avgSpeed?: number | null }): {
   distanceMeters?: number;
   avgSpeed?: number | null;
   inclinePercent?: number;
@@ -218,7 +218,7 @@ export function beltResults(r: Pick<RideStepResult, "distanceM" | "inclinePct" |
   if (r.distanceM == null) return r.inclinePct != null ? { inclinePercent: r.inclinePct } : {};
   return {
     distanceMeters: r.distanceM,
-    avgSpeed: r.activeSeconds > 0 ? Math.round((r.distanceM / r.activeSeconds) * 1000) / 1000 : null,
+    avgSpeed: r.avgSpeed ?? (r.activeSeconds > 0 ? Math.round((r.distanceM / r.activeSeconds) * 1000) / 1000 : null),
     ...(r.inclinePct != null && { inclinePercent: r.inclinePct }),
   };
 }

@@ -136,6 +136,14 @@ describe("beltResults", () => {
     expect(beltResults({ distanceM: undefined, inclinePct: undefined, activeSeconds: 600 })).toEqual({});
   });
 
+  it("a short step's speed is the belt's, not meters over rounded seconds", () => {
+    // 7.6 s at 7.5 km/h, then 1.8 s at 8.0 km/h: 19.8 m in 9.4 s is 7.6 km/h. 20 m over 9 s would say 8.0.
+    const t = rideTimeline(treadmill, [ev("start", 0), ev("belt", 7.6, 80, "s1"), ev("end", 9.4)], at(10));
+    const b = beltResults(t.steps[0]);
+    expect(b.distanceMeters).toBe(20);
+    expect(b.avgSpeed! * 3.6).toBeCloseTo(7.6, 1);
+  });
+
   it("toasts say the value", () => {
     expect(beltToastText("belt", 95)).toBe("Belt 9.5 km/h");
     expect(beltToastText("incline", 15)).toBe("Incline 1.5%");
