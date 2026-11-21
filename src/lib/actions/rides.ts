@@ -14,6 +14,7 @@ import { enduranceEnabledFor } from "@/lib/endurance";
 import { liveProgramExercises, liveProgramSets, livePrograms } from "@/lib/plan-live";
 import { sessionRide } from "@/lib/ride-plan-db";
 import { brickRideOf } from "@/lib/run-brick";
+import { todaysPlannedIdOf } from "@/lib/planned-sessions";
 import { rewriteBeltResults } from "@/lib/run-belt-results";
 import { LIVE, isLive, schedulePushes, settle, type RideView } from "@/lib/ride-settle";
 import { thresholdValues } from "@/lib/session-compliance";
@@ -97,7 +98,7 @@ export async function startRide(data: unknown): Promise<ActionResult<RideView>> 
     if (replay) return { success: true, data: replay };
 
     const [session] = await db
-      .select({ programId: workoutSessions.programId, isCompleted: workoutSessions.isCompleted })
+      .select({ programId: workoutSessions.programId, isCompleted: workoutSessions.isCompleted, plannedSessionId: workoutSessions.plannedSessionId })
       .from(workoutSessions)
       .where(and(eq(workoutSessions.id, sessionId), eq(workoutSessions.userId, userId)));
     if (!session) return { success: false, error: "Not found" };
@@ -151,6 +152,10 @@ export async function startRide(data: unknown): Promise<ActionResult<RideView>> 
       return same ? { success: true, data: same } : { success: false, error: active.sport === "run" ? "A run is already running" : "A ride is already running" };
     }
 
+    // A run links today's planned session of its program when the workout screen
+    // opened the workout without one, as the guided player did (bike 4.5, R16).
+    const link = sport === "run" && session.plannedSessionId == null && session.programId != null ? await todaysPlannedIdOf(userId, session.programId) : null;
+
     let ended = null as RideView | null;
     const ride = await db.transaction(async (tx) => {
       // End ride and start run: the active one ends at the server's time, after
@@ -185,10 +190,11 @@ export async function startRide(data: unknown): Promise<ActionResult<RideView>> 
       await tx.insert(rideEvents).values({ rideId: row.id, seq: 1, clientId, kind: "start", at: new Date(startAt) });
       // The session's ride mode is the bike's (the bike screen's default); a run keeps its mode on its ride.
       const reopened = reopen ? { isCompleted: false, endTime: null } : {};
-      if (sport === "bike" || reopen) {
+      const linked = link != null ? { plannedSessionId: link } : {};
+      if (sport === "bike" || reopen || link != null) {
         await tx
           .update(workoutSessions)
-          .set(sport === "bike" ? { rideMode: mode, ...reopened } : reopened)
+          .set(sport === "bike" ? { rideMode: mode, ...reopened } : { ...reopened, ...linked })
           .where(and(eq(workoutSessions.id, sessionId), eq(workoutSessions.userId, userId)));
       }
       return row;

@@ -5,11 +5,12 @@
  * end reason, and the done run that takes Start run's place.
  */
 import { db } from "@/db";
-import { athleteThresholds, plannedSessions, rides, trainingCycles, users, workoutSets } from "@/db/schema";
+import { athleteThresholds, plannedSessions, rides, trainingCycles, users, workoutSessions, workoutSets } from "@/db/schema";
 import { getRide, sendRideEvent, setRideEndReason, startRide } from "@/lib/actions/rides";
 import { logWorkoutSet } from "@/lib/actions/workout-sets";
 import { brickRideOf, brickRideView, brickRunOf } from "@/lib/run-brick";
 import { runAfterView } from "@/lib/run-exercise-view";
+import { getStepResults } from "@/lib/step-results";
 import { rideTimeline, type RideStepResult } from "@/lib/utils/ride-timeline";
 import { beltResults } from "@/lib/utils/run-screen";
 import { and, eq } from "drizzle-orm";
@@ -273,5 +274,28 @@ describe("the brick (4.7)", () => {
     ok(await sendRideEvent({ rideId: br.id, clientId: cid(), kind: "end", expectedSeq: 1 }));
     expect(ok(await startRide({ ...r, mode: "indoor", clientId: cid() })).ride.brickRideId).toBeNull();
     expect(await brickRunOf(me, br.id)).toBeNull();
+  });
+});
+
+describe("the run links today's planned session (bike 4.5, R16)", () => {
+  it("a run started on a workout the screen opened without the planned session links it, so its step results show on the session page", async () => {
+    const s = await runSetup();
+    const [cycle] = await db.insert(trainingCycles).values({ userId: me, name: "Run block", durationWeeks: 4, status: "active", startDate: "2026-11-16", sessionsGeneratedAt: new Date() }).returning();
+    const [p] = await db.insert(plannedSessions).values({ userId: me, cycleId: cycle.id, date: "2026-11-20", programId: s.programId, position: 1 }).returning();
+    const v = ok(await startRide({ ...s, mode: "indoor", clientId: cid() }));
+    const [session] = await db.select({ plannedSessionId: workoutSessions.plannedSessionId }).from(workoutSessions).where(eq(workoutSessions.id, s.sessionId));
+    expect(session.plannedSessionId).toBe(p.id);
+    later(61 * MIN / 60);
+    ok(await logWorkoutSet(stepSave(s, 0, rideTimeline(v.plan, v.events, Date.now()).steps[0])));
+    expect((await getStepResults(me, { plannedSessionId: p.id }))?.rows.length).toBeGreaterThan(0);
+  });
+
+  it("a run whose program has two planned sessions today links neither", async () => {
+    const s = await runSetup();
+    const [cycle] = await db.insert(trainingCycles).values({ userId: me, name: "Run block", durationWeeks: 4, status: "active", startDate: "2026-11-16", sessionsGeneratedAt: new Date() }).returning();
+    await db.insert(plannedSessions).values([1, 2].map((position) => ({ userId: me, cycleId: cycle.id, date: "2026-11-20", programId: s.programId, position })));
+    ok(await startRide({ ...s, mode: "indoor", clientId: cid() }));
+    const [session] = await db.select({ plannedSessionId: workoutSessions.plannedSessionId }).from(workoutSessions).where(eq(workoutSessions.id, s.sessionId));
+    expect(session.plannedSessionId).toBeNull();
   });
 });

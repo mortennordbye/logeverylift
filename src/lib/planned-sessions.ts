@@ -1353,6 +1353,20 @@ export async function skipAutoDay(
   });
 }
 
+/**
+ * Today's one live planned session of a program, for a workout opened without
+ * one (bike-ride-logger 4.5): null when there is none or more than one.
+ */
+export async function todaysPlannedIdOf(userId: string, programId: number): Promise<number | null> {
+  const rows = await db
+    .select({ id: plannedSessions.id })
+    .from(plannedSessions)
+    .innerJoin(trainingCycles, and(eq(trainingCycles.id, plannedSessions.cycleId), isNull(trainingCycles.deletedAt)))
+    .where(and(eq(plannedSessions.userId, userId), eq(plannedSessions.programId, programId), eq(plannedSessions.date, toDateStr(await userToday(userId))), livePlannedSessions))
+    .limit(2);
+  return rows.length === 1 ? rows[0].id : null;
+}
+
 /** A planned session the user may start a workout for: theirs, live, today, and for this program. */
 export async function startablePlannedId(userId: string, plannedSessionId: number | undefined, programId: number | undefined): Promise<number | null> {
   if (plannedSessionId == null || programId == null) return null;
