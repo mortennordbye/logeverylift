@@ -246,3 +246,31 @@ describe("isHardWorkout", () => {
     expect(isHardWorkout(w([{ type: "warmup", end: { type: "time", seconds: 600 }, target: { metric: "hr", anchor: "lthr", zone: 4 } }]))).toBe(false);
   });
 });
+
+describe("isHardWorkout and strides", () => {
+  const w = (steps: unknown[]): Workout => {
+    const r = parseWorkout({ v: 2, sport: "run", name: "Base", steps });
+    if (!r.ok) throw new Error(JSON.stringify(r.errors));
+    return r.workout;
+  };
+  const z2 = { type: "work", end: { type: "time", seconds: 3000 }, target: { metric: "hr", anchor: "lthr", zone: 2 } };
+  const block = (count: number, end: unknown, recS: number) => ({
+    type: "repeat",
+    count,
+    steps: [
+      { type: "work", end, target: { metric: "rpe", anchor: "absolute", low: 8, high: 8 } },
+      { type: "recovery", end: { type: "time", seconds: recS } },
+    ],
+  });
+
+  it("short strides in an easy run are not hard", () => {
+    expect(isHardWorkout(w([z2, block(6, { type: "time", seconds: 20 }, 100)]))).toBe(false);
+    expect(isHardWorkout(w([z2, block(6, { type: "time", seconds: 30 }, 90)]))).toBe(false);
+  });
+
+  it("short reps with more work in total, longer reps, and reps by distance are still hard", () => {
+    expect(isHardWorkout(w([z2, block(10, { type: "time", seconds: 30 }, 30)]))).toBe(true);
+    expect(isHardWorkout(w([z2, block(6, { type: "time", seconds: 45 }, 90)]))).toBe(true);
+    expect(isHardWorkout(w([z2, block(6, { type: "distance", meters: 100 }, 90)]))).toBe(true);
+  });
+});

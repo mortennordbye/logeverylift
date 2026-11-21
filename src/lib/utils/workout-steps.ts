@@ -724,7 +724,26 @@ export function hardTarget(t: WorkoutTarget, sport: WorkoutSport, thresholds: Th
 }
 
 /**
- * A workout is hard when it has intervals (a repeat holding a work step) or a
+ * Strides: short fast reps in an easy run, for leg speed, with full recovery.
+ * A repeat whose work steps all end on time, each at most maxRepS, with at
+ * most maxWorkS of work over all rounds, is strides and not intervals
+ * (inference: 6 x 20 s strides are 2 min of work; 10 x 30/30 is 5 min and stays hard).
+ */
+export const STRIDES = { maxRepS: 30, maxWorkS: 180 } as const;
+
+/** Whether work reps (seconds each, null when not on time, over all rounds) are strides. */
+export function isStrides(repSeconds: (number | null)[]): boolean {
+  let total = 0;
+  for (const s of repSeconds) {
+    if (s == null || s > STRIDES.maxRepS) return false;
+    total += s;
+  }
+  return repSeconds.length > 0 && total <= STRIDES.maxWorkS;
+}
+
+/**
+ * A workout is hard when it has intervals (a repeat holding a work step, not
+ * strides) or a
  * work step targets zone 4 or above, as isHardSession does for program sets
  * (a "work" rep, or zone 4-5). Which sessions count as hard is inference
  * (owner decision 2 in docs/plans/ai-coach.md).
@@ -734,5 +753,9 @@ export function isHardWorkout(w: Workout, thresholds: ThresholdValues = {}): boo
     const main = mainTarget(s);
     return s.type === "work" && main !== undefined && hardTarget(main, w.sport, thresholds);
   };
-  return w.steps.some((n) => (n.type === "repeat" ? n.steps.some((s) => s.type === "work") : hardStep(n)));
+  const strides = (n: WorkoutRepeat) => {
+    const reps = n.steps.filter((s) => s.type === "work").map((s) => (s.end.type === "time" ? s.end.seconds : null));
+    return isStrides(Array.from({ length: n.count }, () => reps).flat());
+  };
+  return w.steps.some((n) => (n.type === "repeat" ? n.steps.some((s) => s.type === "work") && !strides(n) : hardStep(n)));
 }

@@ -126,6 +126,39 @@ describe("heavy_legs_before_key", () => {
     expect(r.isError, r.raw).toBe(false);
     expect(r.data.limits.checked).toEqual([]);
   });
+
+  it("passes heavy legs two days before an easy run with short strides", async () => {
+    const made = await createProgram(me, [{ exerciseId: run, sets: [{ durationSeconds: 60 * MIN, targetReps: null }] }]);
+    const strides = made.program;
+    const tree = {
+      v: 2,
+      sport: "run",
+      name: "Base",
+      steps: [
+        { type: "work", end: { type: "time", seconds: 50 * MIN }, target: { metric: "hr", anchor: "lthr", zone: 2 } },
+        {
+          type: "repeat",
+          count: 6,
+          steps: [
+            { type: "work", end: { type: "time", seconds: 20 }, target: { metric: "rpe", anchor: "absolute", low: 8, high: 8 } },
+            { type: "recovery", end: { type: "time", seconds: 100 } },
+          ],
+        },
+      ],
+    };
+    await cycle(me, [
+      { day: 1, programId: await legDay() },
+      { day: 3, programId: strides.id },
+    ]);
+    const r = await mcpTools(registerProgramTools, me)("edit_program_exercise", {
+      operation: "update",
+      programExerciseId: made.slots[0].programExerciseId,
+      workout: tree,
+      reason: "Strides as steps",
+      expectedVersion: strides.version,
+    });
+    expect(r.isError, r.raw).toBe(false);
+  });
 });
 
 describe("strength_per_week (D21)", () => {
