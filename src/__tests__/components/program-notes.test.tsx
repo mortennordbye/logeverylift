@@ -35,6 +35,11 @@ beforeEach(() => {
 });
 
 describe("program setup notes", () => {
+  it("has no colon in its hint (UI copy rule)", () => {
+    render(<WorkoutSetsClient {...props} />);
+    expect((screen.getByRole("textbox", { name: "Setup notes" }) as HTMLTextAreaElement).placeholder).not.toContain(":");
+  });
+
   it("saves text typed before a re-render the state never saw", async () => {
     const { rerender } = render(<WorkoutSetsClient {...props} />);
     const notes = screen.getByRole("textbox", { name: "Setup notes" }) as HTMLTextAreaElement;
