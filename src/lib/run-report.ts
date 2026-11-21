@@ -135,8 +135,8 @@ export async function runReport(userId: string, ride: typeof rides.$inferSelect)
           rule: s.run?.rule ?? "time",
           meters: s.run?.meters ?? null,
           target: runTargetText(s, th),
-          // The treadmill belt in km/h and where it came from (step, pace, history, zone, effort); null by feel. Incline null: the one before carries on.
-          ...(treadmill && { beltKmh: tenths(s.run?.belt ?? null), beltFrom: s.run?.beltFrom ?? null, inclinePercent: tenths(s.run?.incline ?? null) }),
+          // The treadmill belt in km/h and where it came from (step, pace, history, zone, effort); null by feel, or with carry (the 20 min of a run test) the belt the step before ended on. Incline null: the one before carries on.
+          ...(treadmill && { beltKmh: tenths(s.run?.belt ?? null), beltFrom: s.run?.beltFrom ?? null, carry: !!s.run?.carry, inclinePercent: tenths(s.run?.incline ?? null) }),
           ...(outdoor && { outdoor: outdoor.main, outdoorSecond: outdoor.second }),
           note: s.step.note ?? null,
         },

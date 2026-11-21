@@ -159,6 +159,10 @@ describe("a run test", () => {
       protocol: "run_30min",
     });
 
+    // The 20 min step keeps the belt the 10 min step ended on: no belt of its own, and not by feel.
+    expect(before.steps[7].planned).toMatchObject({ beltKmh: 10, beltFrom: "step", carry: false });
+    expect(before.steps[8].planned).toMatchObject({ beltKmh: null, carry: true });
+
     expect(ok(await saveRunThreshold({ rideId: r.rideId }))).toMatchObject({ lthr: 176 });
     const stored = await rows();
     expect(stored.map((x) => [x.kind, x.protocol, x.measuredOn, x.testData])).toEqual(
