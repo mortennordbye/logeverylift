@@ -31,6 +31,8 @@ test("log measurements step by step, read them back and delete one", async ({ pa
   await page.getByTestId("account-measurements").click();
   await page.waitForURL("**/more/account/measurements");
   await expect(page.getByTestId("measurements-empty")).toBeVisible();
+  // The empty page shows the whole body map, so the parts can be seen before the first log.
+  await expect(page.getByTestId("map-point-waist")).toBeVisible();
   await page.getByRole("link", { name: "Log measurements" }).click();
   await page.waitForURL("**/more/account/measurements/log");
 
@@ -42,6 +44,14 @@ test("log measurements step by step, read them back and delete one", async ({ pa
   await page.getByRole("button", { name: "Next", exact: true }).click();
   await settle();
 
+  await expect(page.getByTestId("step-count")).toHaveText("2 of 16");
+  // Back goes to the previous step with its saved value; Cancel stays reachable.
+  await expect(page.getByRole("link", { name: "Cancel" })).toBeVisible();
+  await page.getByRole("button", { name: "Back to the previous step" }).click();
+  await expect(page.getByTestId("step-count")).toHaveText("1 of 16");
+  await expect(page.getByRole("textbox", { name: "Neck in cm" })).toHaveValue("39.0");
+  await page.getByRole("button", { name: "Next", exact: true }).click();
+  await settle();
   await expect(page.getByTestId("step-count")).toHaveText("2 of 16");
   await page.getByRole("button", { name: "Skip", exact: true }).click();
 

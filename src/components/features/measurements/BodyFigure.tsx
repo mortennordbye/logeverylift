@@ -2,14 +2,13 @@ import { MAP_FIGURES } from "@/lib/exercise-art/muscle-map";
 import { MUSCLE_FILL } from "@/lib/exercise-art/scene";
 import type { Rule, Tape } from "@/lib/utils/body-measurement-parts";
 
-const FRONT = MAP_FIGURES[0];
-
-/** The front body figure that MuscleMap draws, in its 200 x 400 coordinates. */
-export function FrontFigure() {
+/** The front (or back) body figure that MuscleMap draws, in its 200 x 400 coordinates. */
+export function FrontFigure({ back = false }: { back?: boolean }) {
+  const fig = MAP_FIGURES[back ? 1 : 0];
   return (
     <g>
-      {FRONT.shapes.map((s, i) => <path key={i} d={s.d} style={{ fill: s.muscle ? MUSCLE_FILL.none : MUSCLE_FILL.body }} />)}
-      {FRONT.lines.map((d) => <path key={d} d={d} style={{ fill: "none", stroke: MUSCLE_FILL.line, strokeWidth: 1.2 }} />)}
+      {fig.shapes.map((s, i) => <path key={i} d={s.d} style={{ fill: s.muscle ? MUSCLE_FILL.none : MUSCLE_FILL.body }} />)}
+      {fig.lines.map((d) => <path key={d} d={d} style={{ fill: "none", stroke: MUSCLE_FILL.line, strokeWidth: 1.2 }} />)}
     </g>
   );
 }
@@ -46,16 +45,35 @@ function RuleLine({ rule }: { rule: Rule }) {
   );
 }
 
+/** Seen from behind, the person's right side is on the screen right. */
+const fromBehind = (t: Tape | null): Tape | null => t && { ...t, x1: 200 - t.x2, x2: 200 - t.x1 };
+const ruleFromBehind = (r: Rule | null): Rule | null =>
+  r && { ...r, x: 200 - r.x, ends: r.ends && [r.ends[0] > 0 ? 200 - r.ends[0] : 0, r.ends[1] > 0 ? 200 - r.ends[1] : 0] };
+
 /**
- * The whole front body with one place lit up: the tape of a circumference
- * (with a soft glow so it reads at a small size) or the line of a length.
- * `className` sets the size; the figure keeps its shape and is centred.
+ * The whole body from the front and from behind, with one place lit up: the
+ * tape of a circumference (with a soft glow so it reads at a small size) or
+ * the line of a length. Each figure takes half the width; `className` sizes its picture.
  */
-export function PartFigure({ tape, rule, name, className }: { tape: Tape | null; rule: Rule | null; name: string; className?: string }) {
+export function PartViews({ tape, rule, name, className }: { tape: Tape | null; rule: Rule | null; name: string; className?: string }) {
+  return (
+    <div className="flex justify-center gap-1" role="img" aria-label={`Where to measure the ${name.toLowerCase()}, from the front and from behind`}>
+      {[false, true].map((back) => (
+        <figure key={String(back)} className="flex-1 min-w-0 max-w-[11rem] flex flex-col items-center">
+          <PartFigure tape={back ? fromBehind(tape) : tape} rule={back ? ruleFromBehind(rule) : rule} back={back} className={className} />
+          <figcaption className="text-[11px] text-muted-foreground">{back ? "Back" : "Front"}</figcaption>
+        </figure>
+      ))}
+    </div>
+  );
+}
+
+/** One view of the whole body with the place lit up. */
+function PartFigure({ tape, rule, back, className }: { tape: Tape | null; rule: Rule | null; back: boolean; className?: string }) {
   const rx = tape ? (tape.x2 - tape.x1) / 2 + 4 : 0;
   return (
-    <svg viewBox="4 0 192 392" className={className} role="img" aria-label={`Where to measure the ${name.toLowerCase()}`}>
-      <FrontFigure />
+    <svg viewBox="4 0 192 392" className={className} aria-hidden="true">
+      <FrontFigure back={back} />
       {tape && (
         <>
           <ellipse cx={(tape.x1 + tape.x2) / 2} cy={tape.y} rx={rx} ry={Math.max(6, rx * 0.3)} style={{ fill: "var(--primary)" }} opacity={0.22} />

@@ -1,6 +1,6 @@
 "use client";
 
-import { PartFigure } from "@/components/features/measurements/BodyFigure";
+import { PartViews } from "@/components/features/measurements/BodyFigure";
 import { MeasureGuide } from "@/components/features/measurements/measurement-ui";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import type { BodySide } from "@/db/schema/body-measurements";
@@ -17,7 +17,7 @@ import {
 import { formatChange, formatCm, round1, seriesOf, type MeasurementRow } from "@/lib/utils/body-measurements";
 import { formatDateShort, sanitizeDecimalInput } from "@/lib/utils/format";
 import { callAction } from "@/lib/utils/stale-bundle";
-import { Check } from "lucide-react";
+import { Check, ChevronLeft } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
@@ -116,10 +116,31 @@ export function MeasureLogClient({ rows, today }: { rows: MeasurementRow[]; toda
   return (
     <div className="h-[100dvh] bg-background flex flex-col overflow-hidden" data-testid="measure-step">
       <div className="flex items-center justify-between px-4 pt-4 shrink-0">
-        <Link href="/more/account/measurements" replace className="min-h-[44px] flex items-center text-primary text-sm font-medium">
-          Cancel
-        </Link>
+        {index === 0 ? (
+          <Link href="/more/account/measurements" replace className="min-h-[44px] flex items-center text-primary text-sm font-medium">
+            Cancel
+          </Link>
+        ) : (
+          <button
+            type="button"
+            onMouseDown={keepFocus}
+            onClick={() => setIndex((i) => i - 1)}
+            aria-label="Back to the previous step"
+            className="min-h-[44px] min-w-[44px] flex items-center gap-0.5 text-primary text-sm font-medium active:opacity-60"
+          >
+            <ChevronLeft className="w-4 h-4" aria-hidden="true" />
+            Back
+          </button>
+        )}
         <div className="flex items-center gap-1 text-sm text-muted-foreground">
+          {index > 0 && (
+            <>
+              <Link href="/more/account/measurements" replace className="min-h-[44px] flex items-center text-primary font-medium">
+                Cancel
+              </Link>
+              <span aria-hidden="true">·</span>
+            </>
+          )}
           {index === 0 && (
             <label className="relative min-h-[44px] flex items-center text-primary font-medium">
               {date === today ? "Today" : formatDateShort(date)} ›
@@ -154,14 +175,12 @@ export function MeasureLogClient({ rows, today }: { rows: MeasurementRow[]; toda
           <h1 className="text-xl font-semibold">{title}</h1>
           <p className="text-xs text-muted-foreground">{subtitle(part, step.side)}</p>
         </div>
-        <div className="flex items-center gap-4 rounded-xl bg-card p-3 shrink-0">
-          <PartFigure tape={tape} rule={part.rule} name={part.name} className="h-72 w-auto shrink-0" />
-          <div className="min-w-0 space-y-2">
-            <p className="text-sm">{shortWhere(part.where)}</p>
-            <button type="button" onMouseDown={keepFocus} onClick={() => setGuideOpen(true)} className="min-h-[44px] text-sm text-primary font-medium">
-              How to measure ›
-            </button>
-          </div>
+        <div className="rounded-xl bg-card px-3 pt-3 pb-1 shrink-0">
+          <PartViews tape={tape} rule={part.rule} name={part.name} className="w-full h-auto" />
+          <p className="text-sm pt-2">{shortWhere(part.where)}</p>
+          <button type="button" onMouseDown={keepFocus} onClick={() => setGuideOpen(true)} className="min-h-[44px] text-sm text-primary font-medium">
+            How to measure ›
+          </button>
         </div>
         <div className="flex items-baseline justify-center gap-2 pt-1">
           <input
