@@ -13,7 +13,7 @@ import { rideStepSnapshot } from "@/lib/ride-plan-db";
 import { buildWorkout, type StepRow } from "@/lib/utils/program-steps";
 import { buildRidePlan, rideTimeline, type RideEventInput, type RidePlan } from "@/lib/utils/ride-timeline";
 import { parseWorkout } from "@/lib/utils/workout-steps";
-import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull } from "drizzle-orm";
 
 type Ride = typeof rides.$inferSelect;
 type Executor = Pick<typeof db, "select" | "update" | "insert" | "transaction">;
@@ -113,11 +113,19 @@ export async function settle(ex: Executor, ride: Ride, now: number): Promise<Rid
       .returning({ id: rides.id });
     // The workout keeps whether its ride ended early (4.3): compliance does not
     // count an ended-early key session as done. An unskip that makes the ride
-    // live again clears it.
+    // live again clears it. A workout with a ride and a run is ended early when
+    // either one is: the latest ride of each exercise counts (Ride again).
     if (stored) {
+      const all = await ex
+        .select({ programExerciseId: rides.programExerciseId, status: rides.status })
+        .from(rides)
+        .where(and(eq(rides.sessionId, ride.sessionId), eq(rides.userId, ride.userId)))
+        .orderBy(desc(rides.startedAt), desc(rides.id));
+      const latest = new Map<number | null, string>();
+      for (const r of all) if (!latest.has(r.programExerciseId)) latest.set(r.programExerciseId, r.status);
       await ex
         .update(workoutSessions)
-        .set({ endedEarly: status === "ended_early" })
+        .set({ endedEarly: [...latest.values()].includes("ended_early") })
         .where(and(eq(workoutSessions.id, ride.sessionId), eq(workoutSessions.userId, ride.userId)));
       if (status === "finished" || status === "ended_early") await logDroppedSteps(ex, ride, plan);
     }

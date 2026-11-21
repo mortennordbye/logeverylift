@@ -7,7 +7,7 @@
  */
 import { db } from "@/db";
 import { athleteThresholds, rides, users, workoutSessions, workoutSets } from "@/db/schema";
-import { sendRideEvent, startRide } from "@/lib/actions/rides";
+import { getRide, sendRideEvent, startRide } from "@/lib/actions/rides";
 import { completeWorkoutSession } from "@/lib/actions/workout-sessions";
 import { logWorkoutSet } from "@/lib/actions/workout-sets";
 import { rideAfterView } from "@/lib/bike-exercise-view";
@@ -17,9 +17,11 @@ import { appSessionLoads } from "@/lib/training-load";
 import { rideTimeline } from "@/lib/utils/ride-timeline";
 import { beltResults } from "@/lib/utils/run-screen";
 import { runPaceLoad } from "@/lib/utils/training-load";
+import { workoutToRows } from "@/lib/utils/program-steps";
+import { parseWorkout } from "@/lib/utils/workout-steps";
 import { and, eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createExercise, createSession, createStepProgram, createUser } from "./factories";
+import { createExercise, createProgram, createSession, createStepProgram, createUser } from "./factories";
 import { asUser } from "./setup";
 
 const T0 = new Date("2026-11-20T17:00:00Z");
@@ -283,5 +285,76 @@ describe("step 4 review", () => {
     const after = (await rideAfterView(me, s.programExerciseId))!;
     expect(after.rideId).toBe(second.ride.id);
     expect(Object.keys(after.logs).map(Number)).toEqual([s.setIds[0]]);
+  });
+});
+
+describe("final review", () => {
+  /** A row of a step, as stored. */
+  const rowOf = async (sessionId: number, programSetId: number) =>
+    (await db.select().from(workoutSets).where(and(eq(workoutSets.sessionId, sessionId), eq(workoutSets.programSetId, programSetId))))[0];
+
+  it("(1) saving the results table with only a heart rate keeps a treadmill step's incline", async () => {
+    const s = await setup({ ...twoSteps, steps: [{ type: "work", end: { type: "time", seconds: 600 }, belt: 8, incline: 1.5 }] });
+    await runThrough(s, "indoor", 600);
+    expect((await rowOf(s.sessionId, s.setIds[0])).inclinePercent).toBe(1.5);
+    // The results table sends only what the runner changed (resultPayloads): here one heart rate.
+    ok(
+      await logWorkoutSet({
+        sessionId: s.sessionId, exerciseId: run, setNumber: 1, programSetId: s.setIds[0], actualReps: 0, weightKg: 0, durationSeconds: 600, restTimeSeconds: 0,
+        isCompleted: true, stepStatus: "done", targetOffsetW: 0, extendedSeconds: 0, avgHr: 150, sources: { avgHr: "typed" },
+      }),
+    );
+    const row = await rowOf(s.sessionId, s.setIds[0]);
+    expect(row.inclinePercent).toBe(1.5);
+    expect(row.avgHr).toBe(150);
+  });
+
+  it("(2) a finished run does not clear the ended early of a ride on the same workout", async () => {
+    const rideTree = { v: 2, sport: "bike", name: "Ride", steps: [
+      { type: "work", end: { type: "time", seconds: 600 }, target: { metric: "power", anchor: "ftp", zone: 2 } },
+      { type: "work", end: { type: "time", seconds: 600 }, target: { metric: "power", anchor: "ftp", zone: 3 } },
+    ] };
+    await db.insert(athleteThresholds).values({ userId: me, kind: "ftp", value: 200, measuredOn: "2026-11-01", source: "manual" });
+    const rows = (tree: unknown) => {
+      const p = parseWorkout(tree);
+      if (!p.ok) throw new Error("bad tree");
+      return workoutToRows(p.workout).map((r) => ({ ...r, targetReps: null, weightKg: null, restTimeSeconds: 0 }));
+    };
+    const { program, slots } = await createProgram(me, [{ exerciseId: bike, sets: rows(rideTree) }, { exerciseId: run, sets: rows(twoSteps) }]);
+    const session = await createSession(me, program.id);
+    const r = ok(await startRide({ sessionId: session.id, programExerciseId: slots[0].programExerciseId, mode: "indoor", clientId: cid() }));
+    later(5 * MIN);
+    expect(ok(await sendRideEvent({ rideId: r.ride.id, clientId: cid(), kind: "end", expectedSeq: 1 })).ride.status).toBe("ended_early");
+    const ended = async () => (await db.select().from(workoutSessions).where(eq(workoutSessions.id, session.id)))[0].endedEarly;
+    expect(await ended()).toBe(true);
+    later(6 * MIN);
+    const v = ok(await startRide({ sessionId: session.id, programExerciseId: slots[1].programExerciseId, mode: "indoor", clientId: cid() }));
+    later(6 * MIN + 1201_000);
+    expect(ok(await getRide({ rideId: v.ride.id }))!.ride.status).toBe("finished");
+    expect(await ended()).toBe(true);
+  });
+
+  it("(3) a late belt of a run that auto ended is refused once Run again has started, and leaves the new run's rows", async () => {
+    // Step 2 is 1 km by feel: with no belt it waits, so the run can auto end in it.
+    const s = await setup({ ...twoSteps, steps: [twoSteps.steps[0], { type: "work", end: { type: "distance", meters: 1000 } }] });
+    const first = ok(await startRide({ ...s, mode: "indoor", clientId: cid() }));
+    // The phone goes offline; step 1 is saved at its end, then the run auto ends 2 h after its planned end.
+    later(601_000);
+    const t1 = rideTimeline(first.plan, first.events, Date.now());
+    ok(await logWorkoutSet({ sessionId: s.sessionId, exerciseId: run, setNumber: 1, programSetId: s.setIds[0], actualReps: 0, weightKg: 0, durationSeconds: 600, restTimeSeconds: 0, isCompleted: true, stepStatus: "done", targetOffsetW: 0, extendedSeconds: 0, ...beltResults(t1.steps[0]), sources: { durationSeconds: "clock", distanceMeters: "belt", avgSpeed: "belt" } }));
+    later(1200_000 + 125 * MIN);
+    const ended = ok(await getRide({ rideId: first.ride.id }))!;
+    expect(ended.ride.status).toBe("ended_early");
+    // Run again on the same workout: its step 1 at 8 km/h.
+    const second = ok(await startRide({ ...s, mode: "indoor", again: true, clientId: cid() }));
+    later(1200_000 + 125 * MIN + 601_000);
+    const t2 = rideTimeline(second.plan, second.events, Date.now());
+    ok(await logWorkoutSet({ sessionId: s.sessionId, exerciseId: run, setNumber: 1, programSetId: s.setIds[0], actualReps: 0, weightKg: 0, durationSeconds: 600, restTimeSeconds: 0, isCompleted: true, stepStatus: "done", targetOffsetW: 0, extendedSeconds: 0, ...beltResults(t2.steps[0]), sources: { durationSeconds: "clock", distanceMeters: "belt", avgSpeed: "belt" } }));
+    const before = await rowOf(s.sessionId, s.setIds[0]);
+    expect(before.distanceMeters).toBe(1333);
+    // The first run's belt of 12 km/h tapped at 5 min reaches the server now.
+    const res = await sendRideEvent({ rideId: first.ride.id, clientId: cid(), kind: "belt", value: 120, stepKey: first.plan.steps[0].key, clientAt: T0.getTime() + 300_000, expectedSeq: ended.ride.seq });
+    expect(res).toEqual({ success: false, error: "The ride has ended" });
+    expect((await rowOf(s.sessionId, s.setIds[0])).distanceMeters).toBe(1333);
   });
 });

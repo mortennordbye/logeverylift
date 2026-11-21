@@ -478,6 +478,8 @@ export async function logWorkoutSet(
     const addSources = sources ? Object.fromEntries(Object.entries(sources).filter(([k]) => !cleared.includes(k) && !typedOver.has(k))) : undefined;
     const keepRpe = rideWrite && rir === undefined && rpe === undefined;
     const keepDistance = rideWrite && (distanceMeters === undefined || typedOver.has("distanceMeters"));
+    // The results table sends no incline: a treadmill step keeps the belt's (docs/plans/run-logger.md, 4.7).
+    const keepIncline = rideWrite && inclinePercent === undefined;
 
     const setValues = {
       sessionId,
@@ -544,7 +546,7 @@ export async function logWorkoutSet(
             weightKg: setValues.weightKg,
             durationSeconds: setValues.durationSeconds ?? null,
             ...(!keepDistance && { distanceMeters: setValues.distanceMeters ?? null }),
-            inclinePercent: setValues.inclinePercent ?? null,
+            ...(!keepIncline && { inclinePercent: setValues.inclinePercent ?? null }),
             heartRateZone: setValues.heartRateZone ?? null,
             rir: setValues.rir ?? null,
             ...(!keepRpe && { rpe: setValues.rpe }),

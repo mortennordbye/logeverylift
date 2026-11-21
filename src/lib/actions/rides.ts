@@ -37,7 +37,7 @@ import { SICK_TEXT, sickBlocksTest } from "@/lib/utils/run-test";
 import { requireSession } from "@/lib/utils/session";
 import { parseWorkout } from "@/lib/utils/workout-steps";
 import type { ActionResult } from "@/types/workout";
-import { and, asc, eq, gt, inArray, isNotNull, ne } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNotNull, isNull, ne } from "drizzle-orm";
 import { z } from "zod";
 
 export type { RideView } from "@/lib/ride-settle";
@@ -297,6 +297,15 @@ export async function sendRideEvent(data: unknown): Promise<ActionResult<RideVie
         // A late offline belt or incline from inside the run is kept: the steps' meters recompute from it (4.7).
         const lateBelt = view.ride.sport === "run" && (kind === "belt" || kind === "incline") && view.ride.endedAt !== null && at < view.ride.endedAt;
         if (!isLive(withIt.status) && !lateBelt) return { success: false, error: "The ride has ended" };
+        // A late belt of a run that a later run of its exercise (Run again) follows would move that run's rows.
+        if (lateBelt) {
+          const [again] = await tx
+            .select({ id: rides.id })
+            .from(rides)
+            .where(and(eq(rides.userId, userId), eq(rides.sessionId, ride.sessionId), ne(rides.id, rideId), gt(rides.startedAt, ride.startedAt), ride.programExerciseId === null ? isNull(rides.programExerciseId) : eq(rides.programExerciseId, ride.programExerciseId)))
+            .limit(1);
+          if (again) return { success: false, error: "The ride has ended" };
+        }
         if (isLive(withIt.status)) {
           // Never once a later session has started (docs/plans/run-logger.md, 4.3): the queue drops it.
           const [later] = await tx
