@@ -51,10 +51,12 @@ export function ProgramShareButton({ programId, friends, onExport, exporting }: 
     <>
       <button
         onClick={handleOpen}
-        className="flex items-center gap-1.5 h-9 px-3 rounded-lg border border-border text-sm font-medium active:opacity-70"
+        aria-label="Share"
+        className="flex items-center justify-center gap-1.5 h-9 min-w-11 px-3 rounded-lg border border-border text-sm font-medium active:opacity-70"
       >
         <Share2 className="w-4 h-4" />
-        Share
+        {/* Icon only under 360 px, so the program header fits a 320 px screen. */}
+        <span className="hidden min-[360px]:inline">Share</span>
       </button>
 
       {open && (
