@@ -326,6 +326,12 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** (1) wanting unilateral/bilateral tracking — add a nullable `laterality` enum column to `exercises` (+ optional `program_exercises` override) mirroring the exercise-type plumbing. (2) wanting accurate types — do a one-time pass classifying the seed `EXERCISES` array explicitly (a name/equipment-aware heuristic: single-muscle + cable/machine ⇒ isolation), then a corrective migration `UPDATE` for existing rows.
 - **Touchpoints:** `src/db/schema/exercises.ts`, `src/db/schema/programs.ts`, `src/lib/utils/exercise-type.ts` (`exerciseTypeFromPattern`), `scripts/seed.ts` (`EXERCISES`), `drizzle/0039_nice_supreme_intelligence.sql` (the backfill CASE), `src/components/features/ExercisesClient.tsx`.
 
+### Body measurement log step moves up 64 px after the guide sheet
+- **What:** On the log step (`/more/account/measurements/log`), open "How to measure", close it, then tap Skip: the page body scrolls by 64 px and the header (Cancel, Back, step count) goes out of view. The body has `pb-nav-safe` padding (the tab bar height) but the log route hides the tab bar, so the body is 64 px taller than the screen and can scroll. Seen in the e2e build on Chromium (`e2e/body-measurements.spec.ts`, which measures from the top of the step and resets the scroll to get past it); not seen against the dev server, and it was there before the 2026-11-21 UI fixes.
+- **Why deferred:** Found during the fix round for the UI review; outside the agreed list of items.
+- **Unblocked by:** Finding what scrolls the body after the sheet closes (the `BottomSheet` exit, or the field's `select()` in the step effect) and either dropping the padding on routes with no tab bar or keeping the body from scrolling there. Then drop the scroll reset in the spec.
+- **Touchpoints:** `src/app/layout.tsx` (`pb-nav-safe` on body), `src/components/ui/bottom-nav.tsx` (`MEASURE_LOG`), `src/components/ui/BottomSheet.tsx`, `src/components/features/measurements/MeasureLogClient.tsx`.
+
 ## Privacy and legal
 
 ### Have a lawyer review the privacy policy and terms
