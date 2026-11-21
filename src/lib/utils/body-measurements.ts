@@ -4,10 +4,10 @@
  * Nothing here is stored; the page works it out on each read.
  */
 
-import type { BodySide, BodySite } from "@/db/schema/body-measurements";
+import type { BodySide, BodySite, bodyMeasurements } from "@/db/schema/body-measurements";
 import { addDaysStr } from "@/lib/utils/seasons";
 
-export type MeasurementRow = { id: number; site: BodySite; side: BodySide; valueCm: number; measuredOn: string };
+export type MeasurementRow = Pick<typeof bodyMeasurements.$inferSelect, "id" | "site" | "side" | "valueCm" | "measuredOn">;
 
 export type ChangeSince = "first" | "3m" | "last";
 
@@ -29,11 +29,11 @@ export function latestOf(rows: MeasurementRow[], site: BodySite, side: BodySide)
   return seriesOf(rows, site, side).at(-1) ?? null;
 }
 
-/** "YYYY-MM-DD" three months before `day`. */
+/** "YYYY-MM-DD" `months` months before `day`, on the last day of a shorter month (31 May to 28 Feb). */
 export function monthsBefore(day: string, months: number): string {
-  const d = new Date(`${day}T00:00:00Z`);
-  d.setUTCMonth(d.getUTCMonth() - months);
-  return d.toISOString().slice(0, 10);
+  const [y, m, d] = day.split("-").map(Number);
+  const lastDay = new Date(Date.UTC(y, m - 1 - months + 1, 0)).getUTCDate();
+  return new Date(Date.UTC(y, m - 1 - months, Math.min(d, lastDay))).toISOString().slice(0, 10);
 }
 
 /**
@@ -59,6 +59,13 @@ export function changeSince(
 }
 
 export const round1 = (v: number) => Math.round(v * 10) / 10;
+
+/** A sided part's change per side, "▲0.5 · new", or null when no side has one. */
+export function sidedChange(series: MeasurementRow[][], since: ChangeSince, today: string): string | null {
+  // A side with no values says nothing.
+  const changes = series.filter((s) => s.length > 0).map((s) => changeSince(s, since, today));
+  return changes.some(Boolean) ? changes.map((c) => (c ? formatChange(c.delta) : "new")).join(" · ") : null;
+}
 
 /** "36.5" or "36": one decimal, none when it is zero. */
 export const formatCm = (v: number) => String(round1(v));

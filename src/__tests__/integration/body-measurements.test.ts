@@ -3,7 +3,7 @@ import { bodyMeasurements } from "@/db/schema";
 import { deleteBodyMeasurement, getBodyMeasurements, saveBodyMeasurement } from "@/lib/actions/body-measurements";
 import { collectUserData } from "@/lib/account-data";
 import { eq } from "drizzle-orm";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createUser } from "./factories";
 import { asUser } from "./setup";
 
@@ -38,6 +38,16 @@ describe("saveBodyMeasurement", () => {
     expect((await saveBodyMeasurement({ site: "waist", side: "none", valueCm: 0.5, measuredOn: "2026-11-01" })).success).toBe(false);
     expect((await saveBodyMeasurement({ site: "waist", side: "none", valueCm: 301, measuredOn: "2026-11-01" })).success).toBe(false);
     expect((await saveBodyMeasurement({ site: "waist", side: "none", valueCm: 90, measuredOn: "2999-01-01" })).success).toBe(false);
+    expect(await rowsOf(meId)).toHaveLength(0);
+  });
+
+  it("refuses a date that is not on the calendar before it reaches the database", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    for (const measuredOn of ["2026-02-30", "2026-02-29", "2026-13-01"]) {
+      expect(await saveBodyMeasurement({ site: "waist", side: "none", valueCm: 90, measuredOn })).toMatchObject({ success: false, error: "Invalid input" });
+    }
+    expect(logged).not.toHaveBeenCalled();
+    logged.mockRestore();
     expect(await rowsOf(meId)).toHaveLength(0);
   });
 });

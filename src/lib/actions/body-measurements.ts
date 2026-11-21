@@ -30,7 +30,8 @@ const saveSchema = z
       .min(1)
       .max(300)
       .transform((v) => Math.round(v * 10) / 10),
-    measuredOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    // A real calendar date, so 2026-02-30 never reaches Postgres.
+    measuredOn: z.iso.date(),
   })
   .refine((d) => (SIDED_SITES.includes(d.site) ? d.side !== "none" : d.side === "none"), {
     message: "Wrong side for this part",

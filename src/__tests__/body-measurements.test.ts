@@ -9,6 +9,7 @@ import {
   nextLogFrom,
   seriesOf,
   sideNote,
+  sidedChange,
   type MeasurementRow,
 } from "@/lib/utils/body-measurements";
 import { describe, expect, it } from "vitest";
@@ -113,6 +114,28 @@ describe("dates", () => {
   });
   it("goes back three months", () => {
     expect(monthsBefore("2026-11-21", 3)).toBe("2026-08-21");
+  });
+  it("stops at the last day of a shorter month", () => {
+    expect(monthsBefore("2026-05-31", 3)).toBe("2026-02-28");
+    expect(monthsBefore("2028-05-31", 3)).toBe("2028-02-29");
+    expect(monthsBefore("2026-07-31", 3)).toBe("2026-04-30");
+    expect(monthsBefore("2026-03-31", 3)).toBe("2025-12-31");
+  });
+});
+
+describe("sidedChange", () => {
+  const l = [row("2026-10-01", 38, "calf", "left"), row("2026-11-01", 38.5, "calf", "left")];
+  const r1 = [row("2026-11-01", 39, "calf", "right")];
+  it("says new for a side with one value", () => {
+    expect(sidedChange([l, r1], "first", "2026-11-21")).toBe("▲0.5 · new");
+  });
+  it("shows nothing for a side with no values", () => {
+    expect(sidedChange([l, []], "first", "2026-11-21")).toBe("▲0.5");
+    expect(sidedChange([[], l], "first", "2026-11-21")).toBe("▲0.5");
+  });
+  it("is null when no side has a change", () => {
+    expect(sidedChange([r1, []], "first", "2026-11-21")).toBeNull();
+    expect(sidedChange([[], []], "first", "2026-11-21")).toBeNull();
   });
 });
 
