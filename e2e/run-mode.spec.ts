@@ -7,7 +7,7 @@ import { insertStepProgram } from "./fixtures/step-program";
 import { expect, test } from "./fixtures/test";
 import { waitForLiveSession } from "./helpers";
 import { runTestWorkout } from "../src/lib/utils/run-test";
-import { minSec } from "../src/lib/utils/thresholds";
+import { paceText } from "../src/lib/utils/run-numbers";
 
 /**
  * Run mode (docs/plans/run-logger.md, step 3, section 7 e2e 1 to 4): a run
@@ -510,7 +510,8 @@ test("8: the treadmill run test carries the raised belt into the 20 min, Save st
   ]);
   const meters30 = testSteps[0].distanceMeters! + testSteps[1].distanceMeters!;
   expect(testSteps[1].distanceMeters).toBe(Math.round((1200 * 11.5) / 3.6));
-  const pace = `${minSec(1000 / (meters30 / 1800))} /km`;
+  // Cut to the whole second, as every run pace is (paceText).
+  const pace = paceText(1000 / (meters30 / 1800));
   expect(["5:13 /km", "5:14 /km"]).toContain(pace);
   const line = page.getByTestId("summary-threshold");
   await expect(line).toHaveText(`New threshold pace ${pace} · LTHR 176Save`);
