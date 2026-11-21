@@ -149,7 +149,7 @@ export function MeasureLogClient({ rows, today }: { rows: MeasurementRow[]; toda
   const quick = "flex-1 min-h-[44px] rounded-xl bg-muted text-sm font-medium active:opacity-60 disabled:opacity-40";
 
   return (
-    <div className="h-[100dvh] w-full max-w-md mx-auto bg-background flex flex-col overflow-hidden" data-testid="measure-step">
+    <div className="fixed inset-0 z-30 w-full max-w-md mx-auto bg-background flex flex-col overflow-hidden" data-testid="measure-step">
       <div className="flex items-center justify-between px-4 pt-4 shrink-0">
         {index === 0 ? (
           <Link href="/more/account/measurements" replace className="min-h-[44px] flex items-center text-primary text-sm font-medium">
@@ -310,7 +310,7 @@ function DoneScreen({
   const stepsOf = (p: BodyPart) => steps.filter((s) => s.site === p.site).sort((a, b) => a.side.localeCompare(b.side));
 
   return (
-    <div className="h-[100dvh] w-full max-w-md mx-auto bg-background flex flex-col overflow-hidden" data-testid="measure-done">
+    <div className="fixed inset-0 z-30 w-full max-w-md mx-auto bg-background flex flex-col overflow-hidden" data-testid="measure-done">
       <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-8 pb-4 flex flex-col gap-4">
         <div className="flex flex-col items-center text-center gap-1">
           <span className="flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground">

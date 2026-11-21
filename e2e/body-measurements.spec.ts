@@ -198,20 +198,17 @@ test("a step fits the screen with the keypad open and starts from the right valu
   await expect.poll(async () => (await figure.boundingBox())!.height).toBeCloseTo(full.height, 0);
 
   // The field does not move from step to step: the where line is always two lines high.
-  // Measured from the top of the step: after the guide sheet the page itself can scroll (BACKLOG.md).
-  const step = page.getByTestId("measure-step");
-  const fromStepTop = async (el: Locator) => (await el.boundingBox())!.y - (await step.boundingBox())!.y;
-  const fieldTop = await fromStepTop(neck);
+  const fieldTop = (await neck.boundingBox())!.y;
   await page.getByRole("button", { name: "Skip", exact: true }).click();
   const shoulders = page.getByRole("textbox", { name: "Shoulders in cm" });
   await expect(shoulders).toBeVisible();
-  expect(await fromStepTop(shoulders)).toBeCloseTo(fieldTop, 0);
+  expect((await shoulders.boundingBox())!.y).toBeCloseTo(fieldTop, 0);
+  // The step is a fixed full screen: after the guide sheet the header is still at the top.
+  expect((await page.getByTestId("measure-step").boundingBox())!.y).toBe(0);
   // No last value: no Same button.
   await expect(page.getByRole("button", { name: "Same", exact: true })).toHaveCount(0);
 
-  // A small phone: Next fits with no keypad and with the keypad. The page scroll
-  // the guide sheet left behind is undone first, so the header counts.
-  await page.evaluate(() => (document.body.scrollTop = 0));
+  // A small phone: Next fits with no keypad and with the keypad.
   await page.setViewportSize({ width: 320, height: 568 });
   await expect.poll(() => bottomOf(next)).toBeLessThanOrEqual(568);
   await setKeypad(260);
