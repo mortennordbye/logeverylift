@@ -173,6 +173,14 @@ describe("the plan against done chart (section 5)", () => {
     expect(chart.power).toBeTruthy();
     expect(chart.yTicks.length).toBeGreaterThan(1);
     for (let i = 1; i < chart.yTicks.length; i++) expect(Math.abs(chart.yTicks[i].y - chart.yTicks[i - 1].y)).toBeGreaterThanOrEqual(12);
+    // One minute apart: a label that would crowd ends the scale, so no minute is left out between two labels.
+    const mins = chart.yTicks.map((t) => Number(t.label.split(":")[0]));
+    for (let i = 1; i < mins.length; i++) expect(mins[i] - mins[i - 1]).toBe(1);
+  });
+
+  it("puts no heart rate label in the plot: the Avg HR tile gives it, and a label there covers the lines", () => {
+    const s = stream((t) => ({ speed: 3, hr: 140 + (t % 600 < 30 ? 20 : 0) }));
+    expect(runDoneChart(input(s))!.hrLabel).toBeNull();
   });
 });
 

@@ -401,11 +401,9 @@ export function runDoneChart(input: RunStreamInput): DoneChart | null {
   const hrLow = Math.max(0, Math.min(...hrVals, 100) - 45);
   const yH = (h: number) => base - ((h - hrLow) / (hrTop - hrLow)) * (base - top);
   const hr = line(hBins, yH);
-  const hrIdx = [...inRun];
-  const avgHr = weightedMean(streams.hr, hrIdx, d, (v) => v > 0);
-  const lastHr = [...(hBins ?? [])].reverse().find((v) => v !== null) ?? null;
 
-  // km/h on a treadmill; whole-minute paces outdoors, fastest first, leaving out a label that would crowd the one above it.
+  // km/h on a treadmill; whole-minute paces outdoors, fastest first. The first label that would crowd the one above it ends the
+  // scale, so the labels stay one step apart (a pace axis in speed bunches its slow minutes).
   const yTicks: DoneChart["yTicks"] = [];
   if (hasSpeed || planBands.length) {
     const ticks = treadmill
@@ -414,7 +412,7 @@ export function runDoneChart(input: RunStreamInput): DoneChart | null {
     for (const t of ticks) {
       if (t.kmh <= vMin || t.kmh >= vMax * 0.95) continue;
       const ty = y(t.kmh);
-      if (yTicks.length && ty - yTicks[yTicks.length - 1].y < TICK_GAP) continue;
+      if (yTicks.length && ty - yTicks[yTicks.length - 1].y < TICK_GAP) break;
       yTicks.push({ y: ty, label: t.label });
     }
   }
@@ -428,7 +426,8 @@ export function runDoneChart(input: RunStreamInput): DoneChart | null {
     bands,
     power: line(sBins, y),
     hr,
-    hrLabel: hr && avgHr !== null && lastHr !== null ? { x: right, y: +(yH(lastHr) - 4).toFixed(1), text: `HR ${Math.round(avgHr)}` } : null,
+    // No label in the plot: the Avg HR tile above the chart gives it, and at the line's end it covers the lines.
+    hrLabel: null,
     ftpY: null,
     yTicks,
     xTicks,
