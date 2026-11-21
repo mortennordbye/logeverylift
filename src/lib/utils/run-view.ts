@@ -349,6 +349,11 @@ export function runTargetText(s: RidePlanStep, th: ThresholdValues): string | nu
   return targetText(s, runStepZone(s.step, th), th);
 }
 
+/** The heart rates of a zone as a range ("HR 153-161"), or its effort with no run LTHR (4.2). */
+export function runZoneRangeText(zone: number, th: ThresholdValues): string {
+  return zoneHrText(zone, false, th);
+}
+
 /** The cap at the top of a heart rate zone ("HR under 162"), or its effort with no run LTHR (4.2). */
 export function runZoneCapText(zone: number, th: ThresholdValues): string {
   return zoneHrText(zone, true, th);

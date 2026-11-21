@@ -11,13 +11,17 @@
 import type { RideStepResult, RidePlan, RideTimeline } from "@/lib/utils/ride-timeline";
 import { rideClock } from "@/lib/utils/ride-screen";
 import { paceText } from "@/lib/utils/run-numbers";
-import { KEEP_BELT, RUN_MODE_NAME, runOutdoorText, runRowOfStep, runStepTitle, runTargetText, runZoneCapText } from "@/lib/utils/run-view";
+import { hrTargetZone } from "@/lib/utils/run-plan";
+import { KEEP_BELT, RUN_MODE_NAME, runOutdoorText, runRowOfStep, runStepTitle, runTargetText, runZoneCapText, runZoneRangeText } from "@/lib/utils/run-view";
+import { mainTarget } from "@/lib/utils/workout-steps";
 import { minSec } from "@/lib/utils/thresholds";
 
 /** A cue shows this long before a step whose belt differs (4.4). */
 export const BELT_CUE_S = 10;
 /** A cue shows when the next belt differs from the belt now by this much or more, in km/h (4.4). */
 export const BELT_CUE_KMH = 1;
+/** A heart rate step whose belt is its zone's slow end is adjusted after this long; the cue shows until a minute after (4.2 rule 4). */
+export const HR_ADJUST_AFTER_S = 360;
 /** The first part of a brick run runs on effort (4.2). */
 export const BRICK_EASY_S = 600;
 
@@ -146,6 +150,13 @@ export function runScreen(plan: RidePlan, t: RideTimeline, opts: { brick?: boole
     const now = cur.beltKmh ?? null;
     if (now === null) cue = `Set belt ${kmh(to)} km/h`;
     else if (Math.abs(to - now) >= BELT_CUE_KMH - 1e-9) cue = `${to > now ? "Speed up" : "Slow down"} to ${kmh(to)} km/h`;
+  }
+  // A heart rate step that starts at its zone's slow end (4.2 rule 4): the runner sets the belt by heart rate after 6 min.
+  const hrTarget = mainTarget(s.step);
+  const zone = treadmill && run.beltFrom === "zone" && hrTarget?.metric === "hr" ? hrTargetZone(hrTarget, th) : null;
+  if (!cue && zone !== null && (s.seconds ?? 0) > HR_ADJUST_AFTER_S && cur.activeSeconds < HR_ADJUST_AFTER_S + 60) {
+    const range = runZoneRangeText(zone, th);
+    if (range.startsWith("HR ")) cue = `Adjust after 6 min to hold ${range}`;
   }
 
   return {

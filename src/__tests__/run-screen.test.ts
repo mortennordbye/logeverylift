@@ -46,6 +46,17 @@ describe("runScreen on a treadmill", () => {
     expect(s.target).toBeNull();
   });
 
+  it("a heart rate step whose belt is the zone's slow end says to adjust after 6 min (4.2 rule 4)", () => {
+    // Steady (Z2, belt 8.2 from the zone) starts at 600 s.
+    expect(screenAt(treadmill, 30).cue).toBeNull();
+    expect(screenAt(treadmill, 660).cue).toBe("Adjust after 6 min to hold HR 153-161");
+    expect(screenAt(treadmill, 960).cue).toBe("Adjust after 6 min to hold HR 153-161");
+    expect(screenAt(treadmill, 1080).cue).toBeNull();
+    // A belt from the runner's own history needs no adjusting.
+    const history = [{ beltKmh: 8.6, avgHr: 155, seconds: 900 }, { beltKmh: 8.6, avgHr: 156, seconds: 900 }];
+    expect(screenAt(buildRunPlan(base, ids(base), OWNER, "indoor", { history }), 960).cue).toBeNull();
+  });
+
   it("a belt tap moves the belt now, and the plan's stays to compare", () => {
     const s = screenAt(treadmill, 60, [ev("belt", 40, 85, "s1")]);
     expect(s.treadmill).toEqual({ belt: 8.5, planBelt: 7.5, incline: 1 });
