@@ -103,6 +103,21 @@ describe("run pace zones and the frozen belt (4.2)", () => {
     expect(resolveBelt(rpe(9, 10), OWNER)).toEqual({ kmh: 11.1, from: "effort" });
   });
 
+  it("a lower zone's belt is never faster than a higher zone's in one plan: Z1 history at 8.5 stays at Z2's 8.2", () => {
+    const w = tree({ v: 2, sport: "run", name: "Base", steps: [
+      { type: "warmup", end: { type: "time", seconds: 600 }, target: { metric: "hr", anchor: "lthr", zone: 1 } },
+      { type: "work", end: { type: "time", seconds: 1800 }, target: { metric: "hr", anchor: "lthr", zone: 2 } },
+    ] });
+    // Two done Z1 steps (HR 140 of 180) at 8.5 km/h; no Z2 history, so Z2 is its zone's slow end.
+    const history = [{ beltKmh: 8.5, avgHr: 140, seconds: 900 }, { beltKmh: 8.5, avgHr: 142, seconds: 900 }];
+    const steps = buildRunPlan(w, ids(w), OWNER, "indoor", { history }).steps;
+    expect(steps.map((s) => s.run?.belt)).toEqual([82, 82]);
+    expect(steps[0].run?.beltFrom).toBe("history");
+    // With Z2 history faster than Z1's, both stay as they are.
+    const both = [...history, { beltKmh: 9, avgHr: 156, seconds: 900 }, { beltKmh: 9, avgHr: 157, seconds: 900 }];
+    expect(buildRunPlan(w, ids(w), OWNER, "indoor", { history: both }).steps.map((s) => s.run?.belt)).toEqual([85, 90]);
+  });
+
   // Unit test 7.
   it("a heart rate step with no history uses the zone pace; with no threshold pace the belt is null", () => {
     const w = tree({ v: 2, sport: "run", name: "Base", steps: [{ type: "work", end: { type: "time", seconds: 3000 }, target: { metric: "hr", anchor: "lthr", zone: 2 } }] });

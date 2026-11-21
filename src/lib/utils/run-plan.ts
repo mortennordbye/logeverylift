@@ -133,6 +133,30 @@ export function resolveBelt(
 }
 
 /**
+ * The belts of one plan that come from a heart rate zone (history or the
+ * zone's slow end), kept in zone order: a lower zone's belt is never faster
+ * than a higher zone's (a Z1 history of 8.5 km/h runs at Z2's 8.2).
+ */
+function orderByZone(steps: WorkoutStep[], belts: ({ kmh: number; from: BeltSource } | null)[], thresholds: ThresholdValues) {
+  const zoneOf = (k: number) => {
+    const b = belts[k];
+    const t = mainTarget(steps[k]);
+    return b && t && (b.from === "history" || b.from === "zone") ? hrTargetZone(t, thresholds) : null;
+  };
+  const slowest = new Map<number, number>();
+  belts.forEach((b, k) => {
+    const z = zoneOf(k);
+    if (z !== null) slowest.set(z, Math.min(slowest.get(z) ?? Infinity, b!.kmh));
+  });
+  return belts.map((b, k) => {
+    const z = zoneOf(k);
+    if (z === null) return b;
+    const cap = Math.min(...[...slowest].filter(([zone]) => zone > z).map(([, kmh]) => kmh));
+    return b!.kmh > cap ? { ...b!, kmh: cap } : b;
+  });
+}
+
+/**
  * The seconds an outdoor distance step runs (R9, 4.3): from its pace target,
  * else the runner's recent easy pace for a heart rate step, else the Z2
  * pace. Null when none is known: the step then ends on Lap.
@@ -169,10 +193,15 @@ export function buildRunPlan(
     for (let k = 0; k < n.count * n.steps.length; k++) blockOf.push(short ? (n.id ?? `n${i + 1}`) : null);
   });
   const treadmill = mode === "indoor";
+  const belts = orderByZone(
+    play.map((p) => p.step as WorkoutStep),
+    play.map((p) => (treadmill ? resolveBelt(p.step as WorkoutStep, thresholds, opts.history) : null)),
+    thresholds,
+  );
 
   const steps: RidePlanStep[] = play.map((p, k) => {
     const s = p.step as WorkoutStep;
-    const belt = treadmill ? resolveBelt(s, thresholds, opts.history) : null;
+    const belt = belts[k];
     const beltT = belt ? Math.round(belt.kmh * 10) : null;
     let rule: RunStepPlan["rule"] = "lap";
     let seconds: number | null = null;
