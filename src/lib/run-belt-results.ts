@@ -9,15 +9,43 @@
  */
 
 import { db } from "@/db";
-import { workoutSessions, workoutSets } from "@/db/schema";
+import { rideEvents, rides, workoutSessions, workoutSets } from "@/db/schema";
 import type { RideView } from "@/lib/ride-settle";
-import { planSport, rideTimeline } from "@/lib/utils/ride-timeline";
+import { sessionRide } from "@/lib/ride-plan-db";
+import { planSport, rideTimeline, type RidePlan } from "@/lib/utils/ride-timeline";
 import { beltResults, beltStepsChanged } from "@/lib/utils/run-screen";
-import { and, eq, sql } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 
 type Executor = Pick<typeof db, "update" | "select">;
 
 type View = Pick<RideView, "plan" | "events" | "serverNow" | "ride">;
+
+/**
+ * A treadmill run step's belt fields as the server's timeline has them now,
+ * for a step save from the phone: the phone works them out from its own
+ * timeline, which can place an offline tap elsewhere than the server stored
+ * it, and its save can land after the replay that rewrote them. Null when the
+ * step has not ended on the server yet: the phone's numbers stay.
+ *
+ * Locks the ride as `sendRideEvent` does, inside the caller's transaction:
+ * a belt event either lands before this read or rewrites the row after it.
+ */
+export async function serverBeltResults(ex: Executor, userId: string, sessionId: number, programExerciseId: number, programSetId: number) {
+  const latest = await sessionRide(ex, userId, sessionId, programExerciseId);
+  if (!latest) return null;
+  const [ride] = await ex.select().from(rides).where(eq(rides.id, latest.id)).for("update");
+  const plan = ride.plan as RidePlan;
+  if (planSport(plan) !== "run" || plan.mode !== "indoor") return null;
+  const events = await ex.select().from(rideEvents).where(eq(rideEvents.rideId, ride.id)).orderBy(asc(rideEvents.seq));
+  const t = rideTimeline(
+    plan,
+    events.map((e) => ({ seq: e.seq, kind: e.kind, value: e.value, at: e.at.getTime(), stepKey: e.stepKey })),
+    Date.now(),
+    { heartbeatAt: ride.heartbeatAt?.getTime() ?? null },
+  );
+  const r = t.steps.find((x) => x.programSetId === programSetId);
+  return r ? beltResults(r) : null;
+}
 
 /**
  * Write the belt fields of a treadmill run's ended steps again, where they

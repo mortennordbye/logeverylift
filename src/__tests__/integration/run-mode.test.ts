@@ -134,12 +134,12 @@ describe("each step saves its belt numbers (4.7)", () => {
     // 8.0 km/h is 2.222 m/s: the belt's speed, not the rounded 133 m over 60 s.
     expect(row).toMatchObject({ distanceMeters: 133, avgSpeed: 2.222, inclinePercent: 1, sources: { durationSeconds: "clock", distanceMeters: "belt", avgSpeed: "belt" } });
 
-    // The runner types 150 m; a later save from the belt keeps it.
-    await db.update(workoutSets).set({ distanceMeters: 150, sources: { durationSeconds: "clock", distanceMeters: "typed", avgSpeed: "belt" } }).where(eq(workoutSets.id, row.id));
+    // The runner types 150 m; a later save from the belt keeps it, and writes the belt's speed as the server's timeline has it.
+    await db.update(workoutSets).set({ distanceMeters: 150, avgSpeed: 1, sources: { durationSeconds: "clock", distanceMeters: "typed", avgSpeed: "belt" } }).where(eq(workoutSets.id, row.id));
     ok(await logWorkoutSet(stepSave(s, 0, { ...t.steps[0], distanceM: 140, avgSpeed: 140 / 60 })));
     const [after] = await db.select().from(workoutSets).where(eq(workoutSets.id, row.id));
     expect(after).toMatchObject({ distanceMeters: 150, sources: { distanceMeters: "typed", avgSpeed: "belt" } });
-    expect(after.avgSpeed).toBeCloseTo(140 / 60, 2);
+    expect(after.avgSpeed).toBe(2.222);
   });
 
   it("a late offline belt event moves the meters of a step already saved", async () => {
@@ -157,6 +157,25 @@ describe("each step saves its belt numbers (4.7)", () => {
     // 30 s at 8 km/h and 30 s at 12 km/h: 10 km/h.
     expect(row.distanceMeters).toBe(167);
     expect(row.avgSpeed).toBeCloseTo(10 / 3.6, 3);
+  });
+
+  it("a step save queued offline that lands after the late belt event keeps the meters of the server's timeline", async () => {
+    const s = await runSetup();
+    const { ride: r } = ok(await startRide({ ...s, mode: "indoor", clientId: cid() }));
+    // Offline: the phone saves the step from its own timeline, which places the tap later than the server will.
+    later(61 * 1000);
+    const v1 = ok(await getRide({ rideId: r.id }))!;
+    const phone = rideTimeline(v1.plan, [...v1.events, { seq: 2, kind: "belt", value: 120, at: T0.getTime() + 45_000, stepKey: v1.plan.steps[0].key }], Date.now());
+    // Back online: the belt event replays first (its step has no row yet), then the queued step save.
+    later(70 * 1000);
+    ok(await sendRideEvent({ rideId: r.id, clientId: cid(), kind: "belt", value: 120, stepKey: v1.plan.steps[0].key, clientAt: T0.getTime() + 30_000, expectedSeq: 1 }));
+    ok(await logWorkoutSet(stepSave(s, 0, phone.steps[0])));
+    const [row] = await db.select().from(workoutSets).where(and(eq(workoutSets.sessionId, s.sessionId), eq(workoutSets.programSetId, s.setIds[0])));
+    // 30 s at 8 km/h and 30 s at 12 km/h, as the server stored the tap: not the phone's 45 s.
+    expect(phone.steps[0].distanceM).toBe(150);
+    expect(row.distanceMeters).toBe(167);
+    expect(row.avgSpeed).toBeCloseTo(10 / 3.6, 3);
+    expect(row.sources).toMatchObject({ distanceMeters: "belt", avgSpeed: "belt" });
   });
 });
 
