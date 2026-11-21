@@ -130,11 +130,12 @@ describe("each step saves its belt numbers (4.7)", () => {
     ]);
     ok(await logWorkoutSet(stepSave(s, 0, t.steps[0])));
     const [row] = await db.select().from(workoutSets).where(and(eq(workoutSets.sessionId, s.sessionId), eq(workoutSets.programSetId, s.setIds[0])));
-    expect(row).toMatchObject({ distanceMeters: 133, avgSpeed: 2.217, inclinePercent: 1, sources: { durationSeconds: "clock", distanceMeters: "belt", avgSpeed: "belt" } });
+    // 8.0 km/h is 2.222 m/s: the belt's speed, not the rounded 133 m over 60 s.
+    expect(row).toMatchObject({ distanceMeters: 133, avgSpeed: 2.222, inclinePercent: 1, sources: { durationSeconds: "clock", distanceMeters: "belt", avgSpeed: "belt" } });
 
     // The runner types 150 m; a later save from the belt keeps it.
     await db.update(workoutSets).set({ distanceMeters: 150, sources: { durationSeconds: "clock", distanceMeters: "typed", avgSpeed: "belt" } }).where(eq(workoutSets.id, row.id));
-    ok(await logWorkoutSet(stepSave(s, 0, { ...t.steps[0], distanceM: 140 })));
+    ok(await logWorkoutSet(stepSave(s, 0, { ...t.steps[0], distanceM: 140, avgSpeed: 140 / 60 })));
     const [after] = await db.select().from(workoutSets).where(eq(workoutSets.id, row.id));
     expect(after).toMatchObject({ distanceMeters: 150, sources: { distanceMeters: "typed", avgSpeed: "belt" } });
     expect(after.avgSpeed).toBeCloseTo(140 / 60, 2);
@@ -152,9 +153,9 @@ describe("each step saves its belt numbers (4.7)", () => {
     later(70 * 1000);
     ok(await sendRideEvent({ rideId: r.id, clientId: cid(), kind: "belt", value: 120, stepKey: v1.plan.steps[0].key, clientAt: T0.getTime() + 30_000, expectedSeq: 1 }));
     const [row] = await db.select().from(workoutSets).where(and(eq(workoutSets.sessionId, s.sessionId), eq(workoutSets.programSetId, s.setIds[0])));
-    // 30 s at 8 km/h and 30 s at 12 km/h.
+    // 30 s at 8 km/h and 30 s at 12 km/h: 10 km/h.
     expect(row.distanceMeters).toBe(167);
-    expect(row.avgSpeed).toBeCloseTo(167 / 60, 2);
+    expect(row.avgSpeed).toBeCloseTo(10 / 3.6, 3);
   });
 });
 
