@@ -26,6 +26,20 @@ test("at 320 px the workout header keeps Finished, Workout, Edit and + inside th
   expect(edit.x + edit.width).toBeLessThanOrEqual(plus.x);
 });
 
+test("at 320 px each day of the home week strip fits its column, today's ring too", async ({ page }) => {
+  await page.goto("/");
+  const strip = page.getByTestId("week-strip");
+  await expect(strip).toBeVisible();
+  const dots = strip.locator('[role="img"][aria-label*="day"]');
+  const n = await dots.count();
+  expect(n).toBe(7);
+  for (let i = 0; i < n - 1; i++) {
+    const a = await box(dots.nth(i));
+    const b = await box(dots.nth(i + 1));
+    expect(a.x + a.width).toBeLessThan(b.x);
+  }
+});
+
 test("at 320 px the program header keeps Back, Change history, Share and Edit apart and inside the screen", async ({ page }) => {
   await openWorkout(page);
   const programPath = new URL(page.url()).pathname.replace(/\/workout$/, "");

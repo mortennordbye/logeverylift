@@ -22,7 +22,8 @@ type DayState = "done" | "missed" | "today" | "planned" | "rest";
 const STATE_TEXT: Record<DayState, string> = { done: "done", missed: "missed", today: "today", planned: "planned", rest: "rest" };
 
 function Dot({ state, label, inner }: { state: DayState; label: string; inner?: string }) {
-  const base = "relative grid h-8 w-8 place-items-center rounded-full text-xs font-bold";
+  // 24 px under 360 px: a day's column is about 26 px wide on a 320 px phone.
+  const base = "relative grid h-6 w-6 min-[360px]:h-8 min-[360px]:w-8 place-items-center rounded-full text-xs font-bold";
   const look: Record<DayState, string> = {
     done: "bg-brand-fill text-white",
     missed: "bg-widget-2 text-muted-foreground",
