@@ -64,6 +64,11 @@ describe("RunResults", () => {
     render(<RunResults programId={1} exerciseId={7} steps={steps} rows={rows} mode={mode} setNumbers={{ 1: 1, 2: 2 }} sessionId={9} garminWaiting laterHref="/" />);
   }
 
+  it("More numbers keeps to the left when it wraps on a narrow phone", () => {
+    table("outdoor", { 1: log(600, null) });
+    expect(screen.getByTestId("more-numbers").className).toContain("text-left");
+  });
+
   it("on a treadmill the belt stepper moves 0.1 km/h; Done saves the belt as typed speed and distance, with the effort on each step, then opens the summary", async () => {
     table("indoor", { 1: log(600, 7.5), 2: log(1200, 8.2) });
     expect(screen.getByTestId("garmin-waiting").textContent).toBe("Waiting for your Garmin run. It fills the numbers.");

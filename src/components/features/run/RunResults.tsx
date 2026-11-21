@@ -194,7 +194,7 @@ export function RunResults({
           type="button"
           onClick={() => setShowMore((m) => !m)}
           aria-expanded={showMore}
-          className="min-h-11 self-start text-sm font-medium text-primary active:opacity-70"
+          className="min-h-11 self-start text-left text-sm font-medium text-primary active:opacity-70"
           data-testid="more-numbers"
         >
           {showMore ? "Fewer numbers" : treadmill ? "More numbers · max HR, cadence" : "More numbers · max HR, cadence, climbing"}
