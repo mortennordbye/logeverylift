@@ -1,6 +1,6 @@
 # Run logger
 
-Status: written on 2026-11-20 and waiting for the owner's yes. Nothing is built.
+Status: built. Steps 0 to 8 are built on `feat/run-logger` (2026-11-21). Push alerts stay off until the VAPID keys are set.
 Plan page with the pictures: https://claude.ai/artifact/A8QRyLwG2PviN3WBauvDtu.
 A copy of the page is in the repo: `docs/design/run-logger.html` (open it in a browser).
 This brief is the same plan in text. It is written so that an agent with no conversation history
