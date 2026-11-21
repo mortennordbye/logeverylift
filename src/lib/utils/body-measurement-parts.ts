@@ -13,7 +13,10 @@ export type Tape = {
   y: number;
   x1: number;
   x2: number;
-  /** Which side of the map the label goes on, and its height. */
+  /**
+   * Which side of the map the label goes on, and its height. Labels on one
+   * side are at least 56 apart: a 44 px tap area each on a 320 px screen.
+   */
   label: "L" | "R";
   ly: number;
 };
@@ -38,14 +41,14 @@ export type BodyPart = {
 export const BODY_PARTS: BodyPart[] = [
   {
     n: 1, site: "neck", name: "Neck", kind: "circumference", sides: false,
-    tape: { y: 58, x1: 89.6, x2: 110.4, label: "R", ly: 50 }, rule: null,
+    tape: { y: 58, x1: 89.6, x2: 110.4, label: "R", ly: 44 }, rule: null,
     where: "Just below the Adam's apple (larynx).",
     how: ["Look straight ahead. Keep the shoulders down.", "Put the tape around the neck. Let it go a little down at the front.", "Do not tighten the neck."],
     tip: "Do not swallow while you read the value.",
   },
   {
     n: 2, site: "shoulders", name: "Shoulders", kind: "circumference", sides: false,
-    tape: { y: 92, x1: 47.5, x2: 152.5, label: "L", ly: 88 }, rule: null,
+    tape: { y: 92, x1: 47.5, x2: 152.5, label: "L", ly: 78 }, rule: null,
     where: "Around the widest part of the shoulders, over the round shoulder muscle.",
     how: ["Stand with the arms relaxed at the sides.", "Put the tape around both shoulders and the upper back.", "Breathe out normally, then read."],
     tip: "Ask a helper. It is hard to keep the tape level at the back yourself.",
@@ -59,35 +62,35 @@ export const BODY_PARTS: BodyPart[] = [
   },
   {
     n: 4, site: "waist", name: "Waist", kind: "circumference", sides: false,
-    tape: { y: 150, x1: 71.5, x2: 128.5, label: "R", ly: 150 }, rule: null,
+    tape: { y: 150, x1: 71.5, x2: 128.5, label: "R", ly: 156 }, rule: null,
     where: "Halfway between the lowest rib and the top of the hip bone. For most people this is the narrowest part, a little above the navel.",
     how: ["Stand with the feet together and the stomach relaxed.", "Put the tape around the waist, level with the floor.", "Breathe out normally, then read at the end of the breath."],
     tip: "Do not pull in the stomach. Use the same point each time.",
   },
   {
     n: 5, site: "hips", name: "Hips", kind: "circumference", sides: false,
-    tape: { y: 200, x1: 67.5, x2: 132.5, label: "R", ly: 200 }, rule: null,
+    tape: { y: 200, x1: 67.5, x2: 132.5, label: "R", ly: 212 }, rule: null,
     where: "Around the widest part of the buttocks.",
     how: ["Stand with the feet together.", "Put the tape around the hips and buttocks.", "Move the tape up and down to find the widest part. Read there."],
     tip: "Look at the side in a mirror to make sure the tape is level.",
   },
   {
     n: 6, site: "upper-arm", name: "Upper arm", kind: "circumference", sides: true,
-    tape: { y: 128, x1: 46.9, x2: 64.7, label: "L", ly: 130 }, rule: null,
+    tape: { y: 128, x1: 46.9, x2: 64.7, label: "L", ly: 134 }, rule: null,
     where: "Halfway between the tip of the shoulder and the elbow.",
     how: ["Let the arm hang relaxed. Do not tighten the muscle.", "Put the tape around the arm, at a right angle to it.", "Measure the left arm, then the right arm."],
     tip: "Measure relaxed each time, so the values agree.",
   },
   {
     n: 7, site: "forearm", name: "Forearm", kind: "circumference", sides: true,
-    tape: { y: 174, x1: 45.9, x2: 60.9, label: "L", ly: 176 }, rule: null,
+    tape: { y: 174, x1: 45.9, x2: 60.9, label: "L", ly: 190 }, rule: null,
     where: "Around the widest part, just below the elbow.",
     how: ["Let the arm hang. Turn the palm to the front. Open the hand.", "Move the tape down from the elbow to find the widest part.", "Measure the left arm, then the right arm."],
     tip: "Do not make a fist.",
   },
   {
     n: 8, site: "thigh", name: "Thigh", kind: "circumference", sides: true,
-    tape: { y: 238, x1: 69.1, x2: 97.3, label: "L", ly: 238 }, rule: null,
+    tape: { y: 238, x1: 69.1, x2: 97.3, label: "L", ly: 246 }, rule: null,
     where: "Halfway between the groin crease and the top of the kneecap.",
     how: ["Stand with the weight on both feet. Relax the leg.", "Put the tape around the thigh, level with the floor.", "Measure the left leg, then the right leg."],
     tip: "Measure the distance from the kneecap once. Then use the same distance each time.",

@@ -4,6 +4,7 @@ import { MeasureGuide, SectionLabel, TrendLine } from "@/components/features/mea
 import { deleteBodyMeasurement, saveBodyMeasurement } from "@/lib/actions/body-measurements";
 import type { BodyPart } from "@/lib/utils/body-measurement-parts";
 import { changeSince, formatCm, round1, seriesOf, type MeasurementRow } from "@/lib/utils/body-measurements";
+import { yearSuffix } from "@/lib/utils/date-label";
 import { formatDateShort, sanitizeDecimalInput } from "@/lib/utils/format";
 import { callAction } from "@/lib/utils/stale-bundle";
 import { useRouter } from "next/navigation";
@@ -13,6 +14,9 @@ import { useEffect, useState } from "react";
 const CONFIRM_MS = 3000;
 
 const SIDE_LETTER = { none: "", left: "L", right: "R" } as const;
+
+/** "5 Mar", with the year when it is not this year: "5 Mar 2025". */
+const dayLabel = (day: string) => `${formatDateShort(day)}${yearSuffix(day)}`;
 
 /** "90 cm · −2.0 cm since 3 Oct", or the latest value alone. */
 function headline(series: MeasurementRow[], today: string, prefix = ""): string | null {
@@ -38,7 +42,7 @@ export function PartClient({ part, rows, today }: { part: BodyPart; rows: Measur
     ? [headline(series[0], today, "L "), headline(series[1], today, "R ")].filter(Boolean)
     : [headline(series[0], today)].filter(Boolean);
   const history = [...rows].sort((a, b) => b.measuredOn.localeCompare(a.measuredOn) || a.side.localeCompare(b.side));
-  const dates = rows.map((r) => r.measuredOn).sort();
+  const dates = [...new Set(rows.map((r) => r.measuredOn))].sort();
 
   useEffect(() => {
     if (armed === null) return;
@@ -95,7 +99,7 @@ export function PartClient({ part, rows, today }: { part: BodyPart; rows: Measur
             <div className="divide-y divide-border/50">
               {history.map((r) => (
                 <div key={r.id} className="flex items-center gap-3 px-4 min-h-[52px]" data-testid="history-row">
-                  <span className="flex-1 text-sm">{formatDateShort(r.measuredOn)}</span>
+                  <span className="flex-1 text-sm">{dayLabel(r.measuredOn)}</span>
                   <span className="text-sm font-semibold tabular-nums">
                     {SIDE_LETTER[r.side] && `${SIDE_LETTER[r.side]} `}
                     {formatCm(r.valueCm)} cm
@@ -103,7 +107,7 @@ export function PartClient({ part, rows, today }: { part: BodyPart; rows: Measur
                   <button
                     onClick={() => remove(r.id)}
                     disabled={deleting !== null}
-                    aria-label={`${armed === r.id ? "Confirm delete" : "Delete"} ${formatDateShort(r.measuredOn)}${r.side === "none" ? "" : ` ${r.side}`}`}
+                    aria-label={`${armed === r.id ? "Confirm delete" : "Delete"} ${dayLabel(r.measuredOn)}${r.side === "none" ? "" : ` ${r.side}`}`}
                     className={`min-h-[44px] px-2 text-sm active:opacity-60 disabled:opacity-40 ${armed === r.id ? "rounded-lg bg-destructive text-white font-semibold" : "text-destructive"}`}
                   >
                     {armed === r.id ? "Confirm" : "Delete"}

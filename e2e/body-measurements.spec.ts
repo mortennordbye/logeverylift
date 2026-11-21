@@ -34,6 +34,11 @@ test("log measurements step by step, read them back and delete one", async ({ pa
   await expect(page.getByTestId("measurements-empty")).toBeVisible();
   // The empty page shows the whole body map, so the parts can be seen before the first log.
   await expect(page.getByTestId("map-point-waist")).toBeVisible();
+  // A map point is a link to its part page.
+  await page.getByRole("link", { name: "Waist", exact: true }).click();
+  await page.waitForURL("**/more/account/measurements/waist");
+  await page.goBack();
+  await page.waitForURL("**/more/account/measurements");
   await page.getByRole("link", { name: "Log measurements" }).click();
   await page.waitForURL("**/more/account/measurements/log");
 

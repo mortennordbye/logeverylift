@@ -24,7 +24,8 @@ import Link from "next/link";
 import { useEffect, useLayoutEffect, useReducer, useRef, useState } from "react";
 
 const SIDE_WORD: Record<BodySide, string> = { none: "", left: "Left", right: "Right" };
-const keyOf = (s: LogStep) => `${s.site}:${s.side}`;
+/** Saved values are kept per log date: going Back to change the date starts it empty. */
+const keyOf = (s: LogStep, date: string) => `${date}|${s.site}:${s.side}`;
 
 function subtitle(part: BodyPart, side: BodySide): string {
   if (part.kind === "length") return "Length · tape along the body";
@@ -71,7 +72,7 @@ export function MeasureLogClient({ rows, today }: { rows: MeasurementRow[]; toda
   const part = partOf(step.site)!;
   /** The latest value before the log date: "Last time", and what Same keeps. */
   const before = (s: LogStep) => seriesOf(rows, s.site, s.side).filter((r) => r.measuredOn < date).at(-1) ?? null;
-  const onDate = (s: LogStep) => saved[keyOf(s)] ?? rows.find((r) => r.site === s.site && r.side === s.side && r.measuredOn === date)?.valueCm ?? null;
+  const onDate = (s: LogStep) => saved[keyOf(s, date)] ?? rows.find((r) => r.site === s.site && r.side === s.side && r.measuredOn === date)?.valueCm ?? null;
   const last = before(step);
 
   // Each step starts with the last value, selected, so typing replaces it.
@@ -107,13 +108,14 @@ export function MeasureLogClient({ rows, today }: { rows: MeasurementRow[]; toda
 
   async function save(s: LogStep, valueCm: number): Promise<boolean> {
     setBusy(true);
+    setError(null);
     const result = await callAction(saveBodyMeasurement({ site: s.site, side: s.side, valueCm, measuredOn: date }));
     setBusy(false);
     if (!result.success) {
       setError(result.error);
       return false;
     }
-    setSaved((prev) => ({ ...prev, [keyOf(s)]: result.data.valueCm }));
+    setSaved((prev) => ({ ...prev, [keyOf(s, date)]: result.data.valueCm }));
     return true;
   }
 
@@ -142,7 +144,13 @@ export function MeasureLogClient({ rows, today }: { rows: MeasurementRow[]; toda
     input.current?.select();
   }
 
-  if (done) return <DoneScreen steps={steps} date={date} onDate={onDate} before={before} onFix={setFixing} fixing={fixing} save={save} error={error} />;
+  // A correction sheet opens without the error of an earlier save.
+  function fix(p: BodyPart | null) {
+    setError(null);
+    setFixing(p);
+  }
+
+  if (done) return <DoneScreen steps={steps} date={date} onDate={onDate} before={before} onFix={fix} fixing={fixing} save={save} error={error} />;
 
   const tape = part.tape && (step.side === "left" ? mirrorTape(part.tape) : part.tape);
   const title = part.sides ? `${part.name} · ${SIDE_WORD[step.side].toLowerCase()}` : part.name;

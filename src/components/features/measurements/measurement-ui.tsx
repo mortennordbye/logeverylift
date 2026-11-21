@@ -29,10 +29,11 @@ export function TrendLine({
   const pad = 3;
   const t = (r: MeasurementRow) => Date.parse(r.measuredOn);
   const t0 = Math.min(...all.map(t));
-  const tr = Math.max(...all.map(t)) - t0 || 1;
+  const span = Math.max(...all.map(t)) - t0;
   const v0 = Math.min(...all.map((r) => r.valueCm));
   const vr = Math.max(...all.map((r) => r.valueCm)) - v0 || 1;
-  const x = (r: MeasurementRow) => (all.length === 1 ? width / 2 : pad + ((t(r) - t0) / tr) * (width - 2 * pad));
+  // One date (or the L and R of one date): the points sit in the middle.
+  const x = (r: MeasurementRow) => (span === 0 ? width / 2 : pad + ((t(r) - t0) / span) * (width - 2 * pad));
   const y = (r: MeasurementRow) => height - pad - ((r.valueCm - v0) / vr) * (height - 2 * pad);
   return (
     <svg viewBox={`0 0 ${width} ${height}`} className={className} aria-hidden="true">

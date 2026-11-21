@@ -13,13 +13,13 @@ import {
   nextLogFrom,
   seriesOf,
   sideNote,
+  sidedChange,
   type ChangeSince,
   type MeasurementRow,
 } from "@/lib/utils/body-measurements";
 import { formatDateShort } from "@/lib/utils/format";
 import { ChevronRight } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 const CIRCUMFERENCE = BODY_PARTS.filter((p) => p.kind === "circumference");
@@ -36,17 +36,17 @@ type PartView = { part: BodyPart; series: MeasurementRow[][]; value: string | nu
 function viewOf(rows: MeasurementRow[], part: BodyPart, since: ChangeSince, today: string, letters: boolean): PartView {
   const series = seriesFor(rows, part);
   const latest = series.map((s) => s.at(-1)?.valueCm ?? null);
-  const changes = series.map((s) => changeSince(s, since, today));
   let value: string | null;
   let change: string | null;
   if (part.sides) {
     const [l, r] = latest;
     const bits = [l !== null && `${letters ? "L " : ""}${formatCm(l)}`, r !== null && `${letters ? "R " : ""}${formatCm(r)}`].filter(Boolean);
     value = bits.length ? bits.join(" · ") : null;
-    change = changes.some(Boolean) ? changes.map((c) => (c ? formatChange(c.delta) : "new")).join(" · ") : null;
+    change = sidedChange(series, since, today);
   } else {
     value = latest[0] !== null ? formatCm(latest[0]) : null;
-    change = changes[0] ? formatChange(changes[0].delta) : null;
+    const c = changeSince(series[0], since, today);
+    change = c ? formatChange(c.delta) : null;
   }
   return { part, series, value, change, note: part.sides ? sideNote(latest[0], latest[1]) : null };
 }
@@ -196,14 +196,15 @@ function PartRow({ view }: { view: PartView }) {
 }
 
 // The map: the figure at x 80 in a 340 wide box, labels left of x 106 or right of x 254.
+// At 320 px the map is 272 px wide, so a 56 high tap area is 44.8 px.
 const MAP_X = 80;
+const TAP_H = 56;
 const LABEL_L = 106;
 const LABEL_R = 254;
 
 function ValueMap({ views }: { views: PartView[] }) {
-  const router = useRouter();
   return (
-    <svg viewBox="0 0 340 392" className="w-full" role="img" aria-label="Body map with the latest value at each point">
+    <svg viewBox="0 0 340 392" className="w-full" role="group" aria-label="Body map with the latest value at each point">
       <g transform={`translate(${MAP_X} 0)`}>
         <FrontFigure />
         {views.map((v) => (
@@ -217,7 +218,7 @@ function ValueMap({ views }: { views: PartView[] }) {
         const tx = left ? LABEL_L : LABEL_R;
         const anchor = left ? "end" : "start";
         return (
-          <g key={part.site} onClick={() => router.push(`/more/account/measurements/${part.site}`)} style={{ cursor: "pointer" }} data-testid={`map-point-${part.site}`}>
+          <Link key={part.site} href={partHref(part)} aria-label={part.name} data-testid={`map-point-${part.site}`}>
             <polyline points={`${ex},${t.y} ${left ? tx + 8 : tx - 8},${t.ly}`} fill="none" stroke="var(--muted-foreground)" strokeWidth={0.9} opacity={0.6} />
             <circle cx={ex} cy={t.y} r={2.6} fill="var(--primary)" />
             <text x={tx} y={t.ly - 4} textAnchor={anchor} fontSize={11} fill="var(--muted-foreground)">
@@ -234,8 +235,8 @@ function ValueMap({ views }: { views: PartView[] }) {
               </text>
             )}
             {/* A 44 px tap area over the label. */}
-            <rect x={left ? 0 : tx - 10} y={t.ly - 21} width={left ? tx + 10 : 340 - tx + 10} height={42} fill="transparent" />
-          </g>
+            <rect x={left ? 0 : tx - 10} y={t.ly - TAP_H / 2} width={left ? tx + 10 : 340 - tx + 10} height={TAP_H} fill="transparent" />
+          </Link>
         );
       })}
     </svg>
