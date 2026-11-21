@@ -1,6 +1,6 @@
 import { MAP_FIGURES } from "@/lib/exercise-art/muscle-map";
 import { MUSCLE_FILL } from "@/lib/exercise-art/scene";
-import type { Tape } from "@/lib/utils/body-measurement-parts";
+import type { Rule, Tape } from "@/lib/utils/body-measurement-parts";
 
 const FRONT = MAP_FIGURES[0];
 
@@ -29,22 +29,40 @@ export function TapeBand({ tape, width = 1.8 }: { tape: Pick<Tape, "x1" | "x2" |
   );
 }
 
-/**
- * The figure around one part, with its tape line; `className` sets the box height and colour.
- * The crop is centred and fills the box height; a wide box shows more of the body at the sides.
- */
-export function TapeCrop({ tape, name, className }: { tape: Tape; name: string; className?: string }) {
+/** A length's measuring line, with end ticks, dotted lines back to the body and the floor. */
+function RuleLine({ rule }: { rule: Rule }) {
+  const { x, y1, y2, ends, floor } = rule;
   return (
-    <div className={`overflow-hidden rounded-xl ${className ?? ""}`}>
-      <svg
-        viewBox={tape.crop.join(" ")}
-        className="w-full h-full"
-        role="img"
-        aria-label={`Where to measure the ${name.toLowerCase()}`}
-      >
-        <FrontFigure />
-        <TapeBand tape={tape} width={1.6} />
-      </svg>
-    </div>
+    <g style={{ stroke: "var(--primary)", fill: "none" }} strokeLinecap="round">
+      {ends && (
+        <g style={{ stroke: "var(--muted-foreground)" }} strokeWidth={0.8} strokeDasharray="2 2">
+          {ends[0] > 0 && <path d={`M${x} ${y1}L${ends[0]} ${y1}`} />}
+          {ends[1] > 0 && <path d={`M${x} ${y2}L${ends[1]} ${y2}`} />}
+        </g>
+      )}
+      {floor && <path d={`M20 ${y2}L184 ${y2}`} style={{ stroke: "var(--muted-foreground)" }} strokeWidth={1} />}
+      <path d={`M${x} ${y1}L${x} ${y2}M${x - 5} ${y1}L${x + 5} ${y1}M${x - 5} ${y2}L${x + 5} ${y2}`} strokeWidth={2.2} />
+    </g>
+  );
+}
+
+/**
+ * The whole front body with one place lit up: the tape of a circumference
+ * (with a soft glow so it reads at a small size) or the line of a length.
+ * `className` sets the size; the figure keeps its shape and is centred.
+ */
+export function PartFigure({ tape, rule, name, className }: { tape: Tape | null; rule: Rule | null; name: string; className?: string }) {
+  const rx = tape ? (tape.x2 - tape.x1) / 2 + 4 : 0;
+  return (
+    <svg viewBox="4 0 192 392" className={className} role="img" aria-label={`Where to measure the ${name.toLowerCase()}`}>
+      <FrontFigure />
+      {tape && (
+        <>
+          <ellipse cx={(tape.x1 + tape.x2) / 2} cy={tape.y} rx={rx} ry={Math.max(6, rx * 0.3)} style={{ fill: "var(--primary)" }} opacity={0.22} />
+          <TapeBand tape={tape} width={2.6} />
+        </>
+      )}
+      {rule && <RuleLine rule={rule} />}
+    </svg>
   );
 }

@@ -1,4 +1,4 @@
-import { TapeCrop } from "@/components/features/measurements/BodyFigure";
+import { PartFigure } from "@/components/features/measurements/BodyFigure";
 import type { BodyPart, Tape } from "@/lib/utils/body-measurement-parts";
 import type { MeasurementRow } from "@/lib/utils/body-measurements";
 
@@ -63,11 +63,13 @@ export function TrendLine({
   );
 }
 
-/** Where to measure a part, the three steps and the tip, with the picture for a circumference. */
+/** Where to measure a part, the three steps and the tip, with the whole body and the place lit up. */
 export function MeasureGuide({ part, tape }: { part: BodyPart; tape?: Tape | null }) {
   return (
     <div className="space-y-3 text-sm" data-testid="measure-guide">
-      {tape && <TapeCrop tape={tape} name={part.name} className="h-40 bg-muted" />}
+      <div className="flex justify-center rounded-xl bg-muted py-3">
+        <PartFigure tape={tape ?? null} rule={part.rule} name={part.name} className="h-56 w-auto" />
+      </div>
       <p>
         <span className="font-semibold">Where</span> · {part.where}
       </p>

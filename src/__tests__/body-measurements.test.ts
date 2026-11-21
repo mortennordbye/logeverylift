@@ -127,6 +127,6 @@ describe("parts", () => {
   });
   it("mirrors a tape to the other side of the figure", () => {
     const t = mirrorTape(partOf("upper-arm")!.tape!);
-    expect([t.x1, t.x2, t.crop[0]]).toEqual([135.3, 153.1, 99]);
+    expect([t.x1, t.x2]).toEqual([135.3, 153.1]);
   });
 });

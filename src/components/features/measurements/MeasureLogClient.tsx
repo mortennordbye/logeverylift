@@ -1,6 +1,6 @@
 "use client";
 
-import { TapeCrop } from "@/components/features/measurements/BodyFigure";
+import { PartFigure } from "@/components/features/measurements/BodyFigure";
 import { MeasureGuide } from "@/components/features/measurements/measurement-ui";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import type { BodySide } from "@/db/schema/body-measurements";
@@ -154,13 +154,15 @@ export function MeasureLogClient({ rows, today }: { rows: MeasurementRow[]; toda
           <h1 className="text-xl font-semibold">{title}</h1>
           <p className="text-xs text-muted-foreground">{subtitle(part, step.side)}</p>
         </div>
-        {tape && <TapeCrop tape={tape} name={part.name} className="h-36 bg-card shrink-0" />}
-        <p className="text-xs text-muted-foreground">
-          {shortWhere(part.where)}{" "}
-          <button type="button" onMouseDown={keepFocus} onClick={() => setGuideOpen(true)} className="tap-slop text-primary font-medium">
-            How to measure ›
-          </button>
-        </p>
+        <div className="flex items-center gap-4 rounded-xl bg-card p-3 shrink-0">
+          <PartFigure tape={tape} rule={part.rule} name={part.name} className="h-72 w-auto shrink-0" />
+          <div className="min-w-0 space-y-2">
+            <p className="text-sm">{shortWhere(part.where)}</p>
+            <button type="button" onMouseDown={keepFocus} onClick={() => setGuideOpen(true)} className="min-h-[44px] text-sm text-primary font-medium">
+              How to measure ›
+            </button>
+          </div>
+        </div>
         <div className="flex items-baseline justify-center gap-2 pt-1">
           <input
             ref={input}

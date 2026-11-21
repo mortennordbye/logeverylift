@@ -84,6 +84,10 @@ export function MeasurementsClient({
               Measure with a soft tape, in the morning, before training. Log the parts you measured. You can leave the others empty.
             </p>
           </div>
+          <div className="rounded-2xl bg-card px-2 pt-3 pb-2 mt-3">
+            <ValueMap views={CIRCUMFERENCE.map((p) => viewOf(rows, p, "first", today, false))} />
+            <p className="text-xs text-muted-foreground text-center pt-1">Tap a point to see how to measure it</p>
+          </div>
         </div>
         {logButton}
       </>
