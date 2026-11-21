@@ -449,6 +449,8 @@ test("4: the ride of a brick that ended early hands over to its run, which shows
   await expect(visible(page, "brick-ride-done")).toContainText("Ride numbers later");
   await page.getByRole("link", { name: "Start run" }).click();
   await expect(visible(page, "run-exercise")).toBeVisible();
+  // The ended ride is not a page to go back to: Back on the run reads Workout, as on every run screen.
+  await expect(visible(page, "back-link")).toHaveText("Workout");
   await expect(visible(page, "run-t2")).toContainText(/T2 \d+:\d\d/);
   await startRun(page, { userId, programId: r.programId, peId: r.peId }, "Treadmill", { open: false });
   // A brick run's first 10 min run on effort with short quick steps (4.2).

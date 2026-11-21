@@ -34,7 +34,8 @@ export function BrickRideDone({
         <p className="rounded-xl bg-muted px-4 py-3 text-sm">Brick · the run is next</p>
       </div>
       <div data-pinned-bar className="shrink-0 px-4 pt-2 pb-3 flex flex-col gap-1 border-t border-border bg-background">
-        <Link href={runHref} className="min-h-12 rounded-2xl bg-brand-fill px-4 text-base font-semibold text-white inline-flex items-center justify-center active:opacity-80">
+        {/* Replace: the ended ride is not a page to go back to, so Back on the run reads Workout. */}
+        <Link href={runHref} replace className="min-h-12 rounded-2xl bg-brand-fill px-4 text-base font-semibold text-white inline-flex items-center justify-center active:opacity-80">
           Start run
         </Link>
         <p className="min-h-11 inline-flex items-center justify-center text-sm text-muted-foreground">Ride numbers later</p>
