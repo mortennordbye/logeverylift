@@ -116,3 +116,11 @@ export function nextReplayIn(queue: Retryable[], now: number): "now" | number | 
   if (dueItems(queue, now).length > 0) return "now";
   return Math.min(...queue.map((m) => m.nextAttemptAt ?? 0)) - now;
 }
+
+/** The toast after a replay: "Synced 2 pending sets", "Synced 3 pending steps" (ride and run steps), or both. */
+export function syncedText(sets: number, steps: number): string {
+  const n = (k: number, word: string) => `${k} ${word}${k === 1 ? "" : "s"}`;
+  if (!steps) return `Synced ${n(sets, "pending set")}`;
+  if (!sets) return `Synced ${n(steps, "pending step")}`;
+  return `Synced ${n(sets, "pending set")} and ${n(steps, "step")}`;
+}

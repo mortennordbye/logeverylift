@@ -71,3 +71,14 @@ describe("offline queue retry rules", () => {
     expect(current.nextAttemptAt).toBe(last + STALE_BUNDLE_RETRY_MS);
   });
 });
+
+describe("syncedText", () => {
+  it("names sets, steps or both", async () => {
+    const { syncedText } = await import("@/lib/utils/pending-queue");
+    expect(syncedText(1, 0)).toBe("Synced 1 pending set");
+    expect(syncedText(3, 0)).toBe("Synced 3 pending sets");
+    expect(syncedText(0, 1)).toBe("Synced 1 pending step");
+    expect(syncedText(0, 4)).toBe("Synced 4 pending steps");
+    expect(syncedText(2, 1)).toBe("Synced 2 pending sets and 1 step");
+  });
+});

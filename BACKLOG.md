@@ -28,12 +28,6 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** The run logger being live, then the owner asking for one of them.
 - **Touchpoints:** `src/lib/utils/discipline.ts` (units), `src/lib/garmin/fit.ts` (run dynamics streams), `src/lib/mcp/tools/endurance-app.ts` (fuel), the run exercise screens the brief adds.
 
-### "Synced 1 pending set" after a ride or run
-- **What:** When queued ride or run step saves send after the phone is back online, the toast says "Synced 1 pending set". A ride has steps, not sets, and the toast lies over the effort buttons of the results table for a few seconds. Say "steps" when the queued writes are ride or run steps, or show no toast on the results screen, which already shows the saved steps.
-- **Why deferred:** Found in the final QA journey review of the run logger (2026-11-21). The toast is shared by every workout in the offline queue, on main before this build.
-- **Unblocked by:** A choice of wording for mixed queues (sets and steps).
-- **Touchpoints:** `src/contexts/pending-queue-context.tsx` (the synced toast), `src/components/features/bike/RideResults.tsx`, `src/components/features/run/RunResults.tsx`.
-
 ### Ride GPS track and map from Garmin
 - **What:** Show an outdoor ride's track on a map in its summary, from the Garmin activity the fill matched (the stream holds `lat` and `lng`).
 - **Why deferred:** Section 7 of docs/plans/bike-ride-logger.md: out of scope for this build.

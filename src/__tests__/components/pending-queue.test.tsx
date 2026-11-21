@@ -148,6 +148,23 @@ describe("PendingQueueProvider", () => {
     expect(updateProgramSet).toHaveBeenCalledTimes(1);
   });
 
+  it("says steps, not sets, when the queued writes are ride or run steps", async () => {
+    const step = { ...payload, stepStatus: "done", sources: { durationSeconds: "clock" } };
+    localStorage.setItem(
+      "pendingMutationQueue",
+      JSON.stringify([
+        { id: "s1", kind: "logWorkoutSet", payload: step, queuedAt: 0 },
+        { id: "s2", kind: "logWorkoutSet", payload: { ...step, programSetId: 4 }, queuedAt: 1 },
+      ]),
+    );
+    logWorkoutSet.mockResolvedValue(ok);
+    mount();
+    await flush();
+    await flush();
+    expect(screen.getByText("Synced 2 pending steps")).toBeTruthy();
+    expect(screen.queryByText(/pending set/)).toBeNull();
+  });
+
   it("replays a queue left in storage on a cold open, without waiting for an online event", async () => {
     localStorage.setItem(
       "pendingMutationQueue",
