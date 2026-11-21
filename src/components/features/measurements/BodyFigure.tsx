@@ -55,12 +55,25 @@ const ruleFromBehind = (r: Rule | null): Rule | null =>
  * tape of a circumference (with a soft glow so it reads at a small size) or
  * the line of a length. Each figure takes half the width; `className` sizes its picture.
  */
-export function PartViews({ tape, rule, name, className }: { tape: Tape | null; rule: Rule | null; name: string; className?: string }) {
+export function PartViews({
+  tape,
+  rule,
+  name,
+  className,
+  maxHeight,
+}: {
+  tape: Tape | null;
+  rule: Rule | null;
+  name: string;
+  className?: string;
+  /** A cap on each picture's height in px; the figure stays centred and keeps its shape. */
+  maxHeight?: number;
+}) {
   return (
     <div className="flex justify-center gap-1" role="img" aria-label={`Where to measure the ${name.toLowerCase()}, from the front and from behind`}>
       {[false, true].map((back) => (
         <figure key={String(back)} className="flex-1 min-w-0 max-w-[11rem] flex flex-col items-center">
-          <PartFigure tape={back ? fromBehind(tape) : tape} rule={back ? ruleFromBehind(rule) : rule} back={back} className={className} />
+          <PartFigure tape={back ? fromBehind(tape) : tape} rule={back ? ruleFromBehind(rule) : rule} back={back} className={className} maxHeight={maxHeight} />
           <figcaption className="text-[11px] text-muted-foreground">{back ? "Back" : "Front"}</figcaption>
         </figure>
       ))}
@@ -69,10 +82,10 @@ export function PartViews({ tape, rule, name, className }: { tape: Tape | null; 
 }
 
 /** One view of the whole body with the place lit up. */
-function PartFigure({ tape, rule, back, className }: { tape: Tape | null; rule: Rule | null; back: boolean; className?: string }) {
+function PartFigure({ tape, rule, back, className, maxHeight }: { tape: Tape | null; rule: Rule | null; back: boolean; className?: string; maxHeight?: number }) {
   const rx = tape ? (tape.x2 - tape.x1) / 2 + 4 : 0;
   return (
-    <svg viewBox="4 0 192 392" className={className} aria-hidden="true">
+    <svg viewBox="4 0 192 392" className={className} style={maxHeight === undefined ? undefined : { maxHeight }} aria-hidden="true">
       <FrontFigure back={back} />
       {tape && (
         <>

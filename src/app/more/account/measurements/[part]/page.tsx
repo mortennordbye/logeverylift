@@ -10,7 +10,7 @@ export default async function MeasurementPartPage({ params }: { params: Promise<
   if (!part) notFound();
   const { rows, error, today } = await loadMeasurements();
   return (
-    <div className="h-[100dvh] pb-nav-safe bg-background flex flex-col overflow-hidden">
+    <div className="h-[100dvh] w-full max-w-md mx-auto pb-nav-safe bg-background flex flex-col overflow-hidden">
       <div className="flex items-center px-4 pt-6 pb-2 shrink-0">
         <BackLink fallback={{ href: "/more/account/measurements", label: "Measurements" }} />
       </div>

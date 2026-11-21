@@ -3,6 +3,7 @@
 import { PartViews } from "@/components/features/measurements/BodyFigure";
 import { MeasureGuide } from "@/components/features/measurements/measurement-ui";
 import { BottomSheet } from "@/components/ui/BottomSheet";
+import { useKeyboardHeight } from "@/components/ui/use-keyboard-height";
 import type { BodySide } from "@/db/schema/body-measurements";
 import { saveBodyMeasurement } from "@/lib/actions/body-measurements";
 import {
@@ -16,10 +17,11 @@ import {
 } from "@/lib/utils/body-measurement-parts";
 import { formatChange, formatCm, round1, seriesOf, type MeasurementRow } from "@/lib/utils/body-measurements";
 import { formatDateShort, sanitizeDecimalInput } from "@/lib/utils/format";
+import { MIN_FIGURE_PX, fitMeasureStep } from "@/lib/utils/measure-step-fit";
 import { callAction } from "@/lib/utils/stale-bundle";
 import { Check, ChevronLeft } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useReducer, useRef, useState } from "react";
 
 const SIDE_WORD: Record<BodySide, string> = { none: "", left: "Left", right: "Right" };
 const keyOf = (s: LogStep) => `${s.site}:${s.side}`;
@@ -57,6 +59,12 @@ export function MeasureLogClient({ rows, today }: { rows: MeasurementRow[]; toda
   const [guideOpen, setGuideOpen] = useState(false);
   const [fixing, setFixing] = useState<BodyPart | null>(null);
   const input = useRef<HTMLInputElement>(null);
+  const form = useRef<HTMLFormElement>(null);
+  const figures = useRef<HTMLDivElement>(null);
+  const actions = useRef<HTMLDivElement>(null);
+  const keypad = useKeyboardHeight(true);
+  const [figureCap, setFigureCap] = useState<number | undefined>(undefined);
+  const [, remeasure] = useReducer((n: number) => n + 1, 0);
 
   const done = index >= steps.length;
   const step = steps[Math.min(index, steps.length - 1)];
@@ -73,9 +81,29 @@ export function MeasureLogClient({ rows, today }: { rows: MeasurementRow[]; toda
     setText(start === null ? "" : start.toFixed(1));
     setError(null);
     requestAnimationFrame(() => input.current?.select());
-    // Only when the step changes.
+    // Only when the step or the log date changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [index, done]);
+  }, [index, done, date]);
+
+  // The step down to Next fits in what the keypad leaves visible (and on a
+  // small screen): the figures give up the height. Measured after each render.
+  useLayoutEffect(() => {
+    const svg = figures.current?.querySelector("svg");
+    if (!svg || !actions.current || !form.current) return;
+    const fit = fitMeasureStep({
+      visible: window.innerHeight - keypad,
+      bottom: actions.current.getBoundingClientRect().bottom,
+      figure: svg.getBoundingClientRect().height,
+    });
+    // The whole step fits: undo the scroll that focusing the field at full size made.
+    if (fit.scrollBy > 0) form.current.scrollTop += fit.scrollBy;
+    else if (fit.figure > MIN_FIGURE_PX) form.current.scrollTop = 0;
+    setFigureCap((cap) => (cap !== undefined && Math.abs(cap - fit.figure) < 1 ? cap : fit.figure));
+  });
+  useEffect(() => {
+    window.addEventListener("resize", remeasure);
+    return () => window.removeEventListener("resize", remeasure);
+  }, []);
 
   async function save(s: LogStep, valueCm: number): Promise<boolean> {
     setBusy(true);
@@ -107,6 +135,13 @@ export function MeasureLogClient({ rows, today }: { rows: MeasurementRow[]; toda
   // Buttons keep the focus in the field, so the keypad stays open between steps.
   const keepFocus = (e: React.PointerEvent | React.MouseEvent) => e.preventDefault();
 
+  // Focused in the tap that closes the guide, so the keypad opens again.
+  function closeGuide() {
+    setGuideOpen(false);
+    input.current?.focus();
+    input.current?.select();
+  }
+
   if (done) return <DoneScreen steps={steps} date={date} onDate={onDate} before={before} onFix={setFixing} fixing={fixing} save={save} error={error} />;
 
   const tape = part.tape && (step.side === "left" ? mirrorTape(part.tape) : part.tape);
@@ -114,7 +149,7 @@ export function MeasureLogClient({ rows, today }: { rows: MeasurementRow[]; toda
   const quick = "flex-1 min-h-[44px] rounded-xl bg-muted text-sm font-medium active:opacity-60 disabled:opacity-40";
 
   return (
-    <div className="h-[100dvh] bg-background flex flex-col overflow-hidden" data-testid="measure-step">
+    <div className="h-[100dvh] w-full max-w-md mx-auto bg-background flex flex-col overflow-hidden" data-testid="measure-step">
       <div className="flex items-center justify-between px-4 pt-4 shrink-0">
         {index === 0 ? (
           <Link href="/more/account/measurements" replace className="min-h-[44px] flex items-center text-primary text-sm font-medium">
@@ -165,7 +200,10 @@ export function MeasureLogClient({ rows, today }: { rows: MeasurementRow[]; toda
       </div>
 
       <form
+        ref={form}
         className="flex-1 min-h-0 overflow-y-auto px-4 pt-3 pb-4 flex flex-col gap-2"
+        // Room under the keypad, so a step too tall for what is left can scroll Next above it.
+        style={keypad > 0 ? { paddingBottom: keypad + 16 } : undefined}
         onSubmit={(e) => {
           e.preventDefault();
           next();
@@ -175,9 +213,10 @@ export function MeasureLogClient({ rows, today }: { rows: MeasurementRow[]; toda
           <h1 className="text-xl font-semibold">{title}</h1>
           <p className="text-xs text-muted-foreground">{subtitle(part, step.side)}</p>
         </div>
-        <div className="rounded-xl bg-card px-3 pt-3 pb-1 shrink-0">
-          <PartViews tape={tape} rule={part.rule} name={part.name} className="w-full h-auto" />
-          <p className="text-sm pt-2">{shortWhere(part.where)}</p>
+        <div ref={figures} className="rounded-xl bg-card px-3 pt-3 pb-1 shrink-0">
+          <PartViews tape={tape} rule={part.rule} name={part.name} className="w-full h-auto" maxHeight={figureCap} />
+          {/* Two lines high on every step, so the field stays in one place. */}
+          <p className="text-sm mt-2 h-10 line-clamp-2">{shortWhere(part.where)}</p>
           <button type="button" onMouseDown={keepFocus} onClick={() => setGuideOpen(true)} className="min-h-[44px] text-sm text-primary font-medium">
             How to measure ›
           </button>
@@ -196,7 +235,7 @@ export function MeasureLogClient({ rows, today }: { rows: MeasurementRow[]; toda
               setError(null);
             }}
             onFocus={(e) => e.target.select()}
-            className="w-36 bg-transparent text-center text-4xl font-bold tabular-nums outline-none border-b-2 border-primary"
+            className="w-36 min-h-[48px] bg-transparent text-center text-4xl! font-bold tabular-nums outline-none border-b-2 border-primary"
           />
           <span className="text-base text-muted-foreground">cm</span>
         </div>
@@ -212,28 +251,30 @@ export function MeasureLogClient({ rows, today }: { rows: MeasurementRow[]; toda
           <button type="button" onMouseDown={keepFocus} onClick={() => nudge(-0.5)} disabled={busy || (!last && parseCm(text) === null)} className={quick}>
             − 0.5
           </button>
-          <button type="button" onMouseDown={keepFocus} onClick={() => last && next(String(last.valueCm))} disabled={busy || !last} className={quick}>
-            Same
-          </button>
+          {last && (
+            <button type="button" onMouseDown={keepFocus} onClick={() => next(String(last.valueCm))} disabled={busy} className={quick}>
+              Same
+            </button>
+          )}
           <button type="button" onMouseDown={keepFocus} onClick={() => nudge(0.5)} disabled={busy || (!last && parseCm(text) === null)} className={quick}>
             + 0.5
           </button>
         </div>
-        <div className="flex gap-2">
+        <div ref={actions} className="flex gap-2">
           <button type="button" onMouseDown={keepFocus} onClick={() => setIndex((i) => i + 1)} disabled={busy} className="flex-1 min-h-[48px] rounded-xl text-sm font-medium text-muted-foreground active:opacity-60">
             Skip
           </button>
           <button type="submit" onMouseDown={keepFocus} disabled={busy} className="flex-[2] min-h-[48px] rounded-xl bg-primary text-primary-foreground text-sm font-semibold active:opacity-80 disabled:opacity-50">
-            Next
+            {busy ? "Saving…" : "Next"}
           </button>
         </div>
       </form>
 
-      <BottomSheet open={guideOpen} onClose={() => setGuideOpen(false)} blur>
+      <BottomSheet open={guideOpen} onClose={closeGuide} blur>
         <div className="bg-background rounded-t-2xl px-4 pt-5 pb-8 space-y-4 max-h-[85dvh] overflow-y-auto">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">How to measure · {part.name.toLowerCase()}</h2>
-            <button onClick={() => setGuideOpen(false)} className="text-primary text-sm font-medium min-h-[44px] px-1">
+            <button onClick={closeGuide} className="text-primary text-sm font-medium min-h-[44px] px-1">
               Close
             </button>
           </div>
@@ -269,7 +310,7 @@ function DoneScreen({
   const stepsOf = (p: BodyPart) => steps.filter((s) => s.site === p.site).sort((a, b) => a.side.localeCompare(b.side));
 
   return (
-    <div className="h-[100dvh] bg-background flex flex-col overflow-hidden" data-testid="measure-done">
+    <div className="h-[100dvh] w-full max-w-md mx-auto bg-background flex flex-col overflow-hidden" data-testid="measure-done">
       <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-8 pb-4 flex flex-col gap-4">
         <div className="flex flex-col items-center text-center gap-1">
           <span className="flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground">
@@ -277,7 +318,7 @@ function DoneScreen({
           </span>
           <h1 className="text-xl font-semibold mt-2">Saved · {formatDateShort(date)}</h1>
           <p className="text-sm text-muted-foreground">
-            {count} of {steps.length} parts{skipped > 0 && ` · ${skipped} skipped`}
+            {count} of {steps.length} values{skipped > 0 && ` · ${skipped} skipped`}
           </p>
         </div>
         <div className="rounded-2xl bg-card overflow-hidden divide-y divide-border/50">
@@ -375,6 +416,8 @@ function FixSheet({
             <input
               type="text"
               inputMode="decimal"
+              autoFocus={i === 0}
+              onFocus={(e) => e.target.select()}
               aria-label={`${label} in cm`}
               value={texts[i]}
               onChange={(e) => {

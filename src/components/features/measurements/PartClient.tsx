@@ -7,7 +7,10 @@ import { changeSince, formatCm, round1, seriesOf, type MeasurementRow } from "@/
 import { formatDateShort, sanitizeDecimalInput } from "@/lib/utils/format";
 import { callAction } from "@/lib/utils/stale-bundle";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+
+/** How long a first tap on Delete waits for the second. */
+const CONFIRM_MS = 3000;
 
 const SIDE_LETTER = { none: "", left: "L", right: "R" } as const;
 
@@ -26,6 +29,8 @@ function headline(series: MeasurementRow[], today: string, prefix = ""): string 
 export function PartClient({ part, rows, today }: { part: BodyPart; rows: MeasurementRow[]; today: string }) {
   const router = useRouter();
   const [deleting, setDeleting] = useState<number | null>(null);
+  /** The row whose Delete was tapped once and now says Confirm. */
+  const [armed, setArmed] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const series = part.sides ? [seriesOf(rows, part.site, "left"), seriesOf(rows, part.site, "right")] : [seriesOf(rows, part.site, "none")];
@@ -35,7 +40,15 @@ export function PartClient({ part, rows, today }: { part: BodyPart; rows: Measur
   const history = [...rows].sort((a, b) => b.measuredOn.localeCompare(a.measuredOn) || a.side.localeCompare(b.side));
   const dates = rows.map((r) => r.measuredOn).sort();
 
+  useEffect(() => {
+    if (armed === null) return;
+    const timer = setTimeout(() => setArmed(null), CONFIRM_MS);
+    return () => clearTimeout(timer);
+  }, [armed]);
+
   async function remove(id: number) {
+    if (armed !== id) return setArmed(id);
+    setArmed(null);
     setDeleting(id);
     setError(null);
     const result = await callAction(deleteBodyMeasurement({ id }));
@@ -90,10 +103,10 @@ export function PartClient({ part, rows, today }: { part: BodyPart; rows: Measur
                   <button
                     onClick={() => remove(r.id)}
                     disabled={deleting !== null}
-                    aria-label={`Delete ${formatDateShort(r.measuredOn)}${r.side === "none" ? "" : ` ${r.side}`}`}
-                    className="min-h-[44px] px-2 text-sm text-destructive active:opacity-60 disabled:opacity-40"
+                    aria-label={`${armed === r.id ? "Confirm delete" : "Delete"} ${formatDateShort(r.measuredOn)}${r.side === "none" ? "" : ` ${r.side}`}`}
+                    className={`min-h-[44px] px-2 text-sm active:opacity-60 disabled:opacity-40 ${armed === r.id ? "rounded-lg bg-destructive text-white font-semibold" : "text-destructive"}`}
                   >
-                    Delete
+                    {armed === r.id ? "Confirm" : "Delete"}
                   </button>
                 </div>
               ))}
