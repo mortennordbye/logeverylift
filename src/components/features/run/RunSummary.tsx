@@ -149,9 +149,9 @@ export function RunSummary({
             No load · the run is too short to count
           </p>
         )}
-        {(s.planOnly || s.noLoadReason === "numbers") && (
+        {(s.planOnly || s.noLoadReason === "numbers" || s.noLoadReason === "effort") && (
           <div className="flex items-center justify-between gap-2 rounded-xl bg-muted pl-4 pr-2 min-h-12 text-sm" data-testid="summary-plan-only">
-            <span className="text-muted-foreground">{s.planOnly ? "Plan only · no run numbers" : "No load without effort or distance"}</span>
+            <span className="text-muted-foreground">{s.planOnly ? "Plan only · no run numbers" : s.noLoadReason === "effort" ? "No load without effort" : "No load without effort or distance"}</span>
             <Link href={addHref} className="min-h-11 px-3 inline-flex items-center font-semibold text-primary whitespace-nowrap active:opacity-70">
               Add numbers
             </Link>

@@ -165,6 +165,14 @@ describe("the summary", () => {
     expect(runSummary(plan, logs, { beltEvents: true }).planOnly).toBe(false);
   });
 
+  it("a run too short for a pace load, with a distance and no effort, asks only for the effort", () => {
+    const s = runSummary(plan, { 100: log(80, 8.2, { rpe: null }) }, { beltEvents: true });
+    expect(s.numbers.load).toBeNull();
+    expect(s.noLoadReason).toBe("effort");
+    const none = runSummary(plan, { 100: log(80, null, { rpe: null, avgHr: 130 }) }, { beltEvents: false });
+    expect(none.noLoadReason).toBe("numbers");
+  });
+
   it("outdoors shows the outdoor target and the pace run; with no LTHR no zone bar", () => {
     const out = buildRunPlan(BASE, ids, { run_threshold_pace: OWNER.run_threshold_pace }, "outdoor");
     const logs: Record<number, StepLog> = { 100: log(600, 8, { avgHr: 130 }) };

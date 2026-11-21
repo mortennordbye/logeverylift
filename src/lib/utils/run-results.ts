@@ -187,7 +187,8 @@ export type RunSummary = {
   effort: number | null;
   /** Nothing but times: "Plan only · no run numbers". */
   planOnly: boolean;
-  noLoadReason: "numbers" | "short" | null;
+  /** Why there is no load: no numbers at all, no effort on a run whose distance is too short for a pace load, or a load that rounds to 0. */
+  noLoadReason: "numbers" | "effort" | "short" | null;
 };
 
 /** "HR under 160" → a cap at 160; "HR 153-160" → a range. Read from the words the plan column shows, so the arrow judges what the runner sees. */
@@ -400,7 +401,7 @@ export function runSummary(plan: RidePlan, logs: Record<number, RunStepLog>, opt
     footnote,
     effort,
     planOnly: runSteps.length > 0 && effort === null && !opts.beltEvents && !runSteps.some(hasNumber),
-    noLoadReason: runSteps.length === 0 ? null : load === null ? "numbers" : Math.round(load.value) === 0 ? "short" : null,
+    noLoadReason: runSteps.length === 0 ? null : load === null ? ((numbers.meters ?? 0) > 0 ? "effort" : "numbers") : Math.round(load.value) === 0 ? "short" : null,
   };
 }
 
