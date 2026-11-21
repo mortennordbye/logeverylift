@@ -10,6 +10,7 @@
 
 import type { RideStepResult, RidePlan, RideTimeline } from "@/lib/utils/ride-timeline";
 import { rideClock } from "@/lib/utils/ride-screen";
+import { paceText } from "@/lib/utils/run-numbers";
 import { KEEP_BELT, RUN_MODE_NAME, runOutdoorText, runRowOfStep, runStepTitle, runTargetText, runZoneCapText } from "@/lib/utils/run-view";
 import { minSec } from "@/lib/utils/thresholds";
 
@@ -56,9 +57,9 @@ export type RunScreen = {
 
 const kmh = (n: number) => n.toFixed(1);
 
-/** "7:30 /km" of a belt in km/h. */
+/** "7:30 /km" of a belt in km/h, cut to the whole second as the summary shows it (`paceText`). */
 export function beltPace(beltKmh: number): string | null {
-  return beltKmh > 0 ? `${minSec(3600 / beltKmh)} /km` : null;
+  return beltKmh > 0 ? paceText(3600 / beltKmh) : null;
 }
 
 /** The big target: the number and its unit apart, so the unit can be small. */

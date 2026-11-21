@@ -129,7 +129,7 @@ describe("run mode on a treadmill", () => {
     expect(screen.getByTestId("run-second").textContent).toContain("8:00 /km");
     fireEvent.click(screen.getByRole("button", { name: "Belt up 0.5 km/h" }));
     fireEvent.click(screen.getByRole("button", { name: "Belt up 0.5 km/h" }));
-    expect(screen.getByTestId("run-second").textContent).toContain("7:04 /km");
+    expect(screen.getByTestId("run-second").textContent).toContain("7:03 /km");
   });
 
   it("the incline buttons are 64 px controls, as the belt's are", async () => {

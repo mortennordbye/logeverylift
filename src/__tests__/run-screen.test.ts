@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { BASE_RUN, OWNER } from "@/__tests__/fixtures/base-run";
 import { rideTimeline, type RideEventInput } from "@/lib/utils/ride-timeline";
 import { buildRunPlan } from "@/lib/utils/run-plan";
-import { beltStepsChanged, beltResults, beltToastText, resumeBeltText, runKeptText, runScreen, stepOnText } from "@/lib/utils/run-screen";
+import { beltPace, beltStepsChanged, beltResults, beltToastText, resumeBeltText, runKeptText, runScreen, stepOnText } from "@/lib/utils/run-screen";
 import { parseWorkout, type Workout } from "@/lib/utils/workout-steps";
 
 /** What run mode shows (docs/plans/run-logger.md, 4.2 to 4.6 and section 5 "Run mode"). */
@@ -49,7 +49,7 @@ describe("runScreen on a treadmill", () => {
   it("a belt tap moves the belt now, and the plan's stays to compare", () => {
     const s = screenAt(treadmill, 60, [ev("belt", 40, 85, "s1")]);
     expect(s.treadmill).toEqual({ belt: 8.5, planBelt: 7.5, incline: 1 });
-    expect(s.second[1]).toEqual({ label: "Pace", value: "7:04 /km" });
+    expect(s.second[1]).toEqual({ label: "Pace", value: "7:03 /km" });
   });
 
   it("cues the belt 10 s before a step whose belt differs by 1 km/h or more, not before", () => {
@@ -142,6 +142,12 @@ describe("beltResults", () => {
     const b = beltResults(t.steps[0]);
     expect(b.distanceMeters).toBe(20);
     expect(b.avgSpeed! * 3.6).toBeCloseTo(7.6, 1);
+  });
+
+  it("a belt's pace is cut to the whole second, as the summary shows it", () => {
+    // 8.5 km/h is 423.5 s per km: 7:03, not 7:04.
+    expect(beltPace(8.5)).toBe("7:03 /km");
+    expect(beltPace(0)).toBeNull();
   });
 
   it("toasts say the value", () => {
