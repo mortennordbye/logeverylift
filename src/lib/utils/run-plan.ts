@@ -97,17 +97,18 @@ const median = (xs: number[]) => {
  * the belt written on the step; the pace target's midpoint (to 0.5 km/h);
  * for a heart rate target, the median belt of 2 or more done treadmill steps
  * of 10 min or more in that zone, else the slow end of the pace zone of the
- * same number; for an effort target, the pace its effort stands for. Else
- * null: the runner sets the belt by feel.
+ * same number; for an effort target, the pace its effort stands for; a
+ * recovery with no target is effort 2, the "Easy jog or walk" it shows
+ * outdoors. Else null: the runner sets the belt by feel.
  */
 export function resolveBelt(
-  s: Pick<WorkoutStep, "target" | "belt" | "ramp">,
+  s: Pick<WorkoutStep, "target" | "belt" | "ramp"> & { type?: WorkoutStep["type"] },
   thresholds: ThresholdValues,
   history: BeltHistoryStep[] = [],
 ): { kmh: number; from: BeltSource } | null {
   if (s.belt !== undefined) return { kmh: s.belt, from: "step" };
   const t = mainTarget(s);
-  if (!t) return null;
+  if (!t) return s.type === "recovery" ? { kmh: WALK_BELT_KMH, from: "effort" } : null;
   const speed = thresholds.run_threshold_pace;
   if (t.metric === "pace") {
     const mid = paceTargetSpeed(t, "run", thresholds);

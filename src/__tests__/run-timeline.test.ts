@@ -88,6 +88,13 @@ describe("run pace zones and the frozen belt (4.2)", () => {
     expect(resolveBelt(z2, OWNER, history.slice(1))).toEqual({ kmh: 8.2, from: "zone" });
   });
 
+  it("a recovery with no target is the easy jog or walk outdoors shows: effort 2, 5.5 km/h", () => {
+    expect(resolveBelt({ type: "recovery" }, OWNER)).toEqual({ kmh: 5.5, from: "effort" });
+    expect(resolveBelt({ type: "work" }, OWNER)).toBeNull();
+    const w = tree({ v: 2, sport: "run", name: "Reps", steps: [{ type: "recovery", end: { type: "time", seconds: 120 } }] });
+    expect(buildRunPlan(w, [1], OWNER, "indoor").steps[0].run?.belt).toBe(55);
+  });
+
   it("an effort step uses the pace its effort stands for; a walk is 5.5 km/h", () => {
     const rpe = (low: number, high: number) => ({ target: { metric: "rpe", anchor: "absolute", low, high } }) as const;
     expect(resolveBelt(rpe(1, 2), {})).toEqual({ kmh: 5.5, from: "effort" });
