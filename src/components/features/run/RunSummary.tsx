@@ -181,12 +181,27 @@ export function RunSummary({
                   </span>
                   <span className="text-right text-muted-foreground tabular-nums whitespace-nowrap">{r.plan ?? "–"}</span>
                   <span className={`min-w-20 text-right tabular-nums whitespace-nowrap ${r.quiet ? "text-muted-foreground" : "font-semibold"}`}>
-                    {r.done}
-                    {r.mark && (
-                      <span aria-label={r.mark === "↑" ? "over target" : "under target"} className="ml-0.5">
-                        {r.mark}
-                      </span>
-                    )}
+                    {(() => {
+                      const mark = r.mark && (
+                        <span aria-label={r.mark === "↑" ? "over target" : "under target"} className="ml-0.5">
+                          {r.mark}
+                        </span>
+                      );
+                      // The arrow follows the value it judges: the belt or pace first, the heart rate after it.
+                      const cut = r.markOn === "speed" ? r.done.indexOf(" · ") : -1;
+                      return cut < 0 ? (
+                        <>
+                          {r.done}
+                          {mark}
+                        </>
+                      ) : (
+                        <>
+                          {r.done.slice(0, cut)}
+                          {mark}
+                          {r.done.slice(cut)}
+                        </>
+                      );
+                    })()}
                     {r.onTarget !== null && (
                       <small className="block text-[11px] font-normal text-muted-foreground" data-testid="row-on-target">
                         {r.onTarget}% on target

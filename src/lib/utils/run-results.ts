@@ -166,7 +166,17 @@ export function totalKmText(steps: ResultStep[]): string {
 
 export type RunTile = { label: string; value: string; est?: boolean; sub?: string };
 /** mark: ↑ over a cap or above a range, ↓ under a range (4.2); null when it passes or is not judged. */
-export type RunSummaryRow = { key: string; title: string; plan: string | null; done: string; mark: "↑" | "↓" | null; quiet: boolean; onTarget: number | null };
+export type RunSummaryRow = {
+  key: string;
+  title: string;
+  plan: string | null;
+  done: string;
+  mark: "↑" | "↓" | null;
+  /** What the arrow judges: the belt or pace (the first value of done) or the heart rate. */
+  markOn: "speed" | "hr" | null;
+  quiet: boolean;
+  onTarget: number | null;
+};
 
 /** The Garmin stream of a run as the summary reads it (4.9): its numbers and the plan against done chart. */
 export type RunStreamView = { numbers: RunStreamNumbers; chart: DoneChart | null };
@@ -247,32 +257,33 @@ function doneText(log: StepLog | null, mode: RideMode): string {
  * pace target on a treadmill judges the belt, within 0.25 km/h of the range.
  * Outdoors the pace is judged with a Garmin stream (step 7).
  */
-function markOf(s: RidePlanStep, log: StepLog | null, plan: RidePlan): RunSummaryRow["mark"] {
-  if (!done(log)) return null;
+function markOf(s: RidePlanStep, log: StepLog | null, plan: RidePlan): Pick<RunSummaryRow, "mark" | "markOn"> {
+  const none = { mark: null, markOn: null };
+  if (!done(log)) return none;
   // Outdoors a pace that is the step's main target judges Garmin's pace of the step (step 7); its heart rate line is information.
   const pace = plan.mode !== "indoor" && log.sources?.avgSpeed === "garmin" && log.avgSpeed !== null ? paceBounds(s, plan) : null;
   if (pace) {
-    if (pace.low !== null && log.avgSpeed! < pace.low) return "↓";
-    if (pace.high !== null && log.avgSpeed! > pace.high) return "↑";
-    return null;
+    if (pace.low !== null && log.avgSpeed! < pace.low) return { mark: "↓", markOn: "speed" };
+    if (pace.high !== null && log.avgSpeed! > pace.high) return { mark: "↑", markOn: "speed" };
+    return none;
   }
   const band = hrBand(hrTextOf(s, plan));
   if (band) {
     const seconds = s.seconds ?? log.durationSeconds ?? 0;
-    if (log.avgHr === null || seconds < HR_JUDGED_FROM_S) return null;
-    if (band.high !== null && log.avgHr > band.high) return "↑";
-    if (!band.cap && band.low !== null && log.avgHr < band.low) return "↓";
-    return null;
+    if (log.avgHr === null || seconds < HR_JUDGED_FROM_S) return none;
+    if (band.high !== null && log.avgHr > band.high) return { mark: "↑", markOn: "hr" };
+    if (!band.cap && band.low !== null && log.avgHr < band.low) return { mark: "↓", markOn: "hr" };
+    return none;
   }
   const t = mainTarget(s.step);
   const belt = beltOfLog(log);
-  if (plan.mode !== "indoor" || t?.metric !== "pace" || belt === null) return null;
+  if (plan.mode !== "indoor" || t?.metric !== "pace" || belt === null) return none;
   const r = resolveTarget(t, "run", plan.thresholds);
-  if (r.low === null || r.high === null) return null;
+  if (r.low === null || r.high === null) return none;
   const [slow, fast] = [Math.min(r.low, r.high) * 3.6, Math.max(r.low, r.high) * 3.6];
-  if (belt < slow - BELT_TOLERANCE_KMH) return "↓";
-  if (belt > fast + BELT_TOLERANCE_KMH) return "↑";
-  return null;
+  if (belt < slow - BELT_TOLERANCE_KMH) return { mark: "↓", markOn: "speed" };
+  if (belt > fast + BELT_TOLERANCE_KMH) return { mark: "↑", markOn: "speed" };
+  return none;
 }
 
 /**
@@ -374,6 +385,7 @@ export function runSummary(plan: RidePlan, logs: Record<number, RunStepLog>, opt
         plan: `${work.length} × ${work[0]?.seconds ?? work[0]?.estSeconds ?? 0} s`,
         done: any ? `${ranReps} of ${work.length}` : "Not run",
         mark: null,
+        markOn: null,
         quiet: !any || ranReps === 0,
         onTarget: null,
       });
@@ -382,7 +394,7 @@ export function runSummary(plan: RidePlan, logs: Record<number, RunStepLog>, opt
     const log = logs[s.programSetId] ?? null;
     const text = doneText(log, plan.mode);
     const quiet = text === "Skipped" || text === "Not run";
-    rows.push({ key: s.key, title: steps[i].title, plan: planText(s, plan), done: text, mark: markOf(s, log, plan), quiet, onTarget: quiet ? null : (stream?.onTarget[s.programSetId] ?? null) });
+    rows.push({ key: s.key, title: steps[i].title, plan: planText(s, plan), done: text, ...markOf(s, log, plan), quiet, onTarget: quiet ? null : (stream?.onTarget[s.programSetId] ?? null) });
   });
   const caps = plan.steps.some((s) => hrBand(hrTextOf(s, plan))?.cap);
   const footnote = `${treadmill ? "km/h" : "Pace /km"} · HR.${caps ? " Under an easy cap is a pass." : ""}`;
