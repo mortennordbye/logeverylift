@@ -18,8 +18,8 @@ const set: JourneySet = {
   },
   journeys: [
     { id: 1, title: "Today", summary: "Home and the week show today's run with its steps." },
-    { id: 2, title: "Run the steps", summary: "Open today's workout, see the steps, start guided, finish and save the results." },
-    { id: 3, title: "Swim and brick", summary: "Tomorrow's swim in the pool view, and a ride and run in one program." },
+    { id: 2, title: "Run the steps", summary: "Open today's workout, see the steps, start guided in run mode, end the run and see the results." },
+    { id: 3, title: "Swim and brick", summary: "Tomorrow's swim in the pool view, and a ride and run in one program in the guided player." },
     { id: 4, title: "Edit steps", summary: "Open a run in the program editor, change a step, add a repeat block, save." },
     { id: 5, title: "Plain sets to steps", summary: "A run made before steps: Edit as steps, check, save." },
     { id: 6, title: "Lifter", summary: "A strength day, which must look as before, with a set logged and un-logged." },
@@ -39,10 +39,15 @@ const set: JourneySet = {
           await shot(1, 2, "week", "The week: planned time, distance and load per sport");
         });
 
+        let planned: string | null = null;
         await step("J2 workout", async () => {
           await go("/");
-          await page.getByRole("link", { name: /Start Today's Workout/ }).click();
-          await page.waitForURL(/\/workout/);
+          await page.getByRole("button", { name: /Start Today's Workout/ }).click();
+          await page.getByTestId("start-choice").waitFor();
+          await settle(500);
+          await shot(2, 8, "start-choice", "Start Today's Workout on a day with steps: Guided or Log by hand");
+          await page.getByTestId("start-choice").getByRole("link", { name: /^Log by hand/ }).click();
+          await page.waitForURL(/\/workout$/);
           await settle(4500);
           await shot(2, 1, "workout", "Workout screen: totals, Start guided, the run's steps in one line");
         });
@@ -53,30 +58,45 @@ const set: JourneySet = {
           await page.goBack();
           await settle();
         });
-        await step("J2 player", async () => {
+        await step("J2 run mode", async () => {
+          // R16 (docs/plans/run-logger.md): a run-only program runs in run mode, not the guided player.
           await page.getByRole("link", { name: "Start guided" }).click();
-          await page.waitForURL(/\/play$/);
+          await page.waitForURL(/\/workout\/exercises\/\d+\?ride=1/);
+          planned = new URL(page.url()).searchParams.get("planned");
+          const screen = page.getByTestId("run-exercise").filter({ visible: true });
+          await screen.waitFor();
           await settle();
-          await shot(2, 3, "player-ready", "The guided player before the start");
-          await page.getByRole("button", { name: "Start", exact: true }).click();
-          await settle();
-          await shot(2, 4, "player-step", "The first step running");
-          for (let i = 0; i < 12; i++) {
-            const skip = page.getByRole("button", { name: /^(Skip|Lap)$/ }).first();
-            if (!(await skip.isVisible().catch(() => false))) break;
-            await skip.click();
-            await settle(300);
+          await shot(2, 3, "run-ready", "Start guided on a run-only program opens run mode before the start");
+          await page.getByRole("button", { name: "Start run" }).click();
+          await page.getByTestId("ride-screen").waitFor({ timeout: 15_000 });
+          await settle(1000);
+          await shot(2, 4, "run-step", "The first step running in run mode");
+          await settle(3000);
+          const results = page.getByTestId("run-results").filter({ visible: true });
+          for (let i = 0; i < 15 && !(await results.isVisible()); i++) {
+            const skip = page.getByRole("button", { name: /^Hold to skip/ });
+            if (!(await skip.isVisible())) {
+              await settle(500);
+              continue;
+            }
+            const box = (await skip.boundingBox())!;
+            await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+            await page.mouse.down();
+            await page.waitForTimeout(800);
+            await page.mouse.up();
+            await settle(500);
           }
-          await page.waitForURL(/\/results/);
-          await settle();
-          await shot(2, 5, "results-form", "Results after the run, before saving");
-          await page.getByRole("button", { name: "7", exact: true }).click();
-          await page.getByRole("button", { name: "Save" }).click();
-          await page.waitForURL(/\/planned\/\d+$/);
-          await settle();
-          await shot(2, 6, "session-done", "The session page after saving");
+          await results.waitFor({ timeout: 20_000 });
+          await settle(800);
+          await shot(2, 5, "results-form", "Results after the run, every step skipped, before Done");
+          await page.getByTestId("results-done").click();
+          await page.getByTestId("run-summary-screen").filter({ visible: true }).waitFor({ timeout: 20_000 });
+          await settle(800);
+          await shot(2, 6, "summary", "The run summary after Done");
         });
         await step("J2 results", async () => {
+          await go(`/planned/${planned}`);
+          await shot(2, 9, "session-done", "The session page after the run");
           await page.getByRole("link", { name: /Step results/ }).click();
           await settle();
           await shot(2, 7, "results-saved", "The saved results, planned against done per step");
@@ -99,6 +119,12 @@ const set: JourneySet = {
           await page.getByTestId("week-session").filter({ hasText: "Brick" }).first().click();
           await settle();
           await shot(3, 4, "brick", "A ride and run in one program");
+          // R16: a program with more than one sport keeps the old guided player.
+          await page.getByRole("link", { name: "Start guided" }).click();
+          await page.waitForURL(/\/play$/);
+          await page.getByTestId("player-ready").waitFor();
+          await settle();
+          await shot(3, 5, "brick-player", "Start guided on the ride and run program: the guided player before the start");
         });
 
         await step("J4 editor", async () => {
