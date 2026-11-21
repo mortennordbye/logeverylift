@@ -56,7 +56,7 @@ const set: JourneySet = {
         const { page, step, shot, settle } = c;
         await step("J1 summary", async () => {
           await openRun(c, /2 Base/);
-          await shot(1, 1, "summary", "Run done: time, 9.8 km from the belt, pace, avg HR, load est., effort, zones and plan against done");
+          await shot(1, 1, "summary", "Run done: time, 10.3 km from the belt (the steady step at 8.5 km/h), pace, avg HR, load est., effort, zones and plan against done");
         });
         await step("J1 results", async () => {
           await page.getByTestId("summary-edit").click();

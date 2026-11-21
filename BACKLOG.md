@@ -28,6 +28,18 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** The run logger being live, then the owner asking for one of them.
 - **Touchpoints:** `src/lib/utils/discipline.ts` (units), `src/lib/garmin/fit.ts` (run dynamics streams), `src/lib/mcp/tools/endurance-app.ts` (fuel), the run exercise screens the brief adds.
 
+### Ride mode: the mini profile ignores +1 min
+- **What:** After +1 min in ride mode, the clock and the total ("of 66:00") grow, but the mini profile above the step keeps the planned step widths, so the strip and the total disagree. Draw the strip from the timeline's step lengths (extensions included), on the ride and the run.
+- **Why deferred:** Found in the final QA journey review of the run logger (2026-11-21). It is bike behaviour from main, and that build kept the bike the same bit for bit.
+- **Unblocked by:** Nothing. Check that the position marker still moves at the same speed after an extension.
+- **Touchpoints:** `src/components/features/bike/RideMode.tsx` (`ride-mini-profile`), `src/lib/utils/ride-timeline.ts` (`extendedSeconds`).
+
+### "Synced 1 pending set" after a ride or run
+- **What:** When queued ride or run step saves send after the phone is back online, the toast says "Synced 1 pending set". A ride has steps, not sets, and the toast lies over the effort buttons of the results table for a few seconds. Say "steps" when the queued writes are ride or run steps, or show no toast on the results screen, which already shows the saved steps.
+- **Why deferred:** Found in the final QA journey review of the run logger (2026-11-21). The toast is shared by every workout in the offline queue, on main before this build.
+- **Unblocked by:** A choice of wording for mixed queues (sets and steps).
+- **Touchpoints:** `src/contexts/pending-queue-context.tsx` (the synced toast), `src/components/features/bike/RideResults.tsx`, `src/components/features/run/RunResults.tsx`.
+
 ### Ride GPS track and map from Garmin
 - **What:** Show an outdoor ride's track on a map in its summary, from the Garmin activity the fill matched (the stream holds `lat` and `lng`).
 - **Why deferred:** Section 7 of docs/plans/bike-ride-logger.md: out of scope for this build.
