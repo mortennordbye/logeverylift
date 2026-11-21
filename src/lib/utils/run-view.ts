@@ -12,6 +12,7 @@
 import type { RideMode, RunSurface } from "@/db/schema/rides";
 import { CHART, timeTicks, type ChartBar, type RideChart } from "@/lib/utils/bike-ride-view";
 import type { RidePlan, RidePlanStep } from "@/lib/utils/ride-timeline";
+import { zoneWholeMinutes } from "@/lib/utils/run-numbers";
 import { hrTargetZone, WALK_BELT_KMH } from "@/lib/utils/run-plan";
 import { minSec } from "@/lib/utils/thresholds";
 import { plannedLoad } from "@/lib/utils/training-load";
@@ -231,7 +232,7 @@ export function plannedRunNumbers(plan: RidePlan): RunNumbers {
     // A heart rate or effort step takes its type's IF; that is an estimate, not a gap, so the screen says "about".
     load: { load: l.load, partial: timed.some((t) => t.sec === null) },
     km: meters === null ? null : Math.round(meters / 100) / 10,
-    zoneMinutes: zoneSeconds.map((z) => Math.round(z / 60)),
+    zoneMinutes: zoneWholeMinutes(zoneSeconds),
     mainZone,
   };
 }

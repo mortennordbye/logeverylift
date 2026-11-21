@@ -137,6 +137,21 @@ describe("outdoor targets (4.2)", () => {
 });
 
 describe("plannedRunNumbers and runChart", () => {
+  it("planned minutes in zones add up to the run's minutes", () => {
+    const w = {
+      v: 2,
+      sport: "run",
+      name: "Short",
+      steps: [
+        { type: "warmup", end: { type: "time", seconds: 90 }, target: { metric: "hr", anchor: "lthr", zone: 1 } },
+        { type: "work", end: { type: "time", seconds: 210 }, target: { metric: "hr", anchor: "lthr", zone: 2 } },
+      ],
+    };
+    // 1.5 and 3.5 min: 5 min, which rounding each would make 6.
+    const n = plannedRunNumbers(plan(w, OWNER, "indoor"));
+    expect(n.zoneMinutes.reduce((a, b) => a + b, 0)).toBe(5);
+  });
+
   it("the mockup run: 75 min, the treadmill distance from the belts, most minutes in Z2", () => {
     const n = plannedRunNumbers(plan(BASE_RUN, OWNER, "indoor"));
     expect(n.seconds).toBe(4500);
