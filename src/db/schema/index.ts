@@ -45,6 +45,7 @@ export * from "./illness";
 export * from "./nutrition";
 export * from "./rides";
 export * from "./push";
+export * from "./body-measurements";
 
 // Relations for Drizzle relational queries
 export * from "./relations";

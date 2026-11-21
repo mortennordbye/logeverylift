@@ -3,6 +3,7 @@ import {
   accounts,
   aiGenerations,
   aiSetupPlans,
+  bodyMeasurements,
   customWeightUsage,
   dismissedMakeups,
   athleteInjuries,
@@ -119,6 +120,8 @@ export async function collectUserData(userId: string) {
       .from(sessions)
       .where(eq(sessions.userId, userId)),
     user_weight_entry: await db.select().from(userWeightEntries).where(eq(userWeightEntries.userId, userId)),
+    // Body measurements in cm (docs/plans/body-measurements.md).
+    body_measurement: await db.select().from(bodyMeasurements).where(eq(bodyMeasurements.userId, userId)),
     workout_sessions: sessionRows,
     workout_sets: sessionIds.length
       ? await db.select().from(workoutSets).where(inArray(workoutSets.sessionId, sessionIds))
