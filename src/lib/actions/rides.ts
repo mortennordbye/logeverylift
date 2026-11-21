@@ -152,9 +152,9 @@ export async function startRide(data: unknown): Promise<ActionResult<RideView>> 
       return same ? { success: true, data: same } : { success: false, error: active.sport === "run" ? "A run is already running" : "A ride is already running" };
     }
 
-    // A run links today's planned session of its program when the workout screen
-    // opened the workout without one, as the guided player did (bike 4.5, R16).
-    const link = sport === "run" && session.plannedSessionId == null && session.programId != null ? await todaysPlannedIdOf(userId, session.programId) : null;
+    // A ride or run links today's planned session of its program when the workout
+    // screen opened the workout without one, as the guided player did (bike 4.5, R16).
+    const link = session.plannedSessionId == null && session.programId != null ? await todaysPlannedIdOf(userId, session.programId) : null;
 
     let ended = null as RideView | null;
     const ride = await db.transaction(async (tx) => {
@@ -194,7 +194,7 @@ export async function startRide(data: unknown): Promise<ActionResult<RideView>> 
       if (sport === "bike" || reopen || link != null) {
         await tx
           .update(workoutSessions)
-          .set(sport === "bike" ? { rideMode: mode, ...reopened } : { ...reopened, ...linked })
+          .set(sport === "bike" ? { rideMode: mode, ...reopened, ...linked } : { ...reopened, ...linked })
           .where(and(eq(workoutSessions.id, sessionId), eq(workoutSessions.userId, userId)));
       }
       return row;

@@ -299,3 +299,23 @@ describe("the run links today's planned session (bike 4.5, R16)", () => {
     expect(session.plannedSessionId).toBeNull();
   });
 });
+
+describe("the ride links today's planned session (bike 4.5)", () => {
+  it("a ride started on a workout the screen opened without the planned session links it", async () => {
+    const s = await rideSetup();
+    const [cycle] = await db.insert(trainingCycles).values({ userId: me, name: "Bike block", durationWeeks: 4, status: "active", startDate: "2026-11-16", sessionsGeneratedAt: new Date() }).returning();
+    const [p] = await db.insert(plannedSessions).values({ userId: me, cycleId: cycle.id, date: "2026-11-20", programId: s.programId, position: 1 }).returning();
+    ok(await startRide({ ...s, mode: "indoor", clientId: cid() }));
+    const [session] = await db.select({ plannedSessionId: workoutSessions.plannedSessionId, rideMode: workoutSessions.rideMode }).from(workoutSessions).where(eq(workoutSessions.id, s.sessionId));
+    expect(session).toEqual({ plannedSessionId: p.id, rideMode: "indoor" });
+  });
+
+  it("a ride whose program has two planned sessions today links neither", async () => {
+    const s = await rideSetup();
+    const [cycle] = await db.insert(trainingCycles).values({ userId: me, name: "Bike block", durationWeeks: 4, status: "active", startDate: "2026-11-16", sessionsGeneratedAt: new Date() }).returning();
+    await db.insert(plannedSessions).values([1, 2].map((position) => ({ userId: me, cycleId: cycle.id, date: "2026-11-20", programId: s.programId, position })));
+    ok(await startRide({ ...s, mode: "indoor", clientId: cid() }));
+    const [session] = await db.select({ plannedSessionId: workoutSessions.plannedSessionId }).from(workoutSessions).where(eq(workoutSessions.id, s.sessionId));
+    expect(session.plannedSessionId).toBeNull();
+  });
+});
