@@ -71,6 +71,7 @@ import type {
 } from "@/types/workout";
 import { plannedStepSnapshot } from "@/lib/program-steps-db";
 import { rideStepSnapshot, sessionRide } from "@/lib/ride-plan-db";
+import { serverBeltResults } from "@/lib/run-belt-results";
 import { WORKOUT_LIMITS } from "@/lib/utils/workout-steps";
 import { and, asc, desc, eq, gte, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
@@ -522,6 +523,21 @@ export async function logWorkoutSet(
           .where(and(eq(workoutSets.sessionId, sessionId), eq(workoutSets.programSetId, setValues.programSetId), or(isNotNull(workoutSets.stepStatus), isNotNull(workoutSets.sources))));
         if (kept) return { set: kept, newPRs: [] };
       }
+      // A treadmill step's belt numbers are the server's timeline's, whichever
+      // write lands last: a step save queued offline can reach the server after
+      // the replayed belt event that rewrote them (docs/plans/run-logger.md, 4.7).
+      const fromBelt = (k: "distanceMeters" | "avgSpeed") => rideWrite && sources?.[k] === "belt" && !typedOver.has(k);
+      const server =
+        slot?.programExerciseId != null && slot.programSetId != null && (fromBelt("distanceMeters") || fromBelt("avgSpeed"))
+          ? await serverBeltResults(tx, auth.user.id, sessionId, slot.programExerciseId, slot.programSetId)
+          : null;
+      const belt = {
+        ...(server?.distanceMeters !== undefined &&
+          fromBelt("distanceMeters") && { distanceMeters: server.distanceMeters, ...(inclinePercent !== undefined && { inclinePercent: server.inclinePercent ?? null }) }),
+        ...(server && fromBelt("avgSpeed") && "avgSpeed" in results && { avgSpeed: server.avgSpeed ?? null }),
+      };
+      const row = { ...setValues, ...belt };
+      const rowResults = { ...results, ...("avgSpeed" in belt && { avgSpeed: belt.avgSpeed }) };
       const conflict =
         setValues.programSetId != null
           ? { target: [workoutSets.sessionId, workoutSets.programSetId] }
@@ -531,7 +547,7 @@ export async function logWorkoutSet(
             };
       const [set] = await tx
         .insert(workoutSets)
-        .values(setValues)
+        .values(row)
         .onConflictDoUpdate({
           ...conflict,
           // createdAt is deliberately not updated — it stays the time the set was
@@ -545,8 +561,8 @@ export async function logWorkoutSet(
             actualReps: setValues.actualReps,
             weightKg: setValues.weightKg,
             durationSeconds: setValues.durationSeconds ?? null,
-            ...(!keepDistance && { distanceMeters: setValues.distanceMeters ?? null }),
-            ...(!keepIncline && { inclinePercent: setValues.inclinePercent ?? null }),
+            ...(!keepDistance && { distanceMeters: row.distanceMeters ?? null }),
+            ...(!keepIncline && { inclinePercent: row.inclinePercent ?? null }),
             heartRateZone: setValues.heartRateZone ?? null,
             rir: setValues.rir ?? null,
             ...(!keepRpe && { rpe: setValues.rpe }),
@@ -566,7 +582,7 @@ export async function logWorkoutSet(
             ...(addSources !== undefined && {
               sources: sql`(coalesce(${workoutSets.sources}, '{}'::jsonb) || ${JSON.stringify(addSources)}::jsonb) - array(select jsonb_array_elements_text(${JSON.stringify(cleared)}::jsonb))`,
             }),
-            ...results,
+            ...rowResults,
           },
         })
         .returning();
