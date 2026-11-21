@@ -29,14 +29,16 @@ export function TapeBand({ tape, width = 1.8 }: { tape: Pick<Tape, "x1" | "x2" |
   );
 }
 
-/** The figure cropped to one part, with its tape line, centred in a box; `className` sets the box height and colour. */
+/**
+ * The figure around one part, with its tape line; `className` sets the box height and colour.
+ * The crop is centred and fills the box height; a wide box shows more of the body at the sides.
+ */
 export function TapeCrop({ tape, name, className }: { tape: Tape; name: string; className?: string }) {
   return (
-    <div className={`flex justify-center overflow-hidden rounded-xl ${className ?? ""}`}>
+    <div className={`overflow-hidden rounded-xl ${className ?? ""}`}>
       <svg
         viewBox={tape.crop.join(" ")}
-        className="h-full"
-        style={{ aspectRatio: `${tape.crop[2]} / ${tape.crop[3]}` }}
+        className="w-full h-full"
         role="img"
         aria-label={`Where to measure the ${name.toLowerCase()}`}
       >

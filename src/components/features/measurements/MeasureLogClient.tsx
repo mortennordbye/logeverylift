@@ -154,7 +154,7 @@ export function MeasureLogClient({ rows, today }: { rows: MeasurementRow[]; toda
           <h1 className="text-xl font-semibold">{title}</h1>
           <p className="text-xs text-muted-foreground">{subtitle(part, step.side)}</p>
         </div>
-        {tape && <TapeCrop tape={tape} name={part.name} className="h-28 bg-card shrink-0" />}
+        {tape && <TapeCrop tape={tape} name={part.name} className="h-36 bg-card shrink-0" />}
         <p className="text-xs text-muted-foreground">
           {shortWhere(part.where)}{" "}
           <button type="button" onMouseDown={keepFocus} onClick={() => setGuideOpen(true)} className="tap-slop text-primary font-medium">
