@@ -9,7 +9,7 @@
  */
 
 import { sql } from "drizzle-orm";
-import { bigint, boolean, index, integer, jsonb, pgTable, serial, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { bigint, boolean, index, integer, jsonb, pgTable, serial, text, timestamp, uniqueIndex, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { programExercises } from "./programs";
 import { users } from "./users";
 import { workoutSessions } from "./workout-sessions";
@@ -18,8 +18,18 @@ export const RIDE_MODES = ["indoor", "outdoor"] as const;
 export type RideMode = (typeof RIDE_MODES)[number];
 export const RIDE_STATUSES = ["ready", "running", "paused", "finished", "ended_early"] as const;
 export type RideStatus = (typeof RIDE_STATUSES)[number];
-export const RIDE_EVENT_KINDS = ["start", "pause", "resume", "skip", "unskip", "extend", "nudge", "lap", "end"] as const;
+// belt and incline are run only (docs/plans/run-logger.md, 4.4): absolute values in tenths.
+export const RIDE_EVENT_KINDS = ["start", "pause", "resume", "skip", "unskip", "extend", "nudge", "lap", "end", "belt", "incline"] as const;
 export type RideEventKind = (typeof RIDE_EVENT_KINDS)[number];
+/** The sport of a ride: a bike ride or a run (docs/plans/run-logger.md, R10). */
+export const RIDE_SPORTS = ["bike", "run"] as const;
+export type RideSport = (typeof RIDE_SPORTS)[number];
+/** An outdoor run's surface (R14): on trail or snow, pace targets show as heart rate or effort. */
+export const RUN_SURFACES = ["road", "trail"] as const;
+export type RunSurface = (typeof RUN_SURFACES)[number];
+/** Why a run ended early (R15), when the runner says. */
+export const END_REASONS = ["tired", "pain", "time", "other"] as const;
+export type EndReason = (typeof END_REASONS)[number];
 
 export const rides = pgTable(
   "rides",
@@ -33,7 +43,15 @@ export const rides = pgTable(
       .references(() => workoutSessions.id, { onDelete: "cascade" })
       .notNull(),
     programExerciseId: integer("program_exercise_id").references(() => programExercises.id, { onDelete: "set null" }),
+    // A run shows "indoor" as Treadmill (docs/plans/run-logger.md, R3).
     mode: text("mode", { enum: RIDE_MODES }).notNull(),
+    sport: text("sport", { enum: RIDE_SPORTS }).notNull().default("bike"),
+    // The run of a brick: the ride it follows, from the planned brick pair (4.7).
+    brickRideId: integer("brick_ride_id").references((): AnyPgColumn => rides.id, { onDelete: "set null" }),
+    // An outdoor run's surface; null on a ride and on a treadmill run.
+    surface: text("surface", { enum: RUN_SURFACES }),
+    // The reason the runner gave for ending early; null when none was given.
+    endReason: text("end_reason", { enum: END_REASONS }),
     status: text("status", { enum: RIDE_STATUSES }).notNull(),
     // The plan as it was at start (a RidePlan): later program or FTP changes do not touch it.
     plan: jsonb("plan").notNull(),
@@ -67,8 +85,12 @@ export const rideEvents = pgTable(
     // The client's id for the event, so a replay writes nothing.
     clientId: text("client_id").notNull(),
     kind: text("kind", { enum: RIDE_EVENT_KINDS }).notNull(),
-    // Watts for a nudge (±5), seconds for an extend (±60).
+    // Watts for a nudge (±5), seconds for an extend (±60), 1 for a block
+    // skip, tenths of km/h for a belt and tenths of % for an incline.
     value: integer("value"),
+    // The step key the client saw (run events): an event the timeline places
+    // in another step is ignored (docs/plans/run-logger.md, 4.4).
+    stepKey: text("step_key"),
     // When it happened: the client's time for an offline replay inside the
     // ride, else the server's time.
     at: timestamp("at").notNull(),
@@ -98,12 +120,14 @@ export const rideGarminFills = pgTable(
       .references(() => rides.id, { onDelete: "cascade" })
       .notNull(),
     garminActivityId: bigint("garmin_activity_id", { mode: "number" }).notNull(),
+    // The part of a multisport file (its session index, docs/plans/run-logger.md 4.8); 0 for a one-sport activity.
+    segment: integer("segment").default(0).notNull(),
     previous: jsonb("previous").notNull(),
     declined: boolean("declined").default(false).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (t) => [
-    uniqueIndex("uniq_ride_garmin_fills_pair").on(t.rideId, t.garminActivityId),
+    uniqueIndex("uniq_ride_garmin_fills_pair").on(t.rideId, t.garminActivityId, t.segment),
     // One standing (not undone) fill per ride, so a worker fill and a Pick cannot both land.
     uniqueIndex("uniq_ride_garmin_fills_standing")
       .on(t.rideId)

@@ -18,7 +18,7 @@
 import { getRide, sendRideEvent, type RideView } from "@/lib/actions/rides";
 import { playCue, unlockAudio } from "@/lib/audio-cues";
 import { haptics } from "@/lib/utils/haptics";
-import { RIDE_CONFLICT, rideTimeline, type RideStepResult, type RideTimeline } from "@/lib/utils/ride-timeline";
+import { RIDE_CONFLICT, planSport, rideTimeline, type RideStepResult, type RideTimeline } from "@/lib/utils/ride-timeline";
 import { stepSignature, stepsToSave, withQueued, type QueuedRideEvent, type RideTap } from "@/lib/utils/ride-screen";
 import { callAction, failedInTransit } from "@/lib/utils/stale-bundle";
 import { requestWakeLock, wakeLockSupported, type WakeLockHandle } from "@/lib/wake-lock";
@@ -84,6 +84,43 @@ function writeQueue(rideId: number, mine: QueuedRideEvent[], gone: Set<string>):
   const merged = [...mine, ...others].sort((a, b) => a.clientAt - b.clientAt);
   writeEntry(RIDE_QUEUE_KEY, rideId, merged.length ? merged : null);
   return merged;
+}
+
+/**
+ * Send a ride's taps still waiting on this phone, in order, from outside ride
+ * mode: "End ride and start run" (docs/plans/run-logger.md, 4.3) sends them
+ * before the ride ends. True when none is left on this phone.
+ */
+export async function sendQueuedEvents(rideId: number): Promise<boolean> {
+  if (!readQueuedEvents(rideId).length) return true;
+  const read = async () => {
+    const r = await callAction(getRide({ rideId }));
+    return r.success && r.data ? r.data : null;
+  };
+  let view = await read();
+  if (!view) return false;
+  const gone = new Set<string>();
+  for (const q of readQueuedEvents(rideId)) {
+    if (view.events.some((e) => e.clientId === q.clientId)) {
+      gone.add(q.clientId);
+      continue;
+    }
+    const send = (seq: number) =>
+      callAction(sendRideEvent({ rideId, clientId: q.clientId, kind: q.kind, value: q.value, clientAt: q.clientAt, stepKey: q.stepKey, expectedSeq: seq }));
+    let res = await send(view.ride.seq);
+    // Another device sent an event first: read the ride and send again.
+    if (!res.success && !failedInTransit(res) && res.error === RIDE_CONFLICT) {
+      const again = await read();
+      if (again) {
+        view = again;
+        res = await send(view.ride.seq);
+      }
+    }
+    if (res.success) view = res.data;
+    else if (failedInTransit(res) || !REFUSED_FOR_GOOD.has(res.error)) break;
+    gone.add(q.clientId);
+  }
+  return writeQueue(rideId, [], gone).length === 0;
 }
 
 // ── Taps that arm the ride: audio and the wake lock need a user gesture ─────
@@ -260,7 +297,7 @@ export function useRide(opts: { initial: RideView; saveStep: (r: RideStepResult)
         }
         const sentAt = Date.now();
         const res = await callAction(
-          sendRideEvent({ rideId, clientId: q.clientId, kind: q.kind, value: q.value, clientAt: q.clientAt, expectedSeq: viewRef.current.ride.seq }),
+          sendRideEvent({ rideId, clientId: q.clientId, kind: q.kind, value: q.value, clientAt: q.clientAt, stepKey: q.stepKey, expectedSeq: viewRef.current.ride.seq }),
         );
         if (res.success) {
           applyView(res.data, sentAt);
@@ -432,11 +469,13 @@ export function useRide(opts: { initial: RideView; saveStep: (r: RideStepResult)
     if (ready && !live) letSleep();
   }, [ready, live]);
 
-  /** Queue a tap and send it. */
+  /** Queue a tap and send it. A run's tap carries the step on screen, so a late replay into another step is ignored (4.4). */
   const tap = useCallback(
     (kind: RideTap, value?: number, clientAt?: number) => {
       const at = Math.round(clientAt ?? tickNow());
-      setQueued([...queueRef.current, { clientId: newClientId(), kind, ...(value !== undefined && { value }), clientAt: at }]);
+      const cur = timelineRef.current.current;
+      const stepKey = planSport(viewRef.current.plan) === "run" && cur ? viewRef.current.plan.steps[cur.index]?.key : undefined;
+      setQueued([...queueRef.current, { clientId: newClientId(), kind, ...(value !== undefined && { value }), clientAt: at, ...(stepKey !== undefined && { stepKey }) }]);
       tickNow();
       void flush();
     },
@@ -457,7 +496,16 @@ export function useRide(opts: { initial: RideView; saveStep: (r: RideStepResult)
         tap("skip");
         return true;
       },
+      /** A run's short-step block (4.5): skip the rest of the block. */
+      skipBlock: (index: number) => {
+        if (timelineRef.current.current?.index !== index) return false;
+        tap("skip", 1);
+        return true;
+      },
       unskip: () => tap("unskip"),
+      /** A run on a treadmill (4.4): the new belt in tenths of km/h, the new incline in tenths of %. */
+      belt: (tenths: number, clientAt?: number) => tap("belt", tenths, clientAt),
+      incline: (tenths: number, clientAt?: number) => tap("incline", tenths, clientAt),
       extend: (seconds: 60 | -60) => tap("extend", seconds),
       nudge: (watts: 5 | -5) => tap("nudge", watts),
       lap: () => tap("lap"),

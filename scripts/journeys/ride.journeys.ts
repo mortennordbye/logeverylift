@@ -177,7 +177,7 @@ const set: JourneySet = {
           await page.getByTestId("results-done").click();
           await page.getByTestId("ride-summary-screen").waitFor({ timeout: 15_000 });
           await settle(800);
-          await shot(1, 11, "summary", "The summary: Ended early, the ridden step only, load from effort marked est., and Ride again");
+          await shot(1, 11, "summary", "The summary: Ended early, the ridden step only, No load as the ride is too short, and Ride again");
         });
         await step("J1 ride again", async () => {
           await page.getByRole("button", { name: "Ride again" }).click();

@@ -24,6 +24,49 @@
  *   steps-ftp@demo.local    FTP 180 W: the app's 20 min FTP test, ridden in
  *                           ride mode and ended 10 min ago, the all-out step
  *                           typed at 196 W: the summary offers New FTP 186 W.
+ *   steps-run@demo.local    endurance on, run threshold pace 5:39 /km and run
+ *                           LTHR 180: "2 Base · Run" of the run logger
+ *                           mockups (docs/plans/run-logger.md), today.
+ *   steps-run-nopace@demo.local   the same run with run LTHR 180 only.
+ *   steps-run-nolthr@demo.local   the same run with threshold pace 5:39 only.
+ *   steps-run-pace@demo.local     pace 5:39 and LTHR 180: a run written in
+ *                                 pace, today, for Road and Trail or snow.
+ *   steps-runmode@demo.local      pace 5:39 and LTHR 180: a 5:25 treadmill run
+ *                                 with a strides block, today, for run mode.
+ *   steps-runout@demo.local       the same thresholds: a 400 m rep and 1 min
+ *                                 easy, today, for run mode outdoors.
+ *   steps-brick@demo.local        the same thresholds and FTP 200 W: a short
+ *                                 ride today, then its run linked as a brick.
+ *   steps-brick-live@demo.local   the same brick, for "End ride and start run".
+ *   steps-rundone@demo.local      pace 5:39 and LTHR 180: "2 Base · Run" run on a
+ *                                 treadmill and done 10 min ago, the steady
+ *                                 step at 8.5 km/h by a belt tap, avg HR
+ *                                 typed: the run summary and results table.
+ *   steps-runearly@demo.local     the same thresholds: "Run · Tempo" run
+ *                                 outdoors and ended early in the tempo, no
+ *                                 numbers: plan only, the reason and Run again.
+ *   steps-runbrick@demo.local     the same thresholds and FTP 200 W: the short
+ *                                 brick ridden, then its run on a treadmill
+ *                                 1:12 after the ride: the brick line.
+ *   steps-rungarmin@demo.local    admin (Garmin is for Premium accounts): the
+ *                                 rundone treadmill run, filled from a
+ *                                 synthetic Garmin treadmill run (no real
+ *                                 data): heart rate, cadence, drift, the chart.
+ *   steps-rungarmin-out@demo.local admin: "Run · Tempo" run outdoors, filled
+ *                                 from a synthetic Garmin run with GPS.
+ *   steps-runpick@demo.local      admin: the same outdoor run with two
+ *                                 synthetic Garmin runs that match it: Pick.
+ *   steps-runtest@demo.local      pace 5:39 and LTHR 180: the treadmill run
+ *                                 test run 10 min ago, the belt at 10.9 km/h
+ *                                 from the test's first second, the 20 min
+ *                                 typed at HR 176, effort 9: the summary offers
+ *                                 New threshold pace 5:30 /km · LTHR 176. Also
+ *                                 "Run · Tempo" in pace, for the belts after Save.
+ *   steps-runtest-ready@demo.local   the same test today, not run: the start checks.
+ *   steps-runtest-sick@demo.local    the same, sick until 3 days ago: no Start run.
+ *   steps-runtest-choose@demo.local  the test run, the 20 min at HR 186: Choose.
+ *   steps-runtest-retest@demo.local  the test run, the 20 min at HR 165: Retest.
+ *   steps-runtest-invalid@demo.local the test run at effort 7: Test may be invalid.
  *
  * Dates are relative to the run day. Each run deletes the demo accounts (and
  * with them all their data) and makes them again. No other account is touched.
@@ -43,6 +86,27 @@ const NOFTP = "steps-noftp@demo.local";
 const HAND = "steps-hand@demo.local";
 const GARMIN = "steps-garmin@demo.local";
 const FTP_TEST = "steps-ftp@demo.local";
+const RUN = "steps-run@demo.local";
+const RUN_NOPACE = "steps-run-nopace@demo.local";
+const RUN_NOLTHR = "steps-run-nolthr@demo.local";
+const RUN_PACE = "steps-run-pace@demo.local";
+const RUN_MODE = "steps-runmode@demo.local";
+const RUN_OUT = "steps-runout@demo.local";
+const BRICK = "steps-brick@demo.local";
+const BRICK_LIVE = "steps-brick-live@demo.local";
+const RUN_DONE = "steps-rundone@demo.local";
+const RUN_EARLY = "steps-runearly@demo.local";
+const RUN_BRICK = "steps-runbrick@demo.local";
+const RUN_GARMIN = "steps-rungarmin@demo.local";
+const RUN_GARMIN_OUT = "steps-rungarmin-out@demo.local";
+const RUN_PICK = "steps-runpick@demo.local";
+const RUN_TEST = "steps-runtest@demo.local";
+const RUN_TEST_READY = "steps-runtest-ready@demo.local";
+const RUN_TEST_SICK = "steps-runtest-sick@demo.local";
+const RUN_TEST_CHOOSE = "steps-runtest-choose@demo.local";
+const RUN_TEST_RETEST = "steps-runtest-retest@demo.local";
+const RUN_TEST_INVALID = "steps-runtest-invalid@demo.local";
+const RUN_TESTS_MORE = [RUN_TEST_READY, RUN_TEST_SICK, RUN_TEST_CHOOSE, RUN_TEST_RETEST, RUN_TEST_INVALID];
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "postgres"]);
 const DEMO_TZ = "Europe/Oslo";
 
@@ -124,6 +188,98 @@ const UPPER_ENDURANCE: Workout = {
   ],
 };
 
+/** "2 Base · Run" of the run logger mockups: 75 min, the strides block and a walk to end. */
+const BASE_RUN: Workout = {
+  v: 2,
+  sport: "run",
+  name: "2 Base · Run",
+  steps: [
+    { type: "warmup", end: { type: "time", seconds: 600 }, target: { metric: "hr", anchor: "lthr", zone: 1 }, belt: 7.5, incline: 1 },
+    { type: "work", end: { type: "time", seconds: 3000 }, target: { metric: "hr", anchor: "lthr", zone: 2 } },
+    {
+      type: "repeat",
+      count: 6,
+      steps: [
+        { type: "work", end: { type: "time", seconds: 30 }, target: { metric: "rpe", anchor: "absolute", low: 9, high: 9 }, belt: 13 },
+        { type: "recovery", end: { type: "time", seconds: 90 }, target: { metric: "rpe", anchor: "absolute", low: 2, high: 3 }, belt: 7 },
+      ],
+    },
+    { type: "cooldown", end: { type: "time", seconds: 180 }, target: { metric: "rpe", anchor: "absolute", low: 1, high: 2 } },
+  ],
+};
+
+/** A run written in pace: easy warm-up, a long tempo, 3 threshold reps, an easy cool-down. */
+const PACE_RUN: Workout = {
+  v: 2,
+  sport: "run",
+  name: "Run · Tempo",
+  steps: [
+    { type: "warmup", end: { type: "time", seconds: 600 }, target: { metric: "pace", anchor: "threshold_pace", low: 75, high: 80 } },
+    { type: "work", end: { type: "time", seconds: 1800 }, target: { metric: "pace", anchor: "threshold_pace", low: 88, high: 92 } },
+    {
+      type: "repeat",
+      count: 3,
+      steps: [
+        { type: "work", end: { type: "time", seconds: 300 }, target: { metric: "pace", anchor: "threshold_pace", low: 98, high: 102 } },
+        { type: "recovery", end: { type: "time", seconds: 120 } },
+      ],
+    },
+    { type: "cooldown", end: { type: "time", seconds: 300 }, target: { metric: "pace", anchor: "threshold_pace", low: 75, high: 80 } },
+  ],
+};
+
+/** A treadmill run short enough to walk through in run mode: warm-up, steady, 2 strides, cool-down. */
+const MODE_RUN: Workout = {
+  v: 2,
+  sport: "run",
+  name: "Run mode demo",
+  steps: [
+    { type: "warmup", end: { type: "time", seconds: 25 }, target: { metric: "hr", anchor: "lthr", zone: 1 }, belt: 7.5, incline: 1 },
+    { type: "work", end: { type: "time", seconds: 30 }, target: { metric: "hr", anchor: "lthr", zone: 2 } },
+    {
+      type: "repeat",
+      count: 2,
+      steps: [
+        { type: "work", end: { type: "time", seconds: 15 }, target: { metric: "rpe", anchor: "absolute", low: 9, high: 9 }, belt: 13 },
+        { type: "recovery", end: { type: "time", seconds: 20 }, target: { metric: "rpe", anchor: "absolute", low: 2, high: 3 }, belt: 7 },
+      ],
+    },
+    { type: "work", end: { type: "time", seconds: 180 }, target: { metric: "hr", anchor: "lthr", zone: 2 } },
+    { type: "cooldown", end: { type: "time", seconds: 20 }, target: { metric: "rpe", anchor: "absolute", low: 1, high: 2 } },
+  ],
+};
+
+/** One 400 m rep at threshold pace, then 1 min easy: an outdoor distance step that ends on its estimate or by Lap. */
+const REP_RUN: Workout = {
+  v: 2,
+  sport: "run",
+  name: "Run · 400 m",
+  steps: [
+    { type: "work", end: { type: "distance", meters: 400 }, target: { metric: "pace", anchor: "threshold_pace", low: 100, high: 100 } },
+    { type: "recovery", end: { type: "time", seconds: 60 }, target: { metric: "rpe", anchor: "absolute", low: 2, high: 2 } },
+  ],
+};
+
+/** The halves of a short brick: two ride steps, then a run with 10 min on effort. */
+const SHORT_BRICK_RIDE: Workout = {
+  v: 2,
+  sport: "bike",
+  name: "Brick ride",
+  steps: [
+    { type: "work", end: { type: "time", seconds: 300 }, target: { metric: "power", anchor: "ftp", low: 70, high: 78 } },
+    { type: "cooldown", end: { type: "time", seconds: 120 }, target: { metric: "power", anchor: "ftp", zone: 1 } },
+  ],
+};
+const SHORT_BRICK_RUN: Workout = {
+  v: 2,
+  sport: "run",
+  name: "Brick run",
+  steps: [
+    { type: "work", end: { type: "time", seconds: 600 }, target: { metric: "hr", anchor: "lthr", zone: 2 } },
+    { type: "work", end: { type: "time", seconds: 1200 }, target: { metric: "hr", anchor: "lthr", zone: 3 } },
+  ],
+};
+
 const BRICK_BIKE: Workout = { v: 2, sport: "bike", name: "Brick", steps: [{ type: "work", end: { type: "time", seconds: 3600 }, target: { metric: "power", anchor: "ftp", low: 70, high: 78 } }] };
 const BRICK_RUN: Workout = { v: 2, sport: "run", name: "Brick", steps: [{ type: "work", end: { type: "time", seconds: 1200 }, target: { metric: "pace", anchor: "threshold_pace", low: 88, high: 92 } }] };
 
@@ -142,11 +298,15 @@ async function main() {
   const { buildRidePlan } = await import("../src/lib/utils/ride-timeline");
   const { fillRidesFromGarmin } = await import("../src/lib/ride-garmin");
   const { allOutStep, ftpTestWorkout } = await import("../src/lib/utils/ftp-tests");
+  const { buildRunPlan } = await import("../src/lib/utils/run-plan");
+  const { runTestWorkout } = await import("../src/lib/utils/run-test");
+  const { rideTimeline } = await import("../src/lib/utils/ride-timeline");
+  const { beltResults } = await import("../src/lib/utils/run-screen");
   const { eq, isNull, and } = await import("drizzle-orm");
 
   type Ctx = { userId: string; writer: "user" };
 
-  const old = await db.select({ id: s.users.id }).from(s.users).where(inArray(s.users.email, [TRI, LIFT, RIDE, NOFTP, HAND, GARMIN, FTP_TEST]));
+  const old = await db.select({ id: s.users.id }).from(s.users).where(inArray(s.users.email, [TRI, LIFT, RIDE, NOFTP, HAND, GARMIN, FTP_TEST, RUN, RUN_NOPACE, RUN_NOLTHR, RUN_PACE, RUN_MODE, RUN_OUT, BRICK, BRICK_LIVE, RUN_DONE, RUN_EARLY, RUN_BRICK, RUN_GARMIN, RUN_GARMIN_OUT, RUN_PICK, RUN_TEST, ...RUN_TESTS_MORE]));
   if (old.length) {
     const ids = old.map((u) => u.id);
     await db.delete(s.planRevisions).where(inArray(s.planRevisions.userId, ids));
@@ -389,7 +549,256 @@ async function main() {
     }
   }
 
-  console.log(`Demo accounts ready (password "${DEMO_PASSWORD}"): ${TRI}, ${LIFT}, ${RIDE}, ${NOFTP}, ${HAND}, ${GARMIN}, ${FTP_TEST}`);
+  // ── steps-run, steps-run-nopace and steps-run-nolthr ──────────────────────
+  for (const [email, name, kinds, workout] of [
+    [RUN, "Run Demo", ["run_threshold_pace", "lthr_run"], BASE_RUN],
+    [RUN_NOPACE, "No Pace Demo", ["lthr_run"], BASE_RUN],
+    [RUN_NOLTHR, "No LTHR Demo", ["run_threshold_pace"], BASE_RUN],
+    [RUN_PACE, "Pace Demo", ["run_threshold_pace", "lthr_run"], PACE_RUN],
+    [RUN_MODE, "Run Mode Demo", ["run_threshold_pace", "lthr_run"], MODE_RUN],
+    [RUN_OUT, "Outdoor Run Demo", ["run_threshold_pace", "lthr_run"], REP_RUN],
+  ] as const) {
+    const id = await makeUser(email, name, true);
+    const ctx: Ctx = { userId: id, writer: "user" };
+    const value = { run_threshold_pace: 1000 / 339, lthr_run: 180 };
+    await db.insert(s.athleteThresholds).values(kinds.map((kind) => ({ userId: id, kind, value: value[kind], measuredOn: today, source: "manual" as const })));
+    const programId = await stepProgram(ctx, workout.name, [{ exercise: "Run", workout }]);
+    await weekdayCycle(ctx, "Base · Week 1", [{ dayOfWeek: dow(today), programId }], mondayOf(today));
+  }
+
+  // ── steps-brick and steps-brick-live: today's ride, then its run as a brick ─
+  for (const [email, name] of [
+    [BRICK, "Brick Demo"],
+    [BRICK_LIVE, "Brick Live Demo"],
+  ] as const) {
+    const id = await makeUser(email, name, true);
+    const ctx: Ctx = { userId: id, writer: "user" };
+    await db.insert(s.athleteThresholds).values([
+      { userId: id, kind: "run_threshold_pace", value: 1000 / 339, measuredOn: today, source: "manual" },
+      { userId: id, kind: "lthr_run", value: 180, measuredOn: today, source: "manual" },
+      { userId: id, kind: "ftp", value: 200, measuredOn: today, source: "manual" },
+    ]);
+    const rideId = await stepProgram(ctx, SHORT_BRICK_RIDE.name, [{ exercise: "Bike", workout: SHORT_BRICK_RIDE }]);
+    const runId = await stepProgram(ctx, SHORT_BRICK_RUN.name, [{ exercise: "Run", workout: SHORT_BRICK_RUN }]);
+    await weekdayCycle(ctx, "Brick · Week 1", [{ dayOfWeek: dow(today), programId: rideId }], mondayOf(today));
+    const [ridePlanned] = await db.select().from(s.plannedSessions).where(and(eq(s.plannedSessions.userId, id), eq(s.plannedSessions.date, today)));
+    await db.insert(s.plannedSessions).values({ userId: id, cycleId: ridePlanned.cycleId, date: today, position: 2, programId: runId, brickParentId: ridePlanned.id });
+  }
+
+  // ── steps-rundone, steps-runearly and steps-runbrick: runs already run ──────
+  const runThresholds = { run_threshold_pace: 1000 / 339, lthr_run: 180 };
+  /**
+   * A run of a program's run exercise, run as run mode runs it and saved as it
+   * saves each step (docs/plans/run-logger.md, 4.7): `belts` are taps (seconds
+   * into the run, km/h), `endAfter` ends it early, `hr` gives each step's typed
+   * average heart rate.
+   */
+  async function ranRun(
+    id: string,
+    programId: number,
+    workout: Workout,
+    mode: "indoor" | "outdoor",
+    o: { agoMin: number; belts?: { at: number; kmh: number }[]; endAfter?: number; hr?: (i: number) => number | null; rpe?: number; brickRideId?: number },
+  ) {
+    const [pe] = await db.select().from(s.programExercises).where(eq(s.programExercises.programId, programId));
+    const sets = await db.select().from(s.programSets).where(eq(s.programSets.programExerciseId, pe.id)).orderBy(s.programSets.setNumber);
+    const plan = buildRunPlan(workout, sets.map((x) => x.id), runThresholds, mode, { surface: "road" });
+    const seconds = o.endAfter ?? plan.steps.reduce((a, x) => a + (x.seconds ?? 0), 0);
+    const end = new Date(Date.now() - o.agoMin * 60_000);
+    const start = new Date(end.getTime() - seconds * 1000);
+    const at = (sec: number) => start.getTime() + sec * 1000;
+    const [session] = await db.insert(s.workoutSessions).values({ userId: id, programId, date: today, startTime: start, endTime: end, isCompleted: true }).returning();
+    // The step key a belt tap carries: the step that runs at that second.
+    const keyAt = (sec: number) => {
+      let t = 0;
+      for (const st of plan.steps) {
+        t += st.seconds ?? 0;
+        if (sec < t) return st.key;
+      }
+      return plan.steps[plan.steps.length - 1].key;
+    };
+    type SeedEvent = { seq: number; kind: "start" | "belt" | "end"; at: number; value?: number; stepKey?: string };
+    const events: SeedEvent[] = [
+      { seq: 1, kind: "start", at: at(0) },
+      ...(o.belts ?? []).map((b, k) => ({ seq: k + 2, kind: "belt" as const, at: at(b.at), value: Math.round(b.kmh * 10), stepKey: keyAt(b.at) })),
+    ];
+    if (o.endAfter !== undefined) events.push({ seq: events.length + 1, kind: "end", at: at(o.endAfter) });
+    const [ride] = await db
+      .insert(s.rides)
+      .values({ userId: id, sessionId: session.id, programExerciseId: pe.id, sport: "run", mode, surface: mode === "outdoor" ? "road" : null, brickRideId: o.brickRideId ?? null, status: o.endAfter !== undefined ? "ended_early" : "finished", plan, seq: events.length, startedAt: start, endedAt: end })
+      .returning();
+    await db.insert(s.rideEvents).values(events.map((e) => ({ rideId: ride.id, seq: e.seq, clientId: `seed-${e.seq}`, kind: e.kind, at: new Date(e.at), value: e.value ?? null, stepKey: e.stepKey ?? null })));
+    const t = rideTimeline(plan, events, end.getTime() + 1000);
+    for (const [n, r] of t.steps.entries()) {
+      const b = mode === "indoor" ? beltResults(r) : {};
+      const hr = o.hr?.(r.index) ?? null;
+      await db.insert(s.workoutSets).values({
+        sessionId: session.id, exerciseId: pe.exerciseId, programExerciseId: pe.id, programSetId: r.programSetId, setNumber: n + 1,
+        actualReps: 0, weightKg: "0", restTimeSeconds: 0, durationSeconds: r.activeSeconds, isCompleted: r.status !== "skipped", stepStatus: r.status,
+        targetOffsetW: 0, extendedSeconds: 0, rpe: o.rpe ?? null, avgHr: hr, distanceMeters: b.distanceMeters ?? null, avgSpeed: b.avgSpeed ?? null, inclinePercent: b.inclinePercent ?? null,
+        sources: { durationSeconds: "clock", ...(b.distanceMeters !== undefined && { distanceMeters: "belt", avgSpeed: "belt" }), ...(hr !== null && { avgHr: "typed" }) },
+      });
+    }
+    return { ride, plan, steps: t.steps };
+  }
+  /**
+   * A synthetic Garmin run over a ran run (docs/plans/run-logger.md, step 7):
+   * 1 s samples from `lead` seconds before its start to its end, heart rate
+   * and speed per step from `hr` and `speed` (step index, share of the step
+   * run), cadence per foot as Garmin's FIT has it, GPS and altitude outdoors.
+   * No real Garmin data.
+   */
+  async function garminRun(
+    id: string,
+    garminActivityId: number,
+    typeKey: string,
+    run: Awaited<ReturnType<typeof ranRun>>,
+    o: { lead: number; gps: boolean; hr: (i: number, f: number) => number; speed: (i: number) => number },
+  ) {
+    const start = new Date(run.ride.startedAt.getTime() - o.lead * 1000);
+    const t: number[] = [];
+    const hr: number[] = [];
+    const cadence: number[] = [];
+    const distance: number[] = [];
+    const altitude: number[] = [];
+    const lat: number[] = [];
+    const lng: number[] = [];
+    let d = 0;
+    const end = (run.steps[run.steps.length - 1].endedAt - start.getTime()) / 1000;
+    for (let sec = 0; sec < end; sec++) {
+      const ms = start.getTime() + sec * 1000;
+      const r = run.steps.find((x) => ms >= x.startedAt && ms < x.endedAt);
+      const i = r?.index ?? 0;
+      const f = r ? (ms - r.startedAt) / (r.endedAt - r.startedAt) : 0;
+      const v = r ? o.speed(i) : 1.4;
+      d += v;
+      t.push(sec);
+      hr.push(Math.round((r ? o.hr(i, f) : 105) + Math.sin(sec / 23) * 2));
+      cadence.push(r ? (v > 3.4 ? 92 : 84) + (sec % 3) - 1 : 70);
+      distance.push(Math.round(d * 100) / 100);
+      altitude.push(Math.round((60 + 8 * Math.sin(d / 900)) * 10) / 10);
+      lat.push(59.92 + d / 111_320);
+      lng.push(10.75);
+    }
+    const total = t.length;
+    await db.insert(s.garminActivities).values({
+      userId: id, garminActivityId, startTimeLocal: new Date(start.getTime() + 3600_000), activityType: typeKey,
+      data: { activityId: garminActivityId, startTimeGMT: start.toISOString().slice(0, 19).replace("T", " "), activityType: { typeKey }, duration: total, elapsedDuration: total, distance: Math.round(d) },
+      filesFetchedAt: new Date(),
+    });
+    await db.insert(s.garminActivityStreams).values({
+      userId: id, garminActivityId, parserVersion: 4, sport: "running", subSport: o.gps ? "street" : "treadmill",
+      streams: { t, hr, cadence, distance, ...(o.gps && { altitude, lat, lng }) }, laps: [], sets: [], timeInZone: [],
+      session: { startTime: start.toISOString(), totalElapsedTime: total, firstRecordTime: start.toISOString() }, lengths: [], events: [],
+    });
+  }
+  async function runAccount(email: string, name: string, workout: Workout, ftp = false) {
+    const id = await makeUser(email, name, true);
+    const ctx: Ctx = { userId: id, writer: "user" };
+    await db.insert(s.athleteThresholds).values([
+      { userId: id, kind: "run_threshold_pace", value: runThresholds.run_threshold_pace, measuredOn: today, source: "manual" },
+      { userId: id, kind: "lthr_run", value: runThresholds.lthr_run, measuredOn: today, source: "manual" },
+      ...(ftp ? [{ userId: id, kind: "ftp" as const, value: 200, measuredOn: today, source: "manual" as const }] : []),
+    ]);
+    const programId = await stepProgram(ctx, workout.name, [{ exercise: "Run", workout }]);
+    await weekdayCycle(ctx, "Base · Week 1", [{ dayOfWeek: dow(today), programId }], mondayOf(today));
+    return { id, ctx, programId };
+  }
+  {
+    // The steady step at 8.5 km/h from its second minute; heart rate rising from 124 to 146, strides with none.
+    const { id, programId } = await runAccount(RUN_DONE, "Run Done Demo", BASE_RUN);
+    const hr = [124, 146, ...Array(12).fill(null), 118];
+    await ranRun(id, programId, BASE_RUN, "indoor", { agoMin: 10, belts: [{ at: 660, kmh: 8.5 }], hr: (i) => hr[i], rpe: 6 });
+  }
+  {
+    const { id, programId } = await runAccount(RUN_EARLY, "Run Early Demo", PACE_RUN);
+    await ranRun(id, programId, PACE_RUN, "outdoor", { agoMin: 10, endAfter: 600 + 900 });
+  }
+  {
+    const { id, ctx, programId: runProgram } = await runAccount(RUN_BRICK, "Run Brick Demo", SHORT_BRICK_RUN, true);
+    const rideProgram = await stepProgram(ctx, SHORT_BRICK_RIDE.name, [{ exercise: "Bike", workout: SHORT_BRICK_RIDE }]);
+    const [pe] = await db.select().from(s.programExercises).where(eq(s.programExercises.programId, rideProgram));
+    const sets = await db.select().from(s.programSets).where(eq(s.programSets.programExerciseId, pe.id)).orderBy(s.programSets.setNumber);
+    const plan = buildRidePlan(SHORT_BRICK_RIDE, sets.map((x) => x.id), { ftp: 200 }, "indoor");
+    const runSeconds = SHORT_BRICK_RUN.steps.reduce((a, x) => a + (x.type !== "repeat" && x.end.type === "time" ? x.end.seconds : 0), 0);
+    const rideEnd = new Date(Date.now() - (5 * 60 + runSeconds + 72) * 1000);
+    const rideStart = new Date(rideEnd.getTime() - 420 * 1000);
+    const [session] = await db.insert(s.workoutSessions).values({ userId: id, programId: rideProgram, date: today, startTime: rideStart, endTime: rideEnd, isCompleted: true, rideMode: "indoor" }).returning();
+    const [ride] = await db.insert(s.rides).values({ userId: id, sessionId: session.id, programExerciseId: pe.id, mode: "indoor", status: "finished", plan, seq: 1, startedAt: rideStart, endedAt: rideEnd }).returning();
+    await db.insert(s.rideEvents).values({ rideId: ride.id, seq: 1, clientId: "seed-start", kind: "start", at: rideStart });
+    for (const [n, st] of plan.steps.entries()) {
+      await db.insert(s.workoutSets).values({
+        sessionId: session.id, exerciseId: pe.exerciseId, programExerciseId: pe.id, programSetId: st.programSetId, setNumber: n + 1,
+        actualReps: 0, weightKg: "0", restTimeSeconds: 0, durationSeconds: st.seconds, isCompleted: true, stepStatus: "done", targetOffsetW: 0, extendedSeconds: 0, sources: { durationSeconds: "clock" },
+      });
+    }
+    const hr = [150, 162];
+    await ranRun(id, runProgram, SHORT_BRICK_RUN, "indoor", { agoMin: 5, belts: [{ at: 30, kmh: 9 }, { at: 620, kmh: 10 }], hr: (i) => hr[i], rpe: 7, brickRideId: ride.id });
+  }
+
+  {
+    // The rundone run with a Garmin treadmill run: heart rate rising slowly in the steady step (drift under 5%), strides hard.
+    const { id, programId } = await runAccount(RUN_GARMIN, "Run Garmin Demo", BASE_RUN);
+    await db.update(s.users).set({ role: "admin" }).where(eq(s.users.id, id));
+    const run = await ranRun(id, programId, BASE_RUN, "indoor", { agoMin: 10, belts: [{ at: 660, kmh: 8.5 }], rpe: 6 });
+    const hrOf = (i: number, f: number) => (i === 0 ? 118 + 10 * f : i === 1 ? 141 + 5 * f : i === 14 ? 128 - 6 * f : i % 2 === 0 ? 158 + 6 * f : 150 - 8 * f);
+    await garminRun(id, 990000101, "treadmill_running", run, { lead: 15, gps: false, hr: hrOf, speed: () => 2.3 });
+    const { fillRidesFromGarmin } = await import("../src/lib/ride-garmin");
+    console.log(`steps-rungarmin: ${await fillRidesFromGarmin(id)} run filled from Garmin`);
+  }
+  {
+    // The tempo outdoors with GPS: each step near its pace, the threshold reps a little fast.
+    const { id, programId } = await runAccount(RUN_GARMIN_OUT, "Run Garmin Outdoor Demo", PACE_RUN);
+    await db.update(s.users).set({ role: "admin" }).where(eq(s.users.id, id));
+    const run = await ranRun(id, programId, PACE_RUN, "outdoor", { agoMin: 10, rpe: 7 });
+    const thr = runThresholds.run_threshold_pace;
+    const speed = (i: number) => (i === 0 || i === 8 ? thr * 0.78 : i === 1 ? thr * 0.9 : i % 2 === 0 ? thr * 1.03 : thr * 0.65);
+    const hr = (i: number, f: number) => (i === 0 ? 128 + 10 * f : i === 1 ? 158 + 6 * f : i === 8 ? 150 - 15 * f : i % 2 === 0 ? 168 + 8 * f : 160 - 15 * f);
+    await garminRun(id, 990000102, "running", run, { lead: 5, gps: true, hr, speed });
+    const { fillRidesFromGarmin } = await import("../src/lib/ride-garmin");
+    console.log(`steps-rungarmin-out: ${await fillRidesFromGarmin(id)} run filled from Garmin`);
+  }
+  {
+    // Two Garmin runs over the same outdoor run (the watch and a second recording): the runner picks one.
+    const { id, programId } = await runAccount(RUN_PICK, "Run Pick Demo", PACE_RUN);
+    await db.update(s.users).set({ role: "admin" }).where(eq(s.users.id, id));
+    const run = await ranRun(id, programId, PACE_RUN, "outdoor", { agoMin: 10, rpe: 7 });
+    const thr = runThresholds.run_threshold_pace;
+    await garminRun(id, 990000103, "running", run, { lead: 5, gps: true, hr: () => 150, speed: () => thr * 0.85 });
+    await garminRun(id, 990000104, "running", run, { lead: 60, gps: true, hr: () => 151, speed: () => thr * 0.84 });
+  }
+
+  {
+    // The treadmill run test (docs/plans/run-logger.md, 4.10): the belt up to 10.9 km/h a second into the test, kept into the 20 min.
+    const test = runTestWorkout("treadmill");
+    const { id, ctx, programId } = await runAccount(RUN_TEST, "Run Test Demo", test);
+    // The numbers before the test are a week old, so the saved test (dated the day it was run) becomes the current one.
+    await db.update(s.athleteThresholds).set({ measuredOn: addDaysStr(today, -7) }).where(eq(s.athleteThresholds.userId, id));
+    await stepProgram(ctx, PACE_RUN.name, [{ exercise: "Run", workout: PACE_RUN }]);
+    await ranRun(id, programId, test, "indoor", { agoMin: 10, belts: [{ at: 901, kmh: 10.9 }], hr: (i) => (i === 7 ? 170 : i === 8 ? 176 : null), rpe: 9 });
+  }
+  {
+    // The other states of the run test: before the start, sick, and the three result lines that are not plain Save.
+    const test = runTestWorkout("treadmill");
+    const account = async (email: string, name: string) => {
+      const a = await runAccount(email, name, test);
+      await db.update(s.athleteThresholds).set({ measuredOn: addDaysStr(today, -7) }).where(eq(s.athleteThresholds.userId, a.id));
+      return a;
+    };
+    await account(RUN_TEST_READY, "Run Test Ready Demo");
+    const sick = await account(RUN_TEST_SICK, "Run Test Sick Demo");
+    await db.insert(s.illnessPeriods).values({ userId: sick.id, startedOn: addDaysStr(today, -6), endedOn: addDaysStr(today, -3) });
+    for (const [email, name, hr20, rpe] of [
+      [RUN_TEST_CHOOSE, "Run Test Choose Demo", 186, 9],
+      [RUN_TEST_RETEST, "Run Test Retest Demo", 165, 9],
+      [RUN_TEST_INVALID, "Run Test Invalid Demo", 176, 7],
+    ] as const) {
+      const a = await account(email, name);
+      await ranRun(a.id, a.programId, test, "indoor", { agoMin: 10, belts: [{ at: 901, kmh: 10.9 }], hr: (i) => (i === 7 ? 170 : i === 8 ? hr20 : null), rpe });
+    }
+  }
+
+  console.log(`Demo accounts ready (password "${DEMO_PASSWORD}"): ${TRI}, ${LIFT}, ${RIDE}, ${NOFTP}, ${HAND}, ${GARMIN}, ${FTP_TEST}, ${RUN}, ${RUN_NOPACE}, ${RUN_NOLTHR}, ${RUN_PACE}, ${RUN_MODE}, ${RUN_OUT}, ${BRICK}, ${BRICK_LIVE}, ${RUN_DONE}, ${RUN_EARLY}, ${RUN_BRICK}, ${RUN_GARMIN}, ${RUN_GARMIN_OUT}, ${RUN_PICK}, ${RUN_TEST}, ${RUN_TESTS_MORE.join(", ")}`);
   process.exit(0);
 }
 

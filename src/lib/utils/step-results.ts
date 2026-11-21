@@ -11,7 +11,9 @@ import { plannedLoad, type LoadAnchors, type PlannedStep } from "@/lib/utils/tra
 import { DEFAULT_UNITS, type Units } from "@/lib/utils/units";
 import { RESULT_FIELDS } from "@/lib/validators/workout";
 import {
+  beltKmhSchema,
   describeWorkout,
+  inclinePercentSchema,
   estimateWorkout,
   mainTarget,
   resolveStepTarget,
@@ -41,6 +43,10 @@ export const stepResultSchema = z.strictObject({
   /** m/s */
   avgSpeed: z.number().min(0).max(40).optional(),
   climbM: z.number().int().min(0).max(20000).optional(),
+  // A treadmill run's step (docs/plans/run-logger.md, step 5): its belt in km/h, which is the
+  // step's speed, and its incline in %. Only a treadmill run from run mode takes them.
+  beltKmh: beltKmhSchema.optional(),
+  inclinePercent: inclinePercentSchema.optional(),
   rpe: z.number().int().min(1).max(10).optional(),
   notes: z.string().trim().min(1).max(STEP_NOTE_MAX).optional(),
 });
@@ -148,17 +154,18 @@ export function resultTotals(rows: PlannedRow[], results: StepResult[]): { activ
 
 // ── Assistant writes (docs/plans/bike-ride-logger.md, step 5) ───────────────
 
-/** Sources an assistant write never replaces: what the rider typed and what Garmin measured. */
-export const ASSISTANT_KEEPS: readonly ResultSource[] = ["typed", "garmin"];
+/** Sources an assistant write never replaces: what the rider typed, what Garmin measured, and a treadmill's belt (docs/plans/run-logger.md, 4.7). */
+export const ASSISTANT_KEEPS: readonly ResultSource[] = ["typed", "garmin", "belt"];
 
 type SourcedField = (typeof RESULT_FIELDS)[number];
 type StepStatus = StepResult["status"];
 
-/** A field an assistant write left as it was, and why: the athlete typed it, Garmin filled it, or it was logged already (effort, notes, a done step). */
-export type KeptField = { field: string; by: "typed" | "garmin" | "logged" };
+/** A field an assistant write left as it was, and why: the athlete typed it, Garmin filled it, the treadmill's belt gave it, or it was logged already (effort, notes, a done step). */
+export type KeptField = { field: string; by: "typed" | "garmin" | "belt" | "logged" };
 
 /** The stored row of a logged step, as far as an assistant write reads it. */
 export type StoredStep = Partial<Record<SourcedField, number | null>> & {
+  inclinePercent?: number | null;
   rpe: number | null;
   notes: string | null;
   stepStatus: StepStatus | null;
@@ -166,8 +173,11 @@ export type StoredStep = Partial<Record<SourcedField, number | null>> & {
   sources: Partial<Record<string, ResultSource>> | null;
 };
 
-/** What the assistant sends for one step, in column names. */
-export type SentStep = Partial<Record<SourcedField, number>> & { rpe?: number; notes?: string; stepStatus: StepStatus };
+/** What the assistant sends for one step, in column names; `beltKmh` marks a speed (and distance) that came from a belt. */
+export type SentStep = Partial<Record<SourcedField, number>> & { beltKmh?: number; inclinePercent?: number; rpe?: number; notes?: string; stepStatus: StepStatus };
+
+/** A belt's distance over a step's time, in whole metres. */
+const beltMeters = (kmh: number, seconds: number) => Math.round((kmh / 3.6) * seconds);
 
 /** One step's result as the assistant's columns: active time is durationSeconds, value is measuredValue. */
 export function sentStep(r: StepResult, sessionRpe: number | null | undefined): SentStep {
@@ -178,6 +188,13 @@ export function sentStep(r: StepResult, sessionRpe: number | null | undefined): 
   if (r.distanceMeters !== undefined && r.distanceMeters > 0) out.distanceMeters = Math.round(r.distanceMeters);
   if (r.value !== undefined) out.measuredValue = r.value;
   for (const f of ["avgPower", "avgHr", "maxHr", "avgCadence", "avgSpeed", "climbM"] as const) if (r[f] !== undefined) out[f] = r[f];
+  // A belt is the step's speed, and its distance over the step's time when none is sent, as the results table writes it.
+  if (r.beltKmh !== undefined) {
+    out.beltKmh = r.beltKmh;
+    out.avgSpeed = r.beltKmh / 3.6;
+    if (out.distanceMeters === undefined && out.durationSeconds !== undefined) out.distanceMeters = beltMeters(r.beltKmh, out.durationSeconds);
+  }
+  if (r.inclinePercent !== undefined) out.inclinePercent = r.inclinePercent;
   if (rpe !== undefined) out.rpe = rpe;
   if (r.notes) out.notes = r.notes;
   return out;
@@ -191,7 +208,12 @@ export function sentStep(r: StepResult, sessionRpe: number | null | undefined): 
  * are only filled when empty: the rider's own words stay. A done step stays
  * done and a partial one at least partial.
  */
-export function assistantStepWrite(stored: StoredStep, sent: SentStep): { set: Record<string, unknown>; kept: KeptField[] } {
+export function assistantStepWrite(stored: StoredStep, given: SentStep): { set: Record<string, unknown>; kept: KeptField[] } {
+  // A belt with no distance sent runs over the step's logged time.
+  const sent: SentStep =
+    given.beltKmh !== undefined && given.distanceMeters === undefined && stored.durationSeconds
+      ? { ...given, distanceMeters: beltMeters(given.beltKmh, stored.durationSeconds) }
+      : given;
   const set: Record<string, unknown> = {};
   const kept: KeptField[] = [];
   const sources: Partial<Record<string, ResultSource>> = { ...(stored.sources ?? {}) };
@@ -202,11 +224,23 @@ export function assistantStepWrite(stored: StoredStep, sent: SentStep): { set: R
     const src = stored.sources?.[f];
     if (old !== null && src !== undefined && ASSISTANT_KEEPS.includes(src)) {
       // The same value keeps who wrote it; another one is not the assistant's to replace.
-      if (old !== v) kept.push({ field: f, by: src as KeptField["by"] });
+      // A speed is a real number: the same belt reads back a hair off.
+      if (f === "avgSpeed" ? Math.abs(old - v) > 0.001 : old !== v) kept.push({ field: f, by: src as KeptField["by"] });
       continue;
     }
     set[f] = v;
     sources[f] = "assistant";
+  }
+  // A treadmill step's stored incline is the belt's (run mode's taps), whoever wrote its distance;
+  // the assistant fills an empty one and changes only its own.
+  if (sent.inclinePercent !== undefined) {
+    const old = stored.inclinePercent ?? null;
+    if (old !== null && stored.sources?.inclinePercent !== "assistant") {
+      if (old !== sent.inclinePercent) kept.push({ field: "inclinePercent", by: "belt" });
+    } else {
+      set.inclinePercent = sent.inclinePercent;
+      sources.inclinePercent = "assistant";
+    }
   }
   for (const f of ["rpe", "notes"] as const) {
     const v = sent[f];

@@ -43,7 +43,9 @@ export type DisciplineConfig = {
   /**
    * Sensible default distance in meters when none is set yet. Null for the
    * bike: a ride indoors has no distance, and a guess showed a false speed
-   * (docs/plans/bike-ride-logger.md, D2), so the field starts empty.
+   * (docs/plans/bike-ride-logger.md, D2), so the field starts empty. Null for
+   * the run too: a 75 min set read as 15:00 /km on the 5 km guess
+   * (docs/plans/run-logger.md, step 1).
    */
   defaultDistanceM: number | null;
   /** Which pace/speed formatter to use. */
@@ -97,7 +99,7 @@ export const DISCIPLINE_CONFIG: Record<Discipline, DisciplineConfig> = {
     distancePresetsM: [500, 1000, 2000, 3000, 5000, 10000, 15000, 21097, 42195],
     distanceLabels: ["0.5km", "1km", "2km", "3km", "5km", "10km", "15km", "21km", "42km"],
     inputUnit: "km",
-    defaultDistanceM: 5000,
+    defaultDistanceM: null,
     paceFormatter: "perKm",
     showIncline: true,
     paceBrackets: [

@@ -58,7 +58,8 @@ export const STEP_STATUS_VALUES = ["done", "partial", "skipped", "not_done"] as 
  * is an MCP log_step_results write (step 5): it fills empty, clock or
  * assistant values and never replaces typed or Garmin ones.
  */
-export const RESULT_SOURCES = ["typed", "clock", "garmin", "assistant"] as const;
+// "belt": a treadmill run step's distance and speed from the belt events (docs/plans/run-logger.md, 4.7).
+export const RESULT_SOURCES = ["typed", "clock", "garmin", "assistant", "belt"] as const;
 export type ResultSource = (typeof RESULT_SOURCES)[number];
 
 export const workoutSets = pgTable("workout_sets", {
@@ -106,7 +107,7 @@ export const workoutSets = pgTable("workout_sets", {
   weightKg: decimal("weight_kg", { precision: 6, scale: 2 }).notNull(),
   durationSeconds: integer("duration_seconds"),
   distanceMeters: integer("distance_meters"),
-  inclinePercent: integer("incline_percent"),
+  inclinePercent: real("incline_percent"),
   heartRateZone: integer("heart_rate_zone"), // 1-5
   // Reps In Reserve (0 = to failure, 5 = 5+). Primary user-logged effort signal;
   // rpe is derived from it. Nullable for legacy rows logged before RIR existed.

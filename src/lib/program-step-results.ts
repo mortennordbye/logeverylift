@@ -20,7 +20,7 @@ import { writeLoggedSession, type LoggedSet } from "@/lib/logged-sessions";
 import type { Tx } from "@/lib/plan-revisions";
 import { PlanStateError } from "@/lib/plan-revisions";
 import { liveProgramExercises, liveProgramSets } from "@/lib/plan-live";
-import { liveRideOnProgram, liveRideOnSession, rideRunningText, sessionRide } from "@/lib/ride-plan-db";
+import { liveRideOnProgram, liveRideOnSession, rideRunningText, sessionRides } from "@/lib/ride-plan-db";
 import { programWorkouts, type ProgramWorkout } from "@/lib/program-workouts";
 import { thresholdValues } from "@/lib/session-compliance";
 import { StepResultsError, type SaveStepResultsInput, type SaveStepResultsResult, type StepResultsView } from "@/lib/step-results";
@@ -28,7 +28,7 @@ import { appSessionLoads } from "@/lib/training-load";
 import { getUserSettings, userToday } from "@/lib/user-settings";
 import { toDateStr } from "@/lib/utils/cycle-position";
 import { stepOfRow, type PlannedStepSnapshot, type StepRow } from "@/lib/utils/program-steps";
-import type { RidePlan } from "@/lib/utils/ride-timeline";
+import { planSport, type RidePlan } from "@/lib/utils/ride-timeline";
 import { programPlay, type ProgramPlay } from "@/lib/utils/program-steps";
 import {
   assistantStepWrite,
@@ -88,6 +88,10 @@ async function stepRows(programExerciseIds: number[]) {
     .orderBy(asc(programSets.setNumber), asc(programSets.id));
 }
 
+/** Belt and incline go only to the steps of a treadmill run from run mode (docs/plans/run-logger.md, 4.7). */
+const TREADMILL_ONLY = "beltKmh and inclinePercent are only for the steps of a treadmill run from run mode";
+const beltSent = (s: StepResult) => s.beltKmh !== undefined || s.inclinePercent !== undefined;
+
 /** Results that fit the play steps: known keys, each once. */
 function checkKeys(play: ProgramPlay[], input: unknown): StepResult[] {
   const r = stepResultsSchema.safeParse(input);
@@ -98,6 +102,7 @@ function checkKeys(play: ProgramPlay[], input: unknown): StepResult[] {
   r.data.forEach((s, i) => {
     if (!keys.has(s.key)) errors.push({ path: `${i}.key`, message: `no step "${s.key}" in this session` });
     else if (seen.has(s.key)) errors.push({ path: `${i}.key`, message: `step "${s.key}" is given twice` });
+    if (beltSent(s)) errors.push({ path: `${i}.beltKmh`, message: `${TREADMILL_ONLY}: send the run's workoutSessionId (get_ride gives it)` });
     seen.add(s.key);
   });
   if (errors.length) throw new StepResultsError(errors);
@@ -148,9 +153,11 @@ function stepEntry(
   const done = r.status === "done" || r.status === "partial";
   const rpe = r.rpe ?? sessionRpe ?? null;
   const sent = sentStep(r, sessionRpe);
-  const sources = Object.fromEntries(RESULT_FIELDS.filter((f) => sent[f] !== undefined).map((f) => [f, "assistant" as const]));
-  // The ride numbers only when given: a save that does not send one leaves the stored value.
-  const rideNumbers = Object.fromEntries((["avgHr", "avgPower", "maxHr", "avgCadence", "avgSpeed", "climbM"] as const).filter((f) => r[f] !== undefined).map((f) => [f, r[f]]));
+  const sources: Record<string, "assistant"> = Object.fromEntries(RESULT_FIELDS.filter((f) => sent[f] !== undefined).map((f) => [f, "assistant" as const]));
+  // A treadmill incline the assistant gives is its own, so a later write may change it (assistantStepWrite).
+  if (sent.inclinePercent !== undefined) sources.inclinePercent = "assistant";
+  // The ride numbers only when given: a save that does not send one leaves the stored value. A belt gives the speed.
+  const rideNumbers = Object.fromEntries((["avgHr", "avgPower", "maxHr", "avgCadence", "avgSpeed", "climbM"] as const).filter((f) => sent[f] !== undefined).map((f) => [f, sent[f]]));
   return {
     key,
     sent: given ? sent : null,
@@ -158,7 +165,7 @@ function stepEntry(
       exerciseId: row.exerciseId,
       setNumber: row.setNumber,
       ...(r.activeSeconds !== undefined && r.activeSeconds > 0 && { durationSeconds: r.activeSeconds }),
-      ...(r.distanceMeters !== undefined && r.distanceMeters > 0 && { distanceMeters: Math.round(r.distanceMeters) }),
+      ...(sent.distanceMeters !== undefined && { distanceMeters: sent.distanceMeters }),
       // The session RPE goes on each step without its own, so the
       // time-weighted RPE of the load stays the session's.
       ...(rpe != null && done && { rpe }),
@@ -171,6 +178,7 @@ function stepEntry(
         extendedSeconds: r.extendedSeconds ?? null,
         measuredValue: r.value ?? null,
         ...rideNumbers,
+        ...(sent.inclinePercent !== undefined && { inclinePercent: sent.inclinePercent }),
         ...(source === "assistant" && Object.keys(sources).length > 0 && { sources }),
         plannedStep: snapshot,
       },
@@ -188,11 +196,13 @@ async function rideEntries(plan: RidePlan, programExerciseId: number, input: Pic
   if (!parsed.success) throw new StepResultsError(parsed.error.issues.map((i) => ({ path: i.path.join("."), message: i.message })));
   const steps = [...plan.steps, ...(plan.dropped ?? [])];
   const byKey = new Map(steps.map((s) => [s.key, s]));
+  const treadmill = planSport(plan) === "run" && plan.mode === "indoor";
   const seen = new Set<string>();
   const errors: { path: string; message: string }[] = [];
   parsed.data.forEach((s, i) => {
     if (!byKey.has(s.key)) errors.push({ path: `${i}.key`, message: `no step "${s.key}" in this ride (get_ride lists its keys)` });
     else if (seen.has(s.key)) errors.push({ path: `${i}.key`, message: `step "${s.key}" is given twice` });
+    if (beltSent(s) && !treadmill) errors.push({ path: `${i}.beltKmh`, message: `${TREADMILL_ONLY}; this is ${planSport(plan) === "run" ? "an outdoor run" : "a ride"}` });
     seen.add(s.key);
   });
   if (errors.length) throw new StepResultsError(errors);
@@ -207,9 +217,57 @@ async function rideEntries(plan: RidePlan, programExerciseId: number, input: Pic
     const s = byKey.get(r.key)!;
     const row = rowOf.get(s.programSetId);
     if (!row) throw new PlanStateError("A step of this ride is no longer in the program");
-    const snapshot: PlannedStepSnapshot = { v: 2, sport: "bike", step: s.step, blockId: s.round ? row.blockId : null, blockRound: s.round?.index ?? null, thresholds: plan.thresholds };
+    const snapshot: PlannedStepSnapshot = { v: 2, sport: planSport(plan), step: s.step, blockId: s.round ? row.blockId : null, blockRound: s.round?.index ?? null, thresholds: plan.thresholds };
     return stepEntry(r.key, r, { ...row, programExerciseId }, snapshot, input.sessionRpe, "assistant");
   });
+}
+
+/**
+ * The named steps of a session with one ride or more (docs/plans/run-logger.md,
+ * 4.3): with one, the keys are its plan's. With a ride and a run, a key starts
+ * with its exercise's place (e1:s1), as get_step_results lists them; a key
+ * without one is taken only when one ride alone has it.
+ */
+async function ridesEntries(
+  list: { plan: unknown; programExerciseId: number | null }[],
+  all: ProgramWorkout[],
+  input: Pick<SaveStepResultsInput, "steps" | "sessionRpe">,
+): Promise<StepEntry[]> {
+  const steps = Array.isArray(input.steps) ? (input.steps as { key?: unknown }[]) : [];
+  const placed = (k: unknown) => (typeof k === "string" ? /^e(\d+):(.+)$/.exec(k) : null);
+  if (list.length === 1 && !steps.some((s) => placed(s.key))) return rideEntries(list[0].plan as RidePlan, list[0].programExerciseId!, input);
+  const keysOf = (r: (typeof list)[number]) => new Set([...(r.plan as RidePlan).steps, ...((r.plan as RidePlan).dropped ?? [])].map((s) => s.key));
+  const groups = new Map<(typeof list)[number], { at: number; step: { key?: unknown } }[]>();
+  const errors: { path: string; message: string }[] = [];
+  steps.forEach((s, i) => {
+    const m = placed(s.key);
+    let ride: (typeof list)[number] | undefined;
+    let key = s.key;
+    if (m) {
+      const pe = all[Number(m[1]) - 1]?.programExerciseId;
+      ride = list.find((r) => r.programExerciseId === pe);
+      key = m[2];
+      if (!ride) errors.push({ path: `${i}.key`, message: `exercise ${m[1]} of this session has no ride` });
+    } else {
+      const has = list.filter((r) => keysOf(r).has(String(s.key)));
+      if (has.length === 1) ride = has[0];
+      else {
+        const places = has.map((r) => all.findIndex((p) => p.programExerciseId === r.programExerciseId) + 1);
+        errors.push({
+          path: `${i}.key`,
+          message: has.length ? `step "${String(s.key)}" is in more than one ride of this session: start it with its exercise's place (${places.map((p) => `e${p}:${String(s.key)}`).join(" or ")})` : `no step "${String(s.key)}" in this session's rides`,
+        });
+      }
+    }
+    if (ride) groups.set(ride, [...(groups.get(ride) ?? []), { at: i, step: { ...s, key } }]);
+  });
+  if (errors.length) throw new StepResultsError(errors);
+  const out: StepEntry[] = [];
+  for (const [ride, group] of groups) {
+    const entries = await rideEntries(ride.plan as RidePlan, ride.programExerciseId!, { steps: group.map((g) => g.step) as SaveStepResultsInput["steps"], sessionRpe: input.sessionRpe });
+    entries.forEach((e, k) => out.push({ ...e, key: String(steps[group[k].at].key) }));
+  }
+  return out;
 }
 
 /**
@@ -245,6 +303,7 @@ async function upsertAssistantSets(tx: Tx, sessionId: number, entries: StepEntry
         avgSpeed: row.avgSpeed,
         climbM: row.climbM,
         measuredValue: row.measuredValue,
+        inclinePercent: row.inclinePercent,
         rpe: row.rpe,
         notes: row.notes,
         stepStatus: row.stepStatus,
@@ -486,9 +545,9 @@ export async function saveSessionStepResults(
   const live = await liveRideOnSession(db, userId, found.session.id);
   if (live) throw new PlanStateError(rideRunningText(live));
   // A ride's steps are its frozen plan's; any other session's are the program's, while it still has the steps logged.
-  const ride = await sessionRide(db, userId, found.session.id);
+  const sessionRideList = (await sessionRides(db, userId, found.session.id)).filter((r) => r.programExerciseId != null);
   let entries: StepEntry[];
-  if (ride?.programExerciseId != null) entries = await rideEntries(ride.plan as RidePlan, ride.programExerciseId, input);
+  if (sessionRideList.length) entries = await ridesEntries(sessionRideList, found.all, input);
   else {
     if (!found.all.length) throw new PlanStateError("That session has no structured steps");
     await assertSameShape(found.session.id, found.all);
@@ -526,7 +585,8 @@ async function assertSameShape(sessionId: number, all: ProgramWorkout[]) {
       Array.isArray(v) ? v.map(sorted) : v && typeof v === "object" ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => a.localeCompare(b)).map(([k, x]) => [k, sorted(x)])) : v;
     return JSON.stringify(sorted(rest));
   };
-  const now = new Map(rows.map((r) => [r.id, same(stepOfRow(r as StepRow))]));
+  const sportOf = new Map(all.map((p) => [p.programExerciseId, p.sport]));
+  const now = new Map(rows.map((r) => [r.id, same(stepOfRow(r as StepRow, sportOf.get(r.programExerciseId) ?? null))]));
   const changed = logged.some((l) => now.get(l.programSetId!) !== same((l.plannedStep as PlannedStepSnapshot).step));
   if (changed) throw new PlanStateError("The program changed since this session was logged, so its step keys no longer fit. Log results in the app, or ask the user.");
 }
@@ -551,12 +611,18 @@ async function stepResultsOf(
   const plays = programPlay(found.all, anchors, units);
   // A ride's steps are keyed and ordered by its frozen plan, the keys get_ride
   // lists and log_step_results takes, whatever the program holds now (D9).
-  const ride = await sessionRide(db, userId, session.id);
-  const ridePlan = ride ? (ride.plan as RidePlan) : null;
-  const planSteps = ridePlan ? [...ridePlan.steps, ...(ridePlan.dropped ?? [])] : [];
-  const planIndex = new Map(planSteps.map((st, i) => [st.programSetId, i]));
-  const rows = plays.flatMap(({ pw, play }) => {
-    const rideRows = ride?.programExerciseId === pw.programExerciseId;
+  // Each exercise's own ride (a ride and a run can share a session, docs/plans/run-logger.md 4.3);
+  // with more than one, a ride's key starts with its exercise's place, as log_step_results takes it.
+  const rideList = await sessionRides(db, userId, session.id);
+  const rows = plays.flatMap(({ pw, play }, e) => {
+    const ride = rideList.find((r) => r.programExerciseId === pw.programExerciseId);
+    const ridePlan = ride ? (ride.plan as RidePlan) : null;
+    const planSteps = ridePlan ? [...ridePlan.steps, ...(ridePlan.dropped ?? [])] : [];
+    const planIndex = new Map(planSteps.map((st, i) => [st.programSetId, i]));
+    const rideKey = (k: string) => (rideList.length > 1 ? `e${e + 1}:${k}` : k);
+    const rideRows = ride !== undefined;
+    // A treadmill run's belt (docs/plans/run-logger.md, step 5): its speed in km/h, planned and done.
+    const treadmill = ride?.sport === "run" && ridePlan?.mode === "indoor";
     const mine = logged.filter((l) => l.set.programExerciseId === pw.programExerciseId);
     if (rideRows) mine.sort((a, b) => (planIndex.get(a.set.programSetId ?? -1) ?? 1e9) - (planIndex.get(b.set.programSetId ?? -1) ?? 1e9));
     // Keys follow today's plan when it still has the same steps, so a later
@@ -566,7 +632,7 @@ async function stepResultsOf(
       const snap = set.plannedStep as PlannedStepSnapshot;
       const [planned] = plannedRows({ v: 2, sport: snap.sport, name: "step", steps: [snap.step] }, (snap.thresholds ?? {}) as ThresholdValues, units);
       const inPlan = rideRows ? planSteps[planIndex.get(set.programSetId ?? -1) ?? -1] : undefined;
-      const key = rideRows ? (inPlan?.key ?? `x${set.id}`) : sameShape ? play[i].key : `x${set.id}`;
+      const key = rideRows ? (inPlan ? rideKey(inPlan.key) : `x${set.id}`) : sameShape ? play[i].key : `x${set.id}`;
       const p: PlannedRow = { ...planned, key, round: rideRows ? (inPlan?.round ?? null) : sameShape ? play[i].round : null };
       const result: StepResult | null = set.stepStatus
         ? {
@@ -582,11 +648,20 @@ async function stepResultsOf(
             ...(set.avgCadence != null && { avgCadence: set.avgCadence }),
             ...(set.avgSpeed != null && { avgSpeed: set.avgSpeed }),
             ...(set.climbM != null && { climbM: set.climbM }),
+            ...(treadmill && set.avgSpeed != null && { beltKmh: Math.round(set.avgSpeed * 36) / 10 }),
+            ...(set.inclinePercent != null && { inclinePercent: set.inclinePercent }),
             ...(set.rpe != null && { rpe: set.rpe }),
             ...(set.notes && { notes: set.notes }),
           }
         : null;
-      return { ...p, result, sources: set.sources ?? null, compare: compareStep(p, result ?? undefined) };
+      const run = treadmill && inPlan ? (inPlan as RidePlan["steps"][number]).run : undefined;
+      return {
+        ...p,
+        ...(run && { plannedBelt: { kmh: run.belt === null ? null : run.belt / 10, inclinePercent: run.incline === null ? null : run.incline / 10 } }),
+        result,
+        sources: set.sources ?? null,
+        compare: compareStep(p, result ?? undefined),
+      };
     });
   });
   const rpes = logged.map((l) => l.set.rpe).filter((r): r is number => r != null);

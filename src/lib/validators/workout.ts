@@ -34,7 +34,7 @@ import {
 } from "@/lib/utils/progression";
 import type { ResultSource } from "@/db/schema/workout-sets";
 import { NUDGE_CAP_W, EXTEND_MAX_S } from "@/lib/utils/ride-timeline";
-import { RIDE_TESTS, programStepFieldsSchema } from "@/lib/utils/workout-steps";
+import { WORKOUT_TESTS, inclinePercentSchema, programStepFieldsSchema } from "@/lib/utils/workout-steps";
 import { z } from "zod";
 
 export const WORKOUT_FEELINGS = ["Tired", "OK", "Good", "Awesome"] as const;
@@ -80,7 +80,10 @@ export const createWorkoutSessionSchema = z.object({
  * - 5-6: Easy, many reps left
  */
 /** The sources a client may send for a result field; the others are the server's (`RESULT_SOURCES`). */
-export const CLIENT_RESULT_SOURCES = ["typed", "clock"] as const satisfies readonly ResultSource[];
+export const CLIENT_RESULT_SOURCES = ["typed", "clock", "belt"] as const satisfies readonly ResultSource[];
+
+/** The result fields a treadmill run step takes from the belt (docs/plans/run-logger.md, 4.7). */
+export const BELT_FIELDS = ["distanceMeters", "avgSpeed"] as const;
 
 /** The result fields of a set whose source is kept (`workout_sets.sources`). */
 export const RESULT_FIELDS = ["durationSeconds", "distanceMeters", "avgPower", "avgHr", "maxHr", "avgCadence", "avgSpeed", "climbM", "measuredValue"] as const;
@@ -110,7 +113,7 @@ export const logWorkoutSetSchema = z.object({
     .max(1000, "Weight must be under 1000kg"),
   durationSeconds: z.number().int().min(0).optional(),
   distanceMeters: z.number().int().min(0).nullable().optional(),
-  inclinePercent: z.number().int().min(0).max(30).optional(),
+  inclinePercent: inclinePercentSchema.optional(),
   heartRateZone: z.number().int().min(1).max(5).optional(),
   // Reps In Reserve — the primary effort input (0 = to failure, 5 = 5+ left).
   // When present, the server derives rpe from it (rpe = clamp(10 - rir, 1, 10)).
@@ -164,6 +167,10 @@ export const logWorkoutSetSchema = z.object({
   // The workout list's ring logs a whole exercise: it never writes over a row
   // that carries a step status or sources (a ride's step, a typed result).
   bulk: z.boolean().optional(),
+}).refine((d) => Object.entries(d.sources ?? {}).every(([k, s]) => s !== "belt" || BELT_FIELDS.includes(k as (typeof BELT_FIELDS)[number])), {
+  // A belt measures distance and speed on a treadmill (docs/plans/run-logger.md, 4.7), nothing else.
+  message: "only distance and speed come from the belt",
+  path: ["sources"],
 });
 
 /** A correction to a set in a finished session, made from history. */
@@ -431,7 +438,7 @@ const programSetFields = z.object({
   weightKg: z.number().min(0).max(1000).optional(),
   durationSeconds: z.number().int().min(0).optional(),
   distanceMeters: z.number().int().min(0).optional(),
-  inclinePercent: z.number().int().min(0).max(30).optional(),
+  inclinePercent: inclinePercentSchema.optional(),
   targetHeartRateZone: z.number().int().min(1).max(5).optional(),
   restTimeSeconds: z.number().int().min(0).max(3600).default(0),
   setType: z.enum(SET_TYPES).default("working"),
@@ -647,7 +654,7 @@ const importProgramEntrySchema = z.object({
             }),
           ),
           poolM: z.number().min(10).max(100).optional().catch(undefined),
-          rideTest: z.enum(RIDE_TESTS).optional().catch(undefined),
+          rideTest: z.enum(WORKOUT_TESTS).optional().catch(undefined),
         }),
       )
       .max(50),

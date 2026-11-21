@@ -288,7 +288,8 @@ export function ProgramDetailClient({
     <div className="h-[100dvh] pb-nav-safe bg-background flex flex-col overflow-hidden">
       {/* Header */}
       <div className="flex items-center px-4 pt-6 pb-4 shrink-0">
-        <div className="w-20 shrink-0">
+        {/* The back link takes the room the actions leave, so it reads "Programs" where it fits. */}
+        <div className="min-w-0 flex-1">
           {isEditing ? (
             <button
               type="button"
@@ -302,7 +303,6 @@ export function ProgramDetailClient({
             <BackLink fallback={{ href: "/programs", label: "Programs" }} />
           )}
         </div>
-        <div className="flex-1" />
         <div className="shrink-0 flex items-center gap-3">
           {!isEditing && (
             <Link

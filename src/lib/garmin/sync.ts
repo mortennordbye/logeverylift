@@ -161,6 +161,8 @@ export async function fetchActivities(token: string, userId: string, start: stri
           activityType: sql`excluded.activity_type`,
           data: sql`excluded.data`,
           fetchedAt: sql`excluded.fetched_at`,
+          // A run whose distance changed (Garmin's treadmill calibration) gets its FIT file again, so a run filled from it updates (docs/plans/run-logger.md, 4.8).
+          filesFetchedAt: sql`case when excluded.activity_type ~* '(run|trail)' and (${garminActivities.data}->'distance') is distinct from (excluded.data->'distance') then null else ${garminActivities.filesFetchedAt} end`,
         },
         // Unchanged activities are left alone and not counted (see saveDays).
         setWhere: sql`${garminActivities.data} is distinct from excluded.data or ${garminActivities.startTimeLocal} is distinct from excluded.start_time_local`,

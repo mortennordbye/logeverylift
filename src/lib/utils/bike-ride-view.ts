@@ -111,7 +111,8 @@ export type ChartBar = {
 export type RideChart = {
   bars: ChartBar[];
   bands: { zone: number; y: number; h: number }[];
-  ftpY: number;
+  /** The FTP line; null on a run's zone chart (src/lib/utils/run-view.ts). */
+  ftpY: number | null;
   yTicks: { y: number; label: string }[];
   xTicks: { x: number; label: string }[];
 };
@@ -181,13 +182,18 @@ export function rideChart(plan: RidePlan): RideChart {
     yTicks.push({ y: y(50), label: "50%" });
   }
 
+  return { bars, bands, ftpY: y(100), yTicks, xTicks: timeTicks(total) };
+}
+
+/** Minute ticks under a chart of `total` seconds: every 15 min up to 90 min, 30 up to 3 h, else 60, and the length at the end. */
+export function timeTicks(total: number): RideChart["xTicks"] {
+  const span = CHART.right - CHART.left;
   const minutes = total / 60;
   const every = minutes <= 90 ? 15 : minutes <= 180 ? 30 : 60;
   const xTicks: RideChart["xTicks"] = [];
   for (let m = 0; m <= minutes - every / 2; m += every) xTicks.push({ x: +(CHART.left + ((m * 60) / total) * span).toFixed(1), label: `${m}` });
   xTicks.push({ x: CHART.right, label: `${Math.round(minutes)} min` });
-
-  return { bars, bands, ftpY: y(100), yTicks, xTicks };
+  return xTicks;
 }
 
 // ── Step rows ────────────────────────────────────────────────────────────────

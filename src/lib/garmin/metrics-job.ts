@@ -254,7 +254,7 @@ async function buildDaily(userId: string, today: string) {
   const sessions = await strengthSessions(userId);
   const appEndurance: AppEnduranceInput[] = (await appSessionLoads(userId, null, today))
     .filter((s): s is typeof s & { sport: "swim" | "bike" | "run" } => s.sport === "swim" || s.sport === "bike" || s.sport === "run")
-    .map((s) => ({ sessionId: s.id, day: s.date, sport: s.sport, durationS: s.durationS, load: s.load, method: s.method === "strength_srpe" ? "srpe" : s.method === "bike_power" ? "power" : s.method }));
+    .map((s) => ({ sessionId: s.id, day: s.date, sport: s.sport, durationS: s.durationS, load: s.load, method: s.method === "strength_srpe" ? "srpe" : s.method === "bike_power" ? "power" : s.method === "run_gap" ? "run_pace" : s.method }));
   const feelRows = await db
     .select({ day: workoutSessions.date, feel: sql<number>`avg(${workoutSessions.readiness})::float` })
     .from(workoutSessions)

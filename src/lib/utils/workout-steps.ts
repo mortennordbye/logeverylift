@@ -29,6 +29,15 @@ export const SWIM_EQUIPMENT = ["pull_buoy", "paddles", "fins", "kickboard", "sno
 /** FTP test rides a bike workout can be (docs/plans/bike-ride-logger.md, 4.9). */
 export const RIDE_TESTS = ["ramp", "20min"] as const;
 export type RideTest = (typeof RIDE_TESTS)[number];
+/** The run threshold test (docs/plans/run-logger.md, 4.10), stored as protocol run_30min. */
+export const RUN_TESTS = ["30min"] as const;
+export type RunTest = (typeof RUN_TESTS)[number];
+/** Every test a workout can be: bike tests on a bike, the run test on a run. */
+export const WORKOUT_TESTS = [...RIDE_TESTS, ...RUN_TESTS] as const;
+export type WorkoutTest = (typeof WORKOUT_TESTS)[number];
+/** A workout's test when it is a bike test, for the readers of FTP tests. */
+export const rideTestOf = (test: WorkoutTest | null | undefined): RideTest | undefined =>
+  test === "ramp" || test === "20min" ? test : undefined;
 
 export type WorkoutSport = (typeof WORKOUT_SPORTS)[number];
 
@@ -46,7 +55,22 @@ export const WORKOUT_LIMITS = {
   meters: { min: 10, max: 300_000 },
   poolLengthM: { min: 10, max: 100 },
   sendOffSeconds: { min: 20, max: 600 },
+  // A treadmill step's incline in % and belt speed in km/h (docs/plans/run-logger.md, step 0).
+  incline: { min: -3, max: 30 },
+  belt: { min: 1, max: 25 },
 } as const;
+
+/** At most one decimal: 0.5 and 1.5 pass, 0.25 does not. */
+const oneDecimal = (n: number) => Math.abs(Math.round(n * 10) - n * 10) < 1e-6;
+
+/** A treadmill incline in %, -3 to 30 with one decimal, for a step and for a set. */
+export const inclinePercentSchema = z
+  .number()
+  .min(WORKOUT_LIMITS.incline.min)
+  .max(WORKOUT_LIMITS.incline.max)
+  .refine(oneDecimal, "incline takes at most one decimal");
+/** A treadmill step's belt speed in km/h, 1 to 25 with one decimal. */
+export const beltKmhSchema = z.number().min(WORKOUT_LIMITS.belt.min).max(WORKOUT_LIMITS.belt.max).refine(oneDecimal, "belt takes at most one decimal");
 
 /** Allowed target values per metric and anchor: percent of the anchor, or metric absolute units. */
 const TARGET_RANGE: Record<string, { min: number; max: number; unit: string }> = {
@@ -130,6 +154,7 @@ export const programStepFieldsSchema = z.object({
   ramp: rampSchema.nullable().optional(),
   free: z.boolean().optional(),
   outdoorTarget: targetSchema.nullable().optional(),
+  beltKmh: beltKmhSchema.nullable().optional(),
 });
 
 const stepSchema = z.strictObject({
@@ -149,6 +174,10 @@ const stepSchema = z.strictObject({
   ramp: rampSchema.optional(),
   free: z.literal(true).optional(),
   outdoor: targetSchema.optional(),
+  // Run only (docs/plans/run-logger.md, step 0): the treadmill incline in %
+  // and the belt speed in km/h written on the step.
+  incline: inclinePercentSchema.optional(),
+  belt: beltKmhSchema.optional(),
 });
 
 const repeatSchema = z.strictObject({
@@ -168,7 +197,7 @@ const baseWorkoutSchema = z.strictObject({
   name: z.string().trim().min(1).max(WORKOUT_LIMITS.name),
   description: z.string().trim().max(WORKOUT_LIMITS.description).optional(),
   poolLengthM: z.number().min(WORKOUT_LIMITS.poolLengthM.min).max(WORKOUT_LIMITS.poolLengthM.max).optional(),
-  test: z.enum(RIDE_TESTS).optional(),
+  test: z.enum(WORKOUT_TESTS).optional(),
   steps: z.array(nodeSchema).min(1).max(WORKOUT_LIMITS.nodes),
 });
 
@@ -253,8 +282,12 @@ function stepIssues(step: WorkoutStep, w: Workout, inRepeat: WorkoutRepeat | nul
     else if (step.target2.metric === step.target.metric) out.push({ path: ["target2", "metric"], message: "the second target must use another metric" });
     for (const i of targetIssues(step.target2, w.sport)) out.push({ path: ["target2", ...i.path], message: i.message });
   }
-  for (const f of ["ramp", "free", "outdoor"] as const) {
+  for (const f of ["ramp", "free"] as const) {
     if (step[f] !== undefined && w.sport !== "bike") out.push({ path: [f], message: `${f} is only for bike steps` });
+  }
+  if (step.outdoor !== undefined && w.sport === "swim") out.push({ path: ["outdoor"], message: "outdoor is only for bike and run steps" });
+  for (const f of ["incline", "belt"] as const) {
+    if (step[f] !== undefined && w.sport !== "run") out.push({ path: [f], message: `${f} is only for run steps` });
   }
   if (step.ramp) {
     if (step.target) out.push({ path: ["ramp"], message: "give a target or a ramp, not both" });
@@ -296,7 +329,10 @@ const workoutSchema = baseWorkoutSchema.superRefine((w, ctx) => {
   const add = (path: Issue["path"], message: string) => ctx.addIssue({ code: "custom", path, message });
 
   if (w.poolLengthM !== undefined && w.sport !== "swim") add(["poolLengthM"], "only for swims");
-  if (w.test !== undefined && w.sport !== "bike") add(["test"], "only for bike workouts");
+  if (w.test !== undefined) {
+    const allowed: readonly string[] = w.sport === "bike" ? RIDE_TESTS : w.sport === "run" ? RUN_TESTS : [];
+    if (!allowed.includes(w.test)) add(["test"], allowed.length ? `a ${w.sport} test is ${allowed.join(" or ")}` : "only for bike and run workouts");
+  }
   if (new TextEncoder().encode(JSON.stringify(w)).length > WORKOUT_LIMITS.jsonBytes) add([], `the workout is larger than ${WORKOUT_LIMITS.jsonBytes / 1024} KB`);
 
   let expanded = 0;
@@ -370,6 +406,51 @@ export function parseWorkout(input: unknown): WorkoutParseResult {
 const POWER_ZONES: [number | null, number | null][] = [[null, 54], [55, 74], [75, 89], [90, 104], [105, 120]];
 const RUN_HR_ZONES: [number | null, number | null][] = [[null, 84], [85, 89], [90, 94], [95, 99], [100, null]];
 const BIKE_HR_ZONES: [number | null, number | null][] = [[null, 80], [81, 89], [90, 93], [94, 99], [100, null]];
+
+/** The run heart rate zone (1 to 5, Friel) of a heart rate in % of run LTHR. */
+export function runHrZoneOf(pctLthr: number): number {
+  const i = RUN_HR_ZONES.findIndex(([, high]) => high === null || pctLthr < high + 1);
+  return i + 1;
+}
+
+/**
+ * The whole heart rates (bpm) of a run zone as `runHrZoneOf` counts them: its
+ * first and last bpm, null for an open end. At LTHR 180, Z2 is 153 to 161.
+ */
+export function runHrZoneBpm(zone: number, lthr: number): { low: number | null; high: number | null } {
+  const first = (pct: number) => Math.ceil((lthr * pct) / 100 - 1e-9);
+  const prev = RUN_HR_ZONES[zone - 2]?.[1] ?? null;
+  const top = RUN_HR_ZONES[zone - 1][1];
+  return { low: prev === null ? null : first(prev + 1), high: top === null ? null : first(top + 1) - 1 };
+}
+
+/**
+ * Run pace zones (Friel), as % of threshold pace *time*: a higher number is
+ * slower (docs/plans/run-logger.md, 4.2). [fast, slow]; null is an open end.
+ * Z5 has three parts. Friel's bounds overlap at Z4 and Z5a; kept as he gives them.
+ */
+export const RUN_PACE_ZONES = {
+  "1": [130, null],
+  "2": [114, 129],
+  "3": [106, 113],
+  "4": [99, 105],
+  "5a": [97, 100],
+  "5b": [90, 96],
+  "5c": [null, 89],
+} as const satisfies Record<string, readonly [number | null, number | null]>;
+export type RunPaceZone = keyof typeof RUN_PACE_ZONES;
+
+/**
+ * The one speed (m/s) a run pace zone stands for: its slow end, as 4.2 uses
+ * for a heart rate step's belt (Z2 is 7:17 /km at a 5:39 threshold). Z1 has
+ * no slow end: it stands at Z1_PACE_PCT, so a Z1 step is slower than a Z2 one.
+ */
+export function runZoneSpeed(zone: RunPaceZone, thresholdSpeed: number): number {
+  const [, slow] = RUN_PACE_ZONES[zone];
+  return (thresholdSpeed * 100) / (slow ?? Z1_PACE_PCT);
+}
+/** Where the open Z1 stands, in % of threshold pace time: 7:55 /km at a 5:39 threshold, 7.6 km/h. */
+export const Z1_PACE_PCT = 140;
 
 function zoneBounds(t: WorkoutTarget, sport: WorkoutSport): [number | null, number | null] {
   const table = t.metric === "power" ? POWER_ZONES : sport === "bike" ? BIKE_HR_ZONES : RUN_HR_ZONES;

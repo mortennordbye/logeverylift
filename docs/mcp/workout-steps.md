@@ -1,6 +1,6 @@
 # Workout step syntax
 
-Version: 2026-11-18
+Version: 2026-11-20
 
 This document is served to connected AI assistants as an MCP resource
 (`logeverylift://docs/workout-steps`). It describes the steps of a structured endurance session
@@ -30,7 +30,7 @@ A step tree is one JSON object:
 | `name` | yes | 1-80 characters. Not stored: the program has its own name |
 | `description` | no | At most 1,000 characters. Not stored: use the exercise's `notes` |
 | `poolLengthM` | swim only | Pool length in meters, 10-100 (25 yd is 22.86). Leave it out for open water. Send it as `poolLengthM` on the `edit_program_exercise` call too: the exercise keeps it |
-| `test` | bike only | `ramp` or `20min`: the ride is an FTP test (see Bikes). Stored on the exercise; a tree without it clears it |
+| `test` | bike and run | Bike: `ramp` or `20min`, an FTP test (see Bikes). Run: `30min`, the run threshold test (see Runs). Stored on the exercise; a tree without it clears it |
 | `steps` | yes | 1-100 nodes, in order |
 
 A node is a **step** or a **repeat**.
@@ -50,7 +50,9 @@ A **step**:
 | `note` | no | At most 140 characters. A climb, a gradient or the terrain goes here, never in a target |
 | `ramp` | bike only | `{ "anchor": "ftp" or "absolute", "from": n, "to": n }`: power that moves evenly from `from` to `to` over the step, in % FTP (30-200) or watts (20-2000). In place of `target`; a ramp takes no `target2` |
 | `free` | bike only | `true`: a free spin with no target. No `target`, `target2` or `ramp` with it |
-| `outdoor` | bike only | A target in the shape of Targets, used on an outdoor ride in place of `target`. See Bikes |
+| `outdoor` | bike and run | A target in the shape of Targets, used on an outdoor ride or run in place of `target`. See Bikes and Runs |
+| `incline` | run only | Treadmill incline in %, -3 to 30 with one decimal. It carries over to the next steps until a step has its own. See Runs |
+| `belt` | run only | Treadmill belt speed in km/h, 1 to 25 with one decimal: the speed the step starts at. It never carries over. See Runs |
 | `id` | no | Letters, digits, `-` or `_`, at most 24. Not stored: the app numbers the steps `s1`, `s2`, ... in order (a repeat takes one number, its steps the next ones). Step results use these keys, plus `#n` for round n of a repeat |
 
 A **repeat**: `{ "type": "repeat", "count": 2-50, "steps": [1-10 steps] }`. A repeat holds steps
@@ -176,6 +178,64 @@ and the ride's numbers). `log_step_results` writes per step `avgPower`, `avgHr`,
 marked as written by the assistant; a value the athlete typed or Garmin filled is never replaced,
 and the result lists it under `kept`.
 
+## Runs
+
+A run has two modes, Treadmill and Outdoor, chosen when the athlete starts it. Both run the same
+steps; the mode changes only the target shown and how a distance step ends. Run targets are heart
+rate (`lthr` zones are Friel's), `threshold_pace` (% of threshold speed) or effort. Never power.
+
+- **Belt:** on a treadmill each step starts at a belt speed. Without `belt` the app takes it from
+  the pace target, else for a heart rate step from the athlete's own treadmill belts in that zone,
+  else from the zone's pace; with no threshold pace the athlete sets the belt by feel. Write
+  `belt` only for a fixed speed, for example strides or a walk. The belt never carries over: give
+  the easy step after a fast one its own belt.
+- **Incline:** `incline` on a step holds until a later step has its own. A 1% incline is the
+  usual treadmill setting; the app counts 0 to 1% as flat in its grade-adjusted pace.
+- **Outdoor:** add `outdoor` for your own outdoor target. Without one the app derives it: a heart
+  rate cap at the top of the zone on warm-ups, cool-downs, easy and long steps, a pace range on
+  tempo and threshold work, effort on strides and short hard steps, "easy jog or walk" on recoveries.
+  An outdoor distance step ends on the time its pace gives; the athlete taps Lap to end it sooner.
+- **Strides on a treadmill:** a belt takes 5 to 15 seconds to speed up. Write treadmill strides as
+  30 s work steps (not 20 s) with their belt, in a repeat with an easy step and its own belt.
+  A repeat whose work step is under 60 s runs as one strides block.
+- **Hills:** a climb or the terrain is a note on the step, never a target.
+- **Run threshold test:** `"test": "30min"` on the tree, stored as protocol `run_30min`. Or send
+  `runTest: "treadmill"` or `runTest: "outdoor"` to `edit_program_exercise` in place of `sets` or
+  `workout` to write the app's own test: warm-up 15 min with 3 x 1 min pickups, then the test as a
+  10 min and a 20 min work step at effort 9-10, then 10 min easy. The treadmill one starts at 10.0
+  km/h, and its 20 min step keeps the belt the runner ended the 10 min on. A test does not start
+  within 7 days of a sick period. After the run, `get_ride` gives `thresholdTest`: LTHR is the
+  average heart rate of the 20 min step and threshold pace the average pace of the whole 30 min
+  (Friel); a treadmill test with no belt tap gives LTHR only.
+- **A running run is frozen:** a run keeps the plan it started with, as a ride does.
+
+A 75 minute base run on the treadmill: a warm-up and a steady run in heart rate zones 1 and 2 at
+1% (the app starts the belt from the zone), six 30 s strides at 13 km/h with 90 s easy at
+7 km/h, and a walk to cool down. Outdoors the zone steps run under a heart rate cap and the strides
+by effort.
+
+```json
+{ "v": 2, "sport": "run", "name": "2 Base · Run",
+  "steps": [
+    { "type": "warmup", "end": { "type": "time", "seconds": 600 },
+      "target": { "metric": "hr", "anchor": "lthr", "zone": 1 }, "incline": 1 },
+    { "type": "work", "end": { "type": "time", "seconds": 3000 },
+      "target": { "metric": "hr", "anchor": "lthr", "zone": 2 } },
+    { "type": "repeat", "count": 6, "steps": [
+      { "type": "work", "end": { "type": "time", "seconds": 30 }, "belt": 13,
+        "target": { "metric": "rpe", "anchor": "absolute", "low": 8, "high": 8 },
+        "note": "Fast and relaxed" },
+      { "type": "recovery", "end": { "type": "time", "seconds": 90 }, "belt": 7 } ] },
+    { "type": "cooldown", "end": { "type": "time", "seconds": 180 }, "belt": 5.5 }
+  ] }
+```
+
+Results of a run: `get_ride` reads a run from run mode too (`sport` `run`): the plan with each
+treadmill step's belt and incline, planned against done per step, and the run's numbers.
+`log_step_results` takes `beltKmh` and `inclinePercent` on the steps of a treadmill run (by its
+`workoutSessionId`); a belt is the step's speed, and its distance over the step's time. A number
+the belt gave (source `belt`) is never replaced, like a typed or Garmin one.
+
 ## Swims
 
 In a pool, every distance must be a whole number of lengths. A send-off workout sets
@@ -260,7 +320,8 @@ step. It ends on exactly one of `durationSeconds`, `distanceMeters` or `endsOnLa
 target goes in `targets`, a list of one or two entries in the target shape above. Cadence is
 `cadenceLow` and `cadenceHigh`; a swim step takes `stroke`, `equipment` and `sendOffSeconds`;
 `note` is the step's cue. A bike step takes `ramp` (no `targets` with it), `free: true` and
-`outdoorTarget` (the tree's `outdoor`). The FTP test is only in the tree: a set list leaves the
+`outdoorTarget` (the tree's `outdoor`). A run step takes `beltKmh` (the tree's `belt`),
+`inclinePercent` (the tree's `incline`) and `outdoorTarget`. A test is only in the tree: a set list leaves the
 exercise's test as it is, and `get_program` shows it as `rideTest` on the exercise. A repeat is one set per round: the sets of round 1, then round 2, and
 so on, each with the same `blockId` and its `blockRound`, every round the same. Either every set
 of an exercise is a step or none is. The `workout` argument writes exactly this list for you.

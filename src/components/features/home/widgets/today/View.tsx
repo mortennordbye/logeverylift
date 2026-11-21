@@ -9,6 +9,7 @@ import { todayActions, type TodayAction } from "@/lib/home/today-actions";
 import type { WidgetSize } from "@/lib/home/widgets/types";
 import { ArrowLeftRight, CalendarClock, Check, Play, Sparkles, Zap } from "lucide-react";
 import { dateLabel } from "@/lib/utils/date-label";
+import { RUN_MODE_NAME } from "@/lib/utils/run-view";
 import Link from "next/link";
 import { StartToday } from "./StartToday";
 import { TodayMore } from "./TodayMore";
@@ -196,8 +197,11 @@ function TodayCard({ data, size }: { data: TodayData; size: WidgetSize }) {
   );
 }
 
+/** "Run · Treadmill · 75 min" on a run day (docs/plans/run-logger.md, planned day card), else the counts. */
 const planMeta = (p: TodayPlan) =>
-  `${p.exerciseCount} ${p.exerciseCount === 1 ? "exercise" : "exercises"} · ${p.setCount} ${p.stepsOnly ? (p.setCount === 1 ? "step" : "steps") : p.setCount === 1 ? "set" : "sets"}${p.minutes != null ? ` · about ${p.minutes} min` : ""}`;
+  p.runMode
+    ? ["Run", RUN_MODE_NAME[p.runMode], p.minutes != null ? `${p.minutes} min` : null].filter(Boolean).join(" · ")
+    : `${p.exerciseCount} ${p.exerciseCount === 1 ? "exercise" : "exercises"} · ${p.setCount} ${p.stepsOnly ? (p.setCount === 1 ? "step" : "steps") : p.setCount === 1 ? "set" : "sets"}${p.minutes != null ? ` · about ${p.minutes} min` : ""}`;
 
 /** L: the first three exercises with their sets, then the names of the rest. */
 function PlanList({ plan }: { plan: TodayPlan }) {
@@ -337,7 +341,7 @@ function TodaySmall({ data }: { data: TodayData }) {
         <p className="home-display text-[24px] uppercase leading-[1.05] break-words line-clamp-2">{todayName(data)}</p>
         {data.plan && !data.severalToday && (
           <p className="mt-0.5 text-xs font-medium opacity-80">
-            {data.plan.exerciseCount} exercises · {data.plan.minutes} min
+            {data.plan.runMode ? planMeta(data.plan) : `${data.plan.exerciseCount} exercises · ${data.plan.minutes} min`}
           </p>
         )}
         {data.completedToday && (

@@ -109,8 +109,12 @@ export function rideScreen(plan: RidePlan, t: RideTimeline, units: Units = DEFAU
   // The Next card stays one line: the target without its words.
   const next = after ? { title: `${after.title} · ${after.time}`, target: after.target?.replace(/ · easy spin$/, "") ?? null } : { title: "Finish", target: null };
 
-  // The chart gives each step its width; the bars here are its height in a small strip.
-  const chart = rideChart(plan);
+  // The chart gives each step its width, with the +1 min of each step taken so far, so the strip matches the total.
+  const extended = new Map(t.steps.map((r) => [r.index, r.extendedSeconds]));
+  extended.set(cur.index, cur.extendedSeconds);
+  const drawn: RidePlan = { ...plan, steps: plan.steps.map((p, i) => (p.seconds !== null && extended.get(i) ? { ...p, seconds: p.seconds + extended.get(i)! } : p)) };
+  // The bars here are its height in a small strip.
+  const chart = rideChart(drawn);
   const bars = chart.bars.map((b, i) => ({ key: b.key, x: b.x, w: b.w, h: Math.max(4, 100 - Math.min(b.y, b.y2)), current: i === cur.index }));
   const b = chart.bars[cur.index];
   const length = s.seconds !== null ? s.seconds + cur.extendedSeconds : s.estSeconds;
@@ -196,7 +200,9 @@ export function stepLogPayload(r: RideStepResult, ctx: { sessionId: number; exer
 
 /** A saved step's values in one string: the step saves again only when they change. */
 export function stepSignature(r: RideStepResult): string {
-  return `${r.status}:${r.activeSeconds}:${r.offsetW}:${r.extendedSeconds}`;
+  const base = `${r.status}:${r.activeSeconds}:${r.offsetW}:${r.extendedSeconds}`;
+  // A run step saves its belt meters and incline too (docs/plans/run-logger.md, 4.7); a ride's signature stays as it was.
+  return r.distanceM === undefined && r.inclinePct === undefined ? base : `${base}:${r.distanceM ?? ""}:${r.inclinePct ?? ""}`;
 }
 
 /** The ended steps whose values differ from what this phone last saved for them. */
@@ -208,7 +214,7 @@ export function stepsToSave(steps: RideStepResult[], saved: Record<string, strin
 
 export type RideTap = Exclude<RideEventKind, "start" | "heartbeat">;
 /** A tap not yet stored by the server: its client id (for replays) and when it happened, in server time. */
-export type QueuedRideEvent = { clientId: string; kind: RideTap; value?: number; clientAt: number };
+export type QueuedRideEvent = { clientId: string; kind: RideTap; value?: number; clientAt: number; /** The step on screen at a run's tap (docs/plans/run-logger.md, 4.4). */ stepKey?: string };
 
 /** The server's events and the queued ones after them, timed the way the server will time them. */
 export function withQueued(view: RideView, queued: QueuedRideEvent[], serverNow: number): RideEventInput[] {
@@ -221,7 +227,7 @@ export function withQueued(view: RideView, queued: QueuedRideEvent[], serverNow:
     if (stored.has(q.clientId)) continue;
     const at = eventTime(q.clientAt, startedAt, serverNow, knownUntil);
     knownUntil = Math.max(knownUntil, at);
-    out.push({ seq: ++seq, kind: q.kind, value: q.value ?? null, at });
+    out.push({ seq: ++seq, kind: q.kind, value: q.value ?? null, at, ...(q.stepKey !== undefined && { stepKey: q.stepKey }) });
   }
   return out;
 }

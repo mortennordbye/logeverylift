@@ -44,6 +44,7 @@ export type LoggedSet = {
     | "avgCadence"
     | "avgSpeed"
     | "climbM"
+    | "inclinePercent"
     | "sources"
   >;
 };

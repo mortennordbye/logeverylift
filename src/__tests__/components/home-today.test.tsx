@@ -185,3 +185,19 @@ describe("Start on a day with steps (docs/plans/one-program-model.md, home merge
     expect(screen.queryByRole("button", { name: /Start Today's Workout/ })).toBeNull();
   });
 });
+
+
+describe("Today on a run day (docs/plans/run-logger.md, planned day card)", () => {
+  const plan = { exerciseCount: 1, setCount: 4, stepsOnly: true, minutes: 75, exercises: [{ name: "Run", sets: "10 min warm-up" }], more: [], runExerciseId: 3 };
+  it("says the sport, the mode the run opens in and the time, at every size", () => {
+    for (const size of ["l", "m", "s"] as const) {
+      const r = render(<>{todayWidget.View({ data: { ...base, todayProgram: prog, plan: { ...plan, runMode: "indoor" } }, size })}</>);
+      expect(r.container.textContent).toContain("Run · Treadmill · 75 min");
+      r.unmount();
+    }
+  });
+  it("keeps the counts when the mode is not read (no endurance features)", () => {
+    render(<>{todayWidget.View({ data: { ...base, todayProgram: prog, plan }, size: "l" })}</>);
+    expect(screen.getByText("1 exercise · 4 steps · about 75 min")).toBeTruthy();
+  });
+});

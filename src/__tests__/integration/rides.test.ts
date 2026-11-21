@@ -114,10 +114,10 @@ describe("startRide", () => {
     expect(await start({ sessionId: theirs.sessionId, programExerciseId: s.programExerciseId })).toEqual({ success: false, error: "Not found" });
 
     asUser(me);
-    const run = (await createExercise({ name: `Run ${Math.random()}`, category: "cardio", discipline: "run" })).id;
-    const { program, slots } = await createStepProgram(me, run, { v: 2, sport: "run", name: "Run", steps: [{ type: "work", end: { type: "lap" } }] });
-    const runSession = await createSession(me, program.id);
-    expect(await start({ sessionId: runSession.id, programExerciseId: slots[0].programExerciseId })).toEqual({ success: false, error: "Only a bike exercise has ride mode" });
+    const swim = (await createExercise({ name: `Swim ${Math.random()}`, category: "cardio", discipline: "swim" })).id;
+    const { program, slots } = await createStepProgram(me, swim, { v: 2, sport: "swim", name: "Swim", steps: [{ type: "work", end: { type: "lap" } }] });
+    const swimSession = await createSession(me, program.id);
+    expect(await start({ sessionId: swimSession.id, programExerciseId: slots[0].programExerciseId })).toEqual({ success: false, error: "Only a bike or run exercise has ride mode" });
 
     await db.update(workoutSessions).set({ isCompleted: true }).where(eq(workoutSessions.id, s.sessionId));
     expect(await start(s)).toEqual({ success: false, error: "This workout is finished" });

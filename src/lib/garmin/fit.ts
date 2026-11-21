@@ -8,7 +8,7 @@ import { Decoder, Stream } from "@garmin/fitsdk";
  * Bump FIT_PARSER_VERSION when the output changes, so stored activities can
  * be parsed again from their saved file.
  */
-export const FIT_PARSER_VERSION = 3;
+export const FIT_PARSER_VERSION = 4;
 
 /** Record fields kept as streams, FIT name -> stored name. */
 const STREAM_FIELDS = {
@@ -44,12 +44,27 @@ export type ParsedFit = {
    * garminVo2MaxUpdated (see vo2MaxFromMessage), null when the file has none,
    * and firstRecordTime: the time of the first record, which is stream time 0
    * (a file stored before this field was added has none).
+   * Since v4 it also holds segments: every session of the file in order,
+   * each with its own sport and time window (a multisport file has one per
+   * part, transitions included; see FitSegment).
    */
   session: Record<string, unknown> | null;
   /** Pool lengths: time, strokes, stroke type (swims only). Since v2. */
   lengths: Record<string, unknown>[];
   /** Timer start and stop events, for pauses. Since v2. */
   events: Record<string, unknown>[];
+};
+
+/** One session of a FIT file: a multisport file has one per part, a transition included (docs/plans/run-logger.md, 4.8). */
+export type FitSegment = {
+  sport: string | null;
+  subSport: string | null;
+  /** ISO time the part started. */
+  startTime: string | null;
+  totalElapsedTime: number | null;
+  totalTimerTime: number | null;
+  /** Meters, when the part has any. */
+  totalDistance: number | null;
 };
 
 /** FIT stores positions in semicircles. */
@@ -124,7 +139,17 @@ export function parseFit(file: Buffer): ParsedFit {
   }
 
   const sport = ((messages.sportMesgs ?? []) as Mesg[])[0] ?? ((messages.sessionMesgs ?? []) as Mesg[])[0];
-  const session = ((messages.sessionMesgs ?? []) as Mesg[])[0];
+  const sessions = (messages.sessionMesgs ?? []) as Mesg[];
+  const session = sessions[0];
+  const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+  const segments: FitSegment[] = sessions.map((s) => ({
+    sport: typeof s.sport === "string" ? s.sport : null,
+    subSport: typeof s.subSport === "string" ? s.subSport : null,
+    startTime: s.startTime instanceof Date ? s.startTime.toISOString() : null,
+    totalElapsedTime: n(s.totalElapsedTime),
+    totalTimerTime: n(s.totalTimerTime),
+    totalDistance: n(s.totalDistance),
+  }));
   const vo2 = vo2MaxFromMessage(((messages as Record<string, unknown>)["140"] as Mesg[] | undefined)?.[0]);
 
   return {
@@ -137,7 +162,7 @@ export function parseFit(file: Buffer): ParsedFit {
     sets: ((messages.setMesgs ?? []) as Mesg[]).map(plain),
     timeInZone: ((messages.timeInZoneMesgs ?? []) as Mesg[]).map(plain),
     session: session
-      ? { ...plain(session), garminVo2Max: vo2?.value ?? null, garminVo2MaxUpdated: vo2?.updated ?? false, firstRecordTime: first?.toISOString() ?? null }
+      ? { ...plain(session), garminVo2Max: vo2?.value ?? null, garminVo2MaxUpdated: vo2?.updated ?? false, firstRecordTime: first?.toISOString() ?? null, segments }
       : null,
     lengths: ((messages.lengthMesgs ?? []) as Mesg[]).map(plain),
     events: ((messages.eventMesgs ?? []) as Mesg[]).filter((e) => e.event === "timer").map(plain),

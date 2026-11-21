@@ -160,7 +160,8 @@ export function WorkoutSessionClient({
           slid 8px sideways every time Edit was toggled (Finished⇄Done on the
           left, Edit+＋⇄＋ on the right). Same structure as WorkoutSetsClient. */}
       <div className="flex items-center px-4 pt-6 pb-2 shrink-0">
-        <div className="w-24 shrink-0 flex items-center">
+        {/* Narrower sides and title under 360 px, so the + stays on a 320 px screen. */}
+        <div className="w-20 min-[360px]:w-24 shrink-0 flex items-center">
           {isEditing ? (
             <button
               type="button"
@@ -179,8 +180,8 @@ export function WorkoutSessionClient({
             </button>
           )}
         </div>
-        <h1 className="flex-1 text-center text-3xl font-bold tracking-tight">Workout</h1>
-        <div className="w-24 shrink-0 flex items-center justify-end gap-3">
+        <h1 className="flex-1 min-w-0 text-center text-2xl min-[360px]:text-3xl font-bold tracking-tight">Workout</h1>
+        <div className="w-20 min-[360px]:w-24 shrink-0 flex items-center justify-end gap-3">
           {!isEditing && (
             <button
               type="button"

@@ -14,6 +14,7 @@ import {
   mergeReplayed,
   nextReplayIn,
   replayOutcome,
+  syncedText,
 } from "@/lib/utils/pending-queue";
 import { isReloadPending, isStaleBundleError, noteActionReached, reloadForFreshBundle } from "@/lib/utils/stale-bundle";
 
@@ -144,6 +145,8 @@ export function PendingQueueProvider({ children }: { children: React.ReactNode }
       let conflicts = 0;
       // Plan changes from the workout that the server kept out, for the notice.
       let notApplied = 0;
+      // Ride and run steps (a ride's write sends stepStatus) say steps in the toast, not sets.
+      let steps = 0;
       // Whether this pass saved a finished workout, so the conflict notice can
       // say so. Only then: a finish that failed or waits is not "saved".
       let finished = false;
@@ -184,7 +187,10 @@ export function PendingQueueProvider({ children }: { children: React.ReactNode }
           }
           ok = false;
         }
-        if (ok) continue;
+        if (ok) {
+          if (m.kind === "logWorkoutSet" && (m.payload as { stepStatus?: unknown } | null)?.stepStatus != null) steps++;
+          continue;
+        }
         // Final: the item leaves the queue, and is neither synced nor dropped.
         if (conflict) {
           conflicts++;
@@ -204,12 +210,7 @@ export function PendingQueueProvider({ children }: { children: React.ReactNode }
 
       const succeeded = snapshot.length - failed.length - dropped.length - conflicts;
       if (succeeded > 0) {
-        showToast({
-          message:
-            succeeded === 1
-              ? "Synced 1 pending set"
-              : `Synced ${succeeded} pending sets`,
-        });
+        showToast({ message: syncedText(succeeded - steps, steps) });
       }
       if (dropped.length > 0) {
         showToast({

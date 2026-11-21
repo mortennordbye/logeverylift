@@ -33,7 +33,7 @@ export const HOLD_TO_SKIP_MS = 600;
 type Toast = { id: number; text: string; index: number; undo: RideTap | null; value?: number };
 
 /** A phone on its side: the landscape layout. */
-function useLandscape(): boolean {
+export function useLandscape(): boolean {
   const [on, setOn] = useState(false);
   useEffect(() => {
     if (typeof window.matchMedia !== "function") return;
@@ -46,9 +46,26 @@ function useLandscape(): boolean {
   return on;
 }
 
-const BTN = "min-h-14 rounded-2xl text-base font-semibold active:opacity-70 disabled:opacity-40 select-none touch-manipulation";
+export const BTN = "min-h-14 rounded-2xl text-base font-semibold active:opacity-70 disabled:opacity-40 select-none touch-manipulation";
 
-function HoldToSkip({ step, onSkip, className = "" }: { step: number; onSkip: () => void; className?: string }) {
+export function HoldToSkip({
+  step,
+  onSkip,
+  className = "",
+  label = "Hold to skip",
+  sub = `step ${step}`,
+  ariaLabel = `Hold to skip step ${step}`,
+  testId = "ride-skip",
+}: {
+  step: number;
+  onSkip: () => void;
+  className?: string;
+  /** Run mode's controls lock (docs/plans/run-logger.md, 4.6) holds the same way to unlock. */
+  label?: string;
+  sub?: string | null;
+  ariaLabel?: string;
+  testId?: string;
+}) {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [holding, setHolding] = useState(false);
   const stop = () => {
@@ -74,7 +91,7 @@ function HoldToSkip({ step, onSkip, className = "" }: { step: number; onSkip: ()
   return (
     <button
       type="button"
-      aria-label={`Hold to skip step ${step}`}
+      aria-label={ariaLabel}
       onPointerDown={begin}
       onPointerMove={off}
       onPointerUp={stop}
@@ -89,15 +106,15 @@ function HoldToSkip({ step, onSkip, className = "" }: { step: number; onSkip: ()
       onKeyUp={stop}
       onContextMenu={(e) => e.preventDefault()}
       className={`${BTN} relative overflow-hidden bg-muted px-2 ${className}`}
-      data-testid="ride-skip"
+      data-testid={testId}
     >
       <span
         aria-hidden
         className="absolute inset-y-0 left-0 bg-foreground/15"
         style={{ width: holding ? "100%" : "0%", transition: holding ? `width ${HOLD_TO_SKIP_MS}ms linear` : "none" }}
       />
-      <span className="relative block whitespace-nowrap leading-tight text-sm min-[360px]:text-base">Hold to skip</span>
-      <span className="relative block text-xs font-normal text-muted-foreground">step {step}</span>
+      <span className="relative block whitespace-nowrap leading-tight text-sm min-[360px]:text-base">{label}</span>
+      {sub && <span className="relative block text-xs font-normal text-muted-foreground">{sub}</span>}
     </button>
   );
 }
@@ -141,6 +158,21 @@ function TargetCard({ s, compact = false }: { s: RideScreen; compact?: boolean }
   );
 }
 
+/**
+ * "Work · 1 of 2 · 15 min" that wraps only between its parts, each dot kept
+ * with the part before it, so a narrow phone never leaves "min" alone on a
+ * line and no line starts with a dot (as on the Plan screens).
+ */
+export function DotParts({ text }: { text: string }) {
+  const parts = text.split(" · ");
+  return parts.map((p, i) => (
+    <span key={i}>
+      {i > 0 && " "}
+      <span className="whitespace-nowrap">{i < parts.length - 1 ? `${p} ·` : p}</span>
+    </span>
+  ));
+}
+
 function NextCard({ s }: { s: RideScreen }) {
   return (
     <div
@@ -149,7 +181,7 @@ function NextCard({ s }: { s: RideScreen }) {
       data-last-minute={s.lastMinute ? "true" : undefined}
     >
       <span className="min-w-0 py-2">
-        <span className="text-muted-foreground">Next</span> {s.next.title}
+        <span className="text-muted-foreground">Next</span> <DotParts text={s.next.title} />
       </span>
       {s.next.target && <span className="shrink-0 py-2 tabular-nums">{s.next.target}</span>}
     </div>

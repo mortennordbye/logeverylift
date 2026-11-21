@@ -10,20 +10,41 @@
 import { db } from "@/db";
 import { programSets, rideEvents, rides, workoutSessions } from "@/db/schema";
 import type { PlannedStepSnapshot } from "@/lib/utils/program-steps";
-import { rideTimeline, type RidePlan } from "@/lib/utils/ride-timeline";
+import { planSport, rideTimeline, type RidePlan } from "@/lib/utils/ride-timeline";
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 
 type Executor = Pick<typeof db, "select">;
 
-/** The user's latest ride on this workout session, or null. */
-export async function sessionRide(ex: Executor, userId: string, sessionId: number) {
+/**
+ * The user's latest ride on this workout session, or null. With a program
+ * exercise, the latest ride of that exercise: a program with a bike and a run
+ * exercise keeps them apart (docs/plans/run-logger.md, 4.3).
+ */
+export async function sessionRide(ex: Executor, userId: string, sessionId: number, programExerciseId?: number) {
   const [ride] = await ex
     .select()
     .from(rides)
-    .where(and(eq(rides.userId, userId), eq(rides.sessionId, sessionId)))
+    .where(
+      and(
+        eq(rides.userId, userId),
+        eq(rides.sessionId, sessionId),
+        programExerciseId !== undefined ? eq(rides.programExerciseId, programExerciseId) : undefined,
+      ),
+    )
     .orderBy(desc(rides.startedAt), desc(rides.id))
     .limit(1);
   return ride ?? null;
+}
+
+/** The latest ride of each program exercise on this workout session, newest first (a ride and a run can share one). */
+export async function sessionRides(ex: Executor, userId: string, sessionId: number) {
+  const all = await ex
+    .select()
+    .from(rides)
+    .where(and(eq(rides.userId, userId), eq(rides.sessionId, sessionId)))
+    .orderBy(desc(rides.startedAt), desc(rides.id));
+  const seen = new Set<number | null>();
+  return all.filter((r) => !seen.has(r.programExerciseId) && seen.add(r.programExerciseId));
 }
 
 /** The step of a frozen plan that logs to this program set: a ridden step or a dropped one. */
@@ -37,12 +58,18 @@ export function planStepOf(plan: RidePlan, programSetId: number) {
  * its plan does not hold this program set.
  */
 export async function rideStepSnapshot(ex: Executor, userId: string, sessionId: number, programSetId: number): Promise<PlannedStepSnapshot | null> {
-  const ride = await sessionRide(ex, userId, sessionId);
-  const s = ride ? planStepOf(ride.plan as RidePlan, programSetId) : null;
-  if (!ride || !s) return null;
-  // plan-read: includes deleted (the block of a set the program may have dropped since)
-  const [row] = s.round ? await ex.select({ blockId: programSets.blockId }).from(programSets).where(eq(programSets.id, programSetId)) : [];
-  return { v: 2, sport: "bike", step: s.step, blockId: row?.blockId ?? null, blockRound: s.round?.index ?? null, thresholds: (ride.plan as RidePlan).thresholds };
+  // plan-read: includes deleted (the exercise and block of a set the program may have dropped since)
+  const [row] = await ex
+    .select({ programExerciseId: programSets.programExerciseId, blockId: programSets.blockId })
+    .from(programSets)
+    .where(eq(programSets.id, programSetId));
+  if (!row) return null;
+  const ride = await sessionRide(ex, userId, sessionId, row.programExerciseId);
+  const plan = ride ? (ride.plan as RidePlan) : null;
+  const s = plan ? planStepOf(plan, programSetId) : null;
+  if (!plan || !s) return null;
+  // The snapshot's sport is the plan's (4.7): a run step keeps a run snapshot.
+  return { v: 2, sport: planSport(plan), step: s.step, blockId: s.round ? row.blockId : null, blockRound: s.round?.index ?? null, thresholds: plan.thresholds };
 }
 
 /**
@@ -50,12 +77,18 @@ export async function rideStepSnapshot(ex: Executor, userId: string, sessionId: 
  * by its timeline (a stored status settles on the app's next read), else null.
  */
 export async function liveRideOnSession(ex: Executor, userId: string, sessionId: number): Promise<number | null> {
-  const ride = await sessionRide(ex, userId, sessionId);
-  if (!ride || (ride.status !== "running" && ride.status !== "paused")) return null;
+  // Any exercise's: one session can hold a ride and a run, and only one of them runs.
+  const [ride] = await ex
+    .select()
+    .from(rides)
+    .where(and(eq(rides.userId, userId), eq(rides.sessionId, sessionId), inArray(rides.status, ["running", "paused"])))
+    .limit(1);
+  if (!ride) return null;
   const events = await ex.select().from(rideEvents).where(eq(rideEvents.rideId, ride.id)).orderBy(asc(rideEvents.seq));
   const t = rideTimeline(
     ride.plan as RidePlan,
-    events.map((e) => ({ seq: e.seq, kind: e.kind, value: e.value, at: e.at.getTime() })),
+    // With the step keys, as settle reads them: a run ignores an event meant for another step.
+    events.map((e) => ({ seq: e.seq, kind: e.kind, value: e.value, at: e.at.getTime(), stepKey: e.stepKey })),
     Date.now(),
     { heartbeatAt: ride.heartbeatAt?.getTime() ?? null },
   );

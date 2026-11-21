@@ -51,7 +51,7 @@ export function LogRunModal({
     if (isNaN(n) || n < 0) return null;
     return fieldToMeters(n, unit, targetDistanceMeters);
   };
-  // A ride has no default distance: the field starts empty (0).
+  // A ride or a run has no default distance: the field starts empty (0).
   const startDistance = targetDistanceMeters ?? cfg.defaultDistanceM;
   const [distanceMeters, setDistanceMeters] = useState(startDistance ?? 0);
   const [durationSeconds, setDurationSeconds] = useState(
@@ -318,7 +318,7 @@ export function LogRunModal({
         <div className="px-5 pt-6">
           <button
             onClick={handleConfirm}
-            // A ride logs on its time alone; a run or swim needs its distance.
+            // A ride or a run logs on its time alone; a swim needs its distance.
             disabled={distanceMeters <= 0 && (cfg.defaultDistanceM != null || durationSeconds <= 0)}
             className="w-full rounded-xl bg-primary py-4 text-base font-semibold text-primary-foreground transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
           >

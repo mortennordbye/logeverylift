@@ -48,11 +48,10 @@ describe("runPaceLoad", () => {
     close(r?.intensityFactor, 0.8);
     close(r?.load, 64);
   });
-  it("gives nothing without a threshold, below the floors, on an incline, or with a bad IF", () => {
+  it("gives nothing without a threshold, below the floors, or with a bad IF", () => {
     expect(runPaceLoad({ seconds: 3600, meters: 12000 }, null)).toBeNull();
     expect(runPaceLoad({ seconds: 299, meters: 1000 }, threshold)).toBeNull();
     expect(runPaceLoad({ seconds: 600, meters: 399 }, threshold)).toBeNull();
-    expect(runPaceLoad({ seconds: 3600, meters: 12000, inclinePercent: 3 }, threshold)).toBeNull();
     expect(runPaceLoad({ seconds: 600, meters: 9000 }, threshold)).toBeNull(); // IF 3.6: a typo
   });
 });
@@ -75,7 +74,8 @@ describe("sessionLoad", () => {
   it("run: pace first, then sRPE", () => {
     expect(sessionLoad({ sport: "run", seconds: 3600, meters: 12000, rpe: 9 }, anchors)).toMatchObject({ method: "run_pace" });
     expect(sessionLoad({ sport: "run", seconds: 3600, meters: 12000, rpe: 5 }, {})).toEqual({ load: 3600 / 60 * 5 * 0.22, method: "srpe" });
-    expect(sessionLoad({ sport: "run", seconds: 3600, meters: 12000, inclinePercent: 5, rpe: 5 }, anchors).method).toBe("srpe");
+    // A treadmill incline is grade-adjusted, not a reason to fall back to sRPE (docs/plans/run-logger.md, section 3).
+    expect(sessionLoad({ sport: "run", seconds: 3600, meters: 12000, inclinePercent: 5, rpe: 5 }, anchors).method).toBe("run_pace");
   });
   it("swim: CSS on moving time when given, then sRPE", () => {
     const withMoving = sessionLoad({ sport: "swim", seconds: 3600, movingSeconds: 3000, meters: 3000, rpe: 6 }, anchors);

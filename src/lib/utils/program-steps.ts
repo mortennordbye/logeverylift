@@ -52,6 +52,9 @@ export type StepRow = {
   ramp: unknown;
   free: boolean;
   outdoorTarget: unknown;
+  // Run only (docs/plans/run-logger.md, step 0): a treadmill step's incline in % and its belt in km/h.
+  inclinePercent: number | null;
+  beltKmh: number | null;
 };
 
 /** The step fields of a row, as written: everything StepRow has except id and setNumber. */
@@ -75,6 +78,8 @@ export const EMPTY_STEP_FIELDS: StepFields = {
   ramp: null,
   free: false,
   outdoorTarget: null,
+  inclinePercent: null,
+  beltKmh: null,
 };
 
 /** The program_sets columns that make a row a step, for every path that copies sets field by field. */
@@ -93,6 +98,7 @@ export const STEP_FIELD_KEYS = [
   "ramp",
   "free",
   "outdoorTarget",
+  "beltKmh",
 ] as const satisfies readonly (keyof StepFields)[];
 
 /** The step columns of a row (the end columns are copied with the set's own fields). */
@@ -118,8 +124,12 @@ function targetsOf(r: StepRow): { target?: WorkoutTarget; target2?: WorkoutTarge
   };
 }
 
-/** One row as a tree step. Problems with the end are returned, not thrown. */
-function rowStep(r: StepRow): { step: WorkoutStep } | { problem: string } {
+/**
+ * One row as a tree step. Problems with the end are returned, not thrown. A
+ * row's incline and belt are run step fields; another sport's row keeps its
+ * incline to itself, as it did before steps had one.
+ */
+function rowStep(r: StepRow, sport: WorkoutSport | null): { step: WorkoutStep } | { problem: string } {
   const ends = [r.endsOnLap, r.durationSeconds != null && r.durationSeconds > 0, r.distanceMeters != null && r.distanceMeters > 0].filter(Boolean).length;
   if (ends !== 1) return { problem: "give exactly one end: time, distance or lap" };
   const end: WorkoutStep["end"] = r.endsOnLap
@@ -139,15 +149,17 @@ function rowStep(r: StepRow): { step: WorkoutStep } | { problem: string } {
     ...(r.ramp != null && { ramp: r.ramp as WorkoutRamp }),
     ...(r.free && { free: true as const }),
     ...(r.outdoorTarget != null && { outdoor: r.outdoorTarget as WorkoutTarget }),
+    ...(sport === "run" && r.inclinePercent != null && { incline: r.inclinePercent }),
+    ...(sport === "run" && r.beltKmh != null && { belt: r.beltKmh }),
   };
   if ((r.cadenceLow == null) !== (r.cadenceHigh == null)) return { problem: "give both cadence bounds" };
   return { step };
 }
 
-/** One step row as a tree step, or null when its end is broken. */
-export function stepOfRow(r: StepRow): WorkoutStep | null {
+/** One step row as a tree step, or null when its end is broken. `sport` is the exercise's: only a run step reads incline and belt. */
+export function stepOfRow(r: StepRow, sport: WorkoutSport | null = null): WorkoutStep | null {
   if (r.stepKind == null) return null;
-  const s = rowStep(r);
+  const s = rowStep(r, sport);
   return "step" in s ? s.step : null;
 }
 
@@ -197,7 +209,7 @@ export function buildWorkout(
     }
     if (r.blockId == null) {
       if (r.blockRound != null) problems.push({ setNumber: r.setNumber, message: "a round needs a block" });
-      const s = rowStep(r);
+      const s = rowStep(r, meta.sport);
       if ("problem" in s) problems.push({ setNumber: r.setNumber, message: s.problem });
       else {
         nodes.push(s.step);
@@ -237,14 +249,14 @@ export function buildWorkout(
     const first = rounds.get(1) ?? [];
     const firstSteps: WorkoutStep[] = [];
     for (const x of first) {
-      const s = rowStep(x);
+      const s = rowStep(x, meta.sport);
       if ("problem" in s) problems.push({ setNumber: x.setNumber, message: s.problem });
       else firstSteps.push(s.step);
     }
     for (const [n, list] of rounds) {
       if (n === 1) continue;
       const same = list.length === first.length && list.every((x, k) => {
-        const s = rowStep(x);
+        const s = rowStep(x, meta.sport);
         return "step" in s && firstSteps[k] !== undefined && sameStep(s.step, firstSteps[k]);
       });
       if (!same) problems.push({ setNumber: list[0].setNumber, message: `round ${n} of the repeat block differs from round 1` });
@@ -337,6 +349,8 @@ export function workoutToRows(w: Workout): (StepFields & { setNumber: number })[
     ramp: s.ramp ?? null,
     free: s.free ?? false,
     outdoorTarget: s.outdoor ?? null,
+    inclinePercent: s.incline ?? null,
+    beltKmh: s.belt ?? null,
   });
   let block = 0;
   for (const n of w.steps) {
@@ -362,7 +376,11 @@ export type PlainEnduranceSet = {
   setType?: string | null;
   peakDurationSeconds?: number | null;
   peakDistanceMeters?: number | null;
+  inclinePercent?: number | null;
 };
+
+/** How far each side of a plain run set's own pace its pace target reaches (docs/plans/run-logger.md, step 1). */
+const PLAIN_RUN_PACE_BAND = 0.02;
 
 /**
  * Older plain endurance sets as a step tree (docs/plans/one-program-model.md,
@@ -371,6 +389,11 @@ export type PlainEnduranceSet = {
  * zone becomes an HR zone target on LTHR (bike and run). A set ends on the
  * end its weekly-sync anchor scales (time or distance), else on its distance,
  * else on its time, else on the lap button. Rest after a set stays on the set.
+ *
+ * A run (docs/plans/run-logger.md, step 1): a set with time and distance ends
+ * on its time, unless its anchor is the distance alone, and gets the pace of
+ * distance over time as a target: the second one when the set has a zone,
+ * which stays the main target. Its incline becomes the step's incline.
  */
 export function plainSetsToWorkout(sets: PlainEnduranceSet[], meta: { sport: WorkoutSport; name: string; poolLengthM?: number | null }): Workout {
   const steps: WorkoutStep[] = [...sets]
@@ -380,14 +403,27 @@ export function plainSetsToWorkout(sets: PlainEnduranceSet[], meta: { sport: Wor
       const type: WorkoutStep["type"] = s.setType === "warmup" ? "warmup" : s.sessionRole === "work" || (zone ?? 0) >= 4 ? "work" : zone === 1 ? "recovery" : "work";
       const hasDistance = s.distanceMeters != null && s.distanceMeters > 0;
       const hasTime = s.durationSeconds != null && s.durationSeconds > 0;
-      const onTime = hasTime && (!hasDistance || (s.peakDurationSeconds != null && s.peakDistanceMeters == null));
+      const run = meta.sport === "run";
+      const onTime = run
+        ? hasTime && (!hasDistance || !(s.peakDistanceMeters != null && s.peakDurationSeconds == null))
+        : hasTime && (!hasDistance || (s.peakDurationSeconds != null && s.peakDistanceMeters == null));
       const end: WorkoutStep["end"] = onTime
         ? { type: "time", seconds: s.durationSeconds! }
         : hasDistance
           ? { type: "distance", meters: s.distanceMeters! }
           : { type: "lap" };
-      const target: WorkoutTarget | undefined = zone != null && meta.sport !== "swim" ? { metric: "hr", anchor: "lthr", zone } : undefined;
-      return { type, end, ...(target && { target }) };
+      const zoneTarget: WorkoutTarget | undefined = zone != null && meta.sport !== "swim" ? { metric: "hr", anchor: "lthr", zone } : undefined;
+      const speed = run && hasTime && hasDistance ? s.distanceMeters! / s.durationSeconds! : null;
+      const round3 = (n: number) => Math.round(n * 1000) / 1000;
+      const pace: WorkoutTarget | undefined =
+        speed != null && speed >= 0.3 && speed <= 12
+          ? { metric: "pace", anchor: "absolute", low: round3(Math.max(0.3, speed * (1 - PLAIN_RUN_PACE_BAND))), high: round3(Math.min(12, speed * (1 + PLAIN_RUN_PACE_BAND))) }
+          : undefined;
+      // The zone stays the main target, so the weekly sync still moves it and
+      // the limits judge it; the set's own pace is the second target.
+      const [target, target2] = zoneTarget ? [zoneTarget, pace] : [pace, undefined];
+      const incline = run && s.inclinePercent != null ? s.inclinePercent : undefined;
+      return { type, end, ...(target && { target }), ...(target2 && { target2 }), ...(incline !== undefined && { incline }) };
     });
   return { v: 2, sport: meta.sport, name: meta.name.trim().slice(0, 80) || "Session", ...(meta.poolLengthM != null && { poolLengthM: meta.poolLengthM }), steps: steps.length ? steps : [{ type: "work", end: { type: "lap" } }] };
 }

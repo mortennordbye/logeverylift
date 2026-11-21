@@ -92,7 +92,7 @@ export function NewSetView({
   const [runMode, setRunMode] = useState<"distance" | "time">(
     lastSet?.distanceMeters != null ? "distance"
     : lastSet?.durationSeconds != null ? "time"
-    // A ride has no default distance, so it starts on time.
+    // A ride or a run has no default distance, so it starts on time.
     : cfg.defaultDistanceM != null ? "distance" : "time"
   );
   const [reps, setReps] = useState(lastSet?.targetReps ?? 10);

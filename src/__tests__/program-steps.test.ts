@@ -199,6 +199,51 @@ describe("plainSetsToWorkout", () => {
     const w = plainSetsToWorkout([{ setNumber: 1, distanceMeters: null, durationSeconds: 600, targetHeartRateZone: 1, sessionRole: null, setType: "warmup" }], { sport: "bike", name: "Ride" });
     expect(w.steps).toEqual([{ type: "warmup", end: { type: "time", seconds: 600 }, target: { metric: "hr", anchor: "lthr", zone: 1 } }]);
   });
+
+  // docs/plans/run-logger.md, step 1.
+  it("a run set with time and distance ends on its time with the pace of distance over time", async () => {
+    const { plainSetsToWorkout } = await import("@/lib/utils/program-steps");
+    const w = plainSetsToWorkout(
+      [
+        { setNumber: 1, distanceMeters: 5000, durationSeconds: 1500, targetHeartRateZone: 2, sessionRole: null },
+        { setNumber: 2, distanceMeters: 3000, durationSeconds: 1200, targetHeartRateZone: null, sessionRole: null },
+      ],
+      { sport: "run", name: "Run" },
+    );
+    // 5000 m in 25 min is 3.333 m/s, as a range 2% each side. The zone stays the main target, so the
+    // weekly sync still moves it and the limits judge it; the pace is the second target.
+    expect(w.steps).toEqual([
+      { type: "work", end: { type: "time", seconds: 1500 }, target: { metric: "hr", anchor: "lthr", zone: 2 }, target2: { metric: "pace", anchor: "absolute", low: 3.267, high: 3.4 } },
+      { type: "work", end: { type: "time", seconds: 1200 }, target: { metric: "pace", anchor: "absolute", low: 2.45, high: 2.55 } },
+    ]);
+    expect(parseWorkout(w).ok).toBe(true);
+  });
+
+  it("a run set whose sync anchor is its distance keeps the distance end, with the pace", async () => {
+    const { plainSetsToWorkout } = await import("@/lib/utils/program-steps");
+    const w = plainSetsToWorkout([{ setNumber: 1, distanceMeters: 10000, durationSeconds: 3600, peakDistanceMeters: 10000, targetHeartRateZone: null, sessionRole: null }], { sport: "run", name: "Run" });
+    expect(w.steps[0]).toMatchObject({ end: { type: "distance", meters: 10000 }, target: { metric: "pace", anchor: "absolute" } });
+  });
+
+  it("a zone 4 tempo with time and distance stays hard with no threshold pace", async () => {
+    const { plainSetsToWorkout } = await import("@/lib/utils/program-steps");
+    const { isHardWorkout } = await import("@/lib/utils/workout-steps");
+    const tempo = { setNumber: 1, distanceMeters: 4000, durationSeconds: 1200, targetHeartRateZone: 4, sessionRole: "work" };
+    expect(isHardWorkout(plainSetsToWorkout([tempo], { sport: "run", name: "Run" }), {})).toBe(true);
+  });
+
+  it("a run set's incline becomes the step's incline; a ride ignores it", async () => {
+    const { plainSetsToWorkout } = await import("@/lib/utils/program-steps");
+    const set = { setNumber: 1, distanceMeters: null, durationSeconds: 1800, targetHeartRateZone: 2, sessionRole: null, inclinePercent: 1.5 };
+    expect(plainSetsToWorkout([set], { sport: "run", name: "Run" }).steps[0]).toMatchObject({ incline: 1.5 });
+    expect(plainSetsToWorkout([set], { sport: "bike", name: "Ride" }).steps[0]).not.toHaveProperty("incline");
+  });
+
+  it("a ride with time and distance keeps today's end and no pace", async () => {
+    const { plainSetsToWorkout } = await import("@/lib/utils/program-steps");
+    const w = plainSetsToWorkout([{ setNumber: 1, distanceMeters: 30000, durationSeconds: 3600, targetHeartRateZone: null, sessionRole: null }], { sport: "bike", name: "Ride" });
+    expect(w.steps).toEqual([{ type: "work", end: { type: "distance", meters: 30000 } }]);
+  });
 });
 
 describe("plainSetsToStepRows (bike-ride-logger, step 1)", () => {

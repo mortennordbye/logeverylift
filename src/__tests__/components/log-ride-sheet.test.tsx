@@ -6,7 +6,8 @@ import { describe, expect, it, vi } from "vitest";
 /**
  * The bike has no default distance (docs/plans/bike-ride-logger.md, D2): a
  * 15 min set once opened at 40 km and showed 160 km/h. The sheet starts empty
- * and shows a speed only once a distance is typed. A run keeps its 5 km.
+ * and shows a speed only once a distance is typed. A run has no 5 km guess
+ * either (docs/plans/run-logger.md, step 1).
  */
 
 vi.mock("@/contexts/user-settings-context", () => ({ useUnits: () => ({ distance: "km", swim: "m" }) }));
@@ -37,9 +38,14 @@ describe("LogRunModal for a ride", () => {
     expect(screen.getAllByText(/32(\.0)? km\/h/).length).toBeGreaterThan(0);
   });
 
-  it("keeps the 5 km default for a run", () => {
-    sheet("run");
-    expect(distanceInput().value).toBe("5");
+  it("starts a run with no distance, and logs the time alone", () => {
+    const onConfirm = sheet("run");
+    expect(distanceInput().value).toBe("");
+    expect(screen.queryByText(/\/km/)).toBeNull();
+    const log = screen.getByRole("button", { name: "Log Run" });
+    expect((log as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(log);
+    expect(onConfirm).toHaveBeenCalledWith(0, 900, 7, null, null);
   });
 
   it("the button text has a middle dot, no em dash, for every discipline", () => {
@@ -50,6 +56,7 @@ describe("LogRunModal for a ride", () => {
 
   it("a run's button text has a middle dot too", () => {
     sheet("run");
+    fireEvent.change(distanceInput(), { target: { value: "5" } });
     const button = screen.getByRole("button", { name: /^Log Run · 5 km/ });
     expect(button.textContent).not.toContain("—");
   });

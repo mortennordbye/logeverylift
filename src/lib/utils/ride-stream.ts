@@ -21,7 +21,7 @@ import type { RidePlanStep } from "@/lib/utils/ride-timeline";
 
 type Series = (number | null)[];
 
-export type RideStreams = { t: Series; power?: Series; hr?: Series; cadence?: Series; speed?: Series; distance?: Series; altitude?: Series };
+export type RideStreams = { t: Series; power?: Series; hr?: Series; cadence?: Series; speed?: Series; distance?: Series; altitude?: Series; lat?: Series };
 /** The FIT lap and timer event fields this file reads (src/lib/garmin/fit.ts keeps them as plain JSON). */
 export type FitLap = { startTime?: unknown; totalElapsedTime?: unknown; totalTimerTime?: unknown };
 export type FitEvent = { timestamp?: unknown; eventType?: unknown };
@@ -120,8 +120,11 @@ function indices(t: Series, w: { from: number; to: number; gaps?: [number, numbe
   return out;
 }
 
+/** The sample indices inside a window, outside its gaps (the run numbers read them too). */
+export const sampleIndices = (t: Series, w: { from: number; to: number; gaps?: [number, number][] }): number[] => indices(t, w);
+
 /** Time-weighted mean of a series over samples; `keep` picks the values that count. */
-function weightedMean(series: Series | undefined, idx: number[], d: number[], keep: (v: number) => boolean = () => true): number | null {
+export function weightedMean(series: Series | undefined, idx: number[], d: number[], keep: (v: number) => boolean = () => true): number | null {
   if (!series) return null;
   let sum = 0;
   let secs = 0;

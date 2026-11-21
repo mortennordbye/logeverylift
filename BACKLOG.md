@@ -11,16 +11,22 @@ When you finish an item, delete it. When you add an item, write enough that some
 ## New features — additive
 
 ### Turn on ride step alerts in prod (VAPID keys)
-- **What:** Ride step alerts (web push, docs/plans/bike-ride-logger.md 4.7) are built but off in prod, because no VAPID keys are set. Make a key pair (`npx web-push generate-vapid-keys`), store `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` and `VAPID_SUBJECT` (a `mailto:` address) in Bitwarden Secrets Manager (the `secrets` skill), add the three to the logeverylift ExternalSecret in the homelab repo (`k8s/talos/apps/logeverylift`), and check that the pod env has them and the log says `[ridePush] alerts send every 5s`. Then do the owner check of the brief's section 8: a ride with the phone locked, a push at each step and one minute before.
-- **Why deferred:** The owner chose not to wire the keys in this build.
+- **What:** Ride and run step alerts (web push, docs/plans/bike-ride-logger.md 4.7, docs/plans/run-logger.md step 6) are built but off in prod, because no VAPID keys are set. Make a key pair (`npx web-push generate-vapid-keys`), store `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` and `VAPID_SUBJECT` (a `mailto:` address) in Bitwarden Secrets Manager (the `secrets` skill), add the three to the logeverylift ExternalSecret in the homelab repo (`k8s/talos/apps/logeverylift`), and check that the pod env has them and the log says `[ridePush] alerts send every 5s`. Then do the owner check of the brief's section 8: a ride with the phone locked, a push at each step and one minute before. And the run check: an outdoor run with the phone locked, an alert at each step and one at the start and end of a strides block.
+- **Why deferred:** The owner chose not to wire the keys in this build (bike D7, run R7).
 - **Unblocked by:** The owner's go.
 - **Touchpoints:** `src/lib/env.ts` (the three vars, all or none), `src/lib/push.ts` (`pushKeys`, `startRidePushLoop`), `src/instrumentation.ts`, `public/push-sw.js`, the ExternalSecret in the homelab repo.
 
-### Run and swim on the ride logger's parts (D1)
-- **What:** Give run and swim exercises what the bike got in docs/plans/bike-ride-logger.md: the exercise screen with the planned profile and step list, a server-kept session with a frozen plan and events driven by one timeline, each step saved when it ends, a results table and summary, step alerts, the Garmin fill and the outdoor targets. Run and swim keep today's steps and the old guided player (`/planned/[id]/play`).
-- **Why deferred:** Decision D1 of the brief: bike only in this build.
-- **Unblocked by:** A brief of its own: which numbers a run and a swim summary show (pace, CSS, stroke), how a pool swim's lengths map to steps, and whether `rides` becomes a general table or gets siblings.
+### Swim on the ride logger's parts (D1)
+- **What:** Give swim exercises what the bike got in docs/plans/bike-ride-logger.md: the exercise screen with the planned profile and step list, a server-kept session with a frozen plan and events driven by one timeline, each step saved when it ends, a results table and summary, step alerts and the Garmin fill. Swim keeps today's steps and the old guided player (`/planned/[id]/play`). Run has its own brief, docs/plans/run-logger.md.
+- **Why deferred:** Decision D1 of the bike brief and R1 of the run brief: one sport at a time.
+- **Unblocked by:** A brief of its own: which numbers a swim summary shows (CSS, stroke), how a pool swim's lengths map to steps, and how the pool screen fits run mode's parts.
 - **Touchpoints:** `src/components/features/bike/`, `src/lib/actions/rides.ts`, `src/lib/ride-settle.ts`, `src/lib/utils/ride-timeline.ts`, `src/lib/ride-garmin.ts`, `src/components/features/guided/GuidedPlayer.tsx`, `src/lib/program-steps-view.ts`.
+
+### Run logger parts left out of its brief
+- **What:** From docs/plans/run-logger.md section 8: mph and min/mi units; a fuel prompt at the end of runs of 75 min or more and of bricks; run dynamics (ground contact, stride length) and run power numbers; sending runs to the watch; a race or stroller flag that leaves a run out of the drift and pace models.
+- **Why deferred:** The owner chose km only (R6, 2026-11-20); the rest is outside the brief's scope, which the four reviews of 2026-11-20 settled.
+- **Unblocked by:** The run logger being live, then the owner asking for one of them.
+- **Touchpoints:** `src/lib/utils/discipline.ts` (units), `src/lib/garmin/fit.ts` (run dynamics streams), `src/lib/mcp/tools/endurance-app.ts` (fuel), the run exercise screens the brief adds.
 
 ### Ride GPS track and map from Garmin
 - **What:** Show an outdoor ride's track on a map in its summary, from the Garmin activity the fill matched (the stream holds `lat` and `lng`).

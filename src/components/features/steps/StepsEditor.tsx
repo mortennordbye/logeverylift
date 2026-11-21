@@ -12,6 +12,7 @@ import { PlanSheetPanel } from "@/components/features/PlanSheetPanel";
 import { saveExerciseSteps } from "@/lib/actions/program-steps";
 import { formatSessionLength, loadText } from "@/lib/utils/format";
 import { TEST_NAME, ftpTestWorkout } from "@/lib/utils/ftp-tests";
+import { RUN_TEST_MODES, RUN_TEST_NAME, RUN_TEST_TEXT, runTestWorkout } from "@/lib/utils/run-test";
 import { callAction } from "@/lib/utils/stale-bundle";
 import { workoutPlannedLoad } from "@/lib/utils/step-results";
 import type { Units } from "@/lib/utils/units";
@@ -311,6 +312,11 @@ export function StepsEditor({
             Insert FTP test
           </button>
         )}
+        {sport === "run" && (
+          <button type="button" onClick={() => setTestSheet(true)} className="col-span-2 min-h-11 rounded-2xl border border-border px-3 text-sm font-medium active:opacity-70">
+            Insert run test
+          </button>
+        )}
       </div>
 
       <div className="mt-auto px-4 pt-4 pb-6 flex flex-col gap-2">
@@ -329,7 +335,26 @@ export function StepsEditor({
         </button>
       </div>
 
-      <BottomSheet open={testSheet} onClose={() => setTestSheet(false)}>
+      <BottomSheet open={testSheet && sport === "run"} onClose={() => setTestSheet(false)}>
+        <PlanSheetPanel label="Insert run test" title="Insert run test" sub={<p className="text-sm text-muted-foreground">The test takes the place of these steps. Nothing changes until you save.</p>} testId="run-test-sheet">
+          {RUN_TEST_MODES.map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => {
+                change(runTestWorkout(m, workout.name));
+                setTestSheet(false);
+              }}
+              className="min-h-12 rounded-2xl bg-widget-2 px-4 py-2.5 text-left active:opacity-70"
+            >
+              <span className="block text-base font-semibold">{RUN_TEST_NAME[m]}</span>
+              <span className="block text-xs text-muted-foreground">{RUN_TEST_TEXT[m]}</span>
+            </button>
+          ))}
+        </PlanSheetPanel>
+      </BottomSheet>
+
+      <BottomSheet open={testSheet && sport === "bike"} onClose={() => setTestSheet(false)}>
         <PlanSheetPanel label="Insert FTP test" title="Insert FTP test" sub={<p className="text-sm text-muted-foreground">The test takes the place of these steps. Nothing changes until you save.</p>} testId="ftp-test-sheet">
           {RIDE_TESTS.map((t) => (
             <button

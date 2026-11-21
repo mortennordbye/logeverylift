@@ -349,9 +349,10 @@ export async function syncPeriodizedTargets(
           // Phase-aware: the quality session's hard reps swap zone/recovery by phase.
           // A transition phase leaves them alone (owner decision 2).
           if (ps.sessionRole === "work" && phase !== "transition") {
-            if (ps.stepKind != null && ps.discipline === "bike") {
-              // A bike step has no rest of its own (docs/plans/bike-ride-logger.md,
-              // step 1): the phase's rest goes to the rest step right after it.
+            if (ps.stepKind != null && (ps.discipline === "bike" || ps.discipline === "run")) {
+              // A bike or run step has no rest of its own (docs/plans/bike-ride-logger.md,
+              // step 1; docs/plans/run-logger.md, step 1): the phase's rest goes to
+              // the rest step right after it.
               const [next] = await tx
                 .select({ id: programSets.id, stepKind: programSets.stepKind, blockId: programSets.blockId })
                 .from(programSets)

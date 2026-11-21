@@ -865,7 +865,7 @@ export function WorkoutSetsClient({
             defaultValue={savedNotes}
             maxLength={500}
             onBlur={handleNotesBlur}
-            placeholder="Setup notes: seat height, grip, cues"
+            placeholder="Seat height, grip, cues"
             rows={2}
             className="mt-2 w-full rounded-xl bg-muted px-3 py-2 text-base placeholder:text-muted-foreground/70 focus:outline-none focus:ring-2 focus:ring-primary/40"
           />

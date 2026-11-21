@@ -27,7 +27,7 @@ export default function PrivacyPage() {
         </li>
         <li>
           <strong>Step alerts, if you turn them on:</strong> your device&apos;s push address and the keys that encrypt
-          alerts for it, and the alerts of a bike ride in progress until they are sent.
+          alerts for it, and the alerts of a bike ride or run in progress until they are sent.
         </li>
         <li>
           <strong>Profile, if you fill it in:</strong> gender, year of birth, height, body weight, training goals and
@@ -53,10 +53,14 @@ export default function PrivacyPage() {
           thresholds used), from the guided player or typed in by you or your assistant. For a bike ride the app also keeps
           whether you rode indoors or outdoors, whether you ended before the last step, and per step your average power,
           maximum heart rate, average cadence, average speed, climbing, any change you made to the target, and where each
-          number came from. In ride mode it keeps the ride&apos;s plan as it was at the start and each tap you make (start,
-          pause, skip, an extra minute, a target change, lap, end) with its time. If Garmin is on for your account, a Garmin
-          bike ride that overlaps your ride fills the step numbers you left empty, and the app keeps what was there before
-          so Undo can restore it, and whether you undid it. From your logged sessions and thresholds
+          number came from. For a run in run mode it keeps whether you ran on a treadmill or outdoors, an outdoor
+          run&apos;s surface, the reason you pick if you end it early (tired, pain, time or other), for the run of a brick
+          the ride it follows, and per treadmill step the distance, average speed and incline worked out from the belt
+          speed and incline you set. In ride mode and run mode it keeps the plan as it was at the start and each tap you
+          make (start, pause, skip, an extra minute, a target change, belt speed or incline, lap, end) with its time. If Garmin is on for your account, a Garmin
+          bike ride that overlaps your ride (or a Garmin run that overlaps your run, also as part of a multisport activity)
+          fills the step numbers you left empty, and the app keeps what was there before so Undo can restore it, and
+          whether you undid it. From your logged sessions and thresholds
           the app also works out a training load and your fitness, fatigue and form; these are calculated when shown,
           not stored.
         </li>
@@ -183,11 +187,11 @@ export default function PrivacyPage() {
         </li>
         <li>
           <strong>Your device&apos;s push service</strong> (Apple, Google, Mozilla or Microsoft, in the USA), only if you
-          turn on step alerts for bike rides. During a ride our server sends each alert, such as the next step&apos;s
+          turn on step alerts for bike rides and runs. During a ride or run our server sends each alert, such as the next step&apos;s
           target and time, to the push service your browser uses, which passes it to your device. The text is
           encrypted for your device. The push service sees your device&apos;s push address, when each alert is sent and
           its size, how long it may wait (60 seconds) and that it is urgent, and the operator&apos;s contact address.
-          It does not see which ride the alert is about.
+          It does not see which ride or run the alert is about.
         </li>
         <li>
           <strong>Google Drive</strong> stores an off-site copy of the backups. The backups are encrypted before they
@@ -235,7 +239,7 @@ export default function PrivacyPage() {
       <p>
         <strong>AI assistants you connect yourself</strong> (MCP) get the access you choose when you connect them:
         read only, or read and change. They can read your profile, body weight, time zone, display units, how your home screen is arranged, whether endurance features are
-        on, programs (with their structured steps), cycles and their dated sessions with planned versus done, step results, your bike rides from ride mode, and training load, seasons and their races, coach memory, thresholds, the athlete profile with injuries and sick periods, fuel logs, fuel products, sweat tests and race plans, and workout history: sets, weights, heart rate zones, effort, how you felt, your readiness and the
+        on, programs (with their structured steps), cycles and their dated sessions with planned versus done, step results, your bike rides from ride mode and runs from run mode, and training load, seasons and their races, coach memory, thresholds, the athlete profile with injuries and sick periods, fuel logs, fuel products, sweat tests and race plans, and workout history: sets, weights, heart rate zones, effort, how you felt, your readiness and the
         notes you write on workouts, sets and exercises. If Garmin is on for your account, they can also read data from it. With read and change
         access they can also change your profile, body weight, time zone, display units, programs and their steps, cycles, dated sessions, seasons and races, see and restore earlier
         versions of your programs, cycles and seasons, write coach memory, thresholds, the athlete profile, injuries and sick periods, log fuel, sweat tests and fuel products, change race plans, create custom exercises, log a workout you did and its step results, mark a planned day

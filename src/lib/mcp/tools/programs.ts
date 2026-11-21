@@ -41,8 +41,9 @@ import { reanchoredPeaks } from "@/lib/utils/periodization";
 import { REP_RANGE_MESSAGE, repRangeIsWellFormed } from "@/lib/validators/workout";
 import { StepRowsError, settleStepRows } from "@/lib/program-steps-db";
 import { workoutToRows } from "@/lib/utils/program-steps";
-import { RIDE_TESTS, parseWorkout, programStepFieldsSchema, type Workout } from "@/lib/utils/workout-steps";
+import { RIDE_TESTS, inclinePercentSchema, parseWorkout, programStepFieldsSchema, type Workout } from "@/lib/utils/workout-steps";
 import { ftpTestWorkout } from "@/lib/utils/ftp-tests";
+import { RUN_TEST_MODES, runTestWorkout } from "@/lib/utils/run-test";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { and, asc, eq, inArray, isNull, or } from "drizzle-orm";
 import { z } from "zod";
@@ -95,7 +96,7 @@ const setShape = z
     weightKg: z.number().nonnegative().max(9999).nullable().optional(),
     durationSeconds: z.number().int().positive().nullable().optional(),
     distanceMeters: z.number().int().positive().nullable().optional(),
-    inclinePercent: z.number().int().min(0).max(30).nullable().optional(),
+    inclinePercent: inclinePercentSchema.nullable().optional(),
     targetHeartRateZone: z.number().int().min(1).max(5).nullable().optional(),
     sessionRole: z.enum(["work"]).nullable().optional(),
     startDelaySeconds: z.number().int().min(0).max(60).nullable().optional(),
@@ -166,6 +167,7 @@ function setValues(programExerciseId: number, s: SetInput) {
     ramp: s.ramp ?? null,
     free: s.free ?? false,
     outdoorTarget: s.outdoorTarget ?? null,
+    beltKmh: s.beltKmh ?? null,
   };
 }
 
@@ -271,7 +273,7 @@ export function registerProgramTools(server: McpServer, userId: string, clientId
     "get_program",
     {
       description:
-        "Get one program with its ordered exercise slots and planned sets, and its version. Pass the version as expectedVersion when you change it. A step set holds its step fields as written (stepKind, targets, cadence, note, and on a bike ramp, free and outdoorTarget); a bike slot holds rideTest, the FTP test of its ride or null.",
+        "Get one program with its ordered exercise slots and planned sets, and its version. Pass the version as expectedVersion when you change it. A step set holds its step fields as written (stepKind, targets, cadence, note, on a bike ramp, free and outdoorTarget, and on a run beltKmh, inclinePercent and outdoorTarget); a bike or run slot holds rideTest, the test of its ride or run (ramp or 20min on a bike, 30min on a run) or null.",
       inputSchema: { programId: z.number().int().positive() },
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
@@ -380,8 +382,9 @@ export function registerProgramTools(server: McpServer, userId: string, clientId
         "Each set takes setNumber and optional targetReps, repRangeMin and repRangeMax (both or neither, min <= targetReps <= max), targetRir (0-5), weightKg, durationSeconds, distanceMeters, inclinePercent, targetHeartRateZone (1-5), sessionRole ('work' marks a hard interval rep), startDelaySeconds (0-60, prep time before a timed set), restTimeSeconds and setType. Any other key fails the call. All values are metric.",
         "Field owners: target reps and weight belong to the progression engine; an edit is a one-off until the next logged session (change the progression settings to change the trend). On a set with a peak anchor, distance or duration is this week's value and the peak is re-derived from it. targetHeartRateZone and restTimeSeconds on a 'work' set with a peak anchor belong to the weekly sync: a different value is refused, and an omitted one keeps the sync's value; send sessionRole: null on that set to take them over. To make a whole week lighter or harder, use manage_training_cycle operation='set_volume', not set edits.",
         "operation='update': requires programExerciseId; any provided slot fields are updated. A new exerciseId must be a built-in exercise or one of the user's own. If sets[] is provided it becomes the slot's full set list: an entry with id updates that set, an entry without id updates the set at the same setNumber, other entries are added, and stored sets that no entry names are removed. Set ids never change, so logged workouts keep their link. A set without sessionRole keeps the role it had.",
-        "Endurance steps (swim, bike or run exercises only): a set with stepKind (warmup, work, recovery, cooldown, rest) is one step of a structured session. It ends on exactly one of durationSeconds, distanceMeters or endsOnLap: true. Optional targets (1-2 entries, the shape of a step target in logeverylift://docs/workout-steps; the second caps the first), cadenceLow and cadenceHigh, and for swims stroke, equipment, sendOffSeconds and poolLengthM on the slot; note is a short cue. A repeat block is one set per round: the sets of block 1 round 1, then block 1 round 2, and so on, each with blockId and blockRound, every round the same. Instead of sets[] you can send workout: a step tree with repeats, and it becomes the set list. Either every set of a slot is a step or none is. For a user with endurance features on, a bike slot always holds steps: plain bike sets are stored as steps (each set one step, its targetHeartRateZone a zone target on LTHR, its rest a rest step after it). The whole slot is checked after the write and a broken one is refused with the set numbers.",
-        "Bike steps also take (in sets and in the tree): ramp {anchor ftp or absolute, from, to} in place of the target (no cap with a ramp), free: true for a spin with no target, and an outdoor target (outdoorTarget on a set, outdoor in the tree) that changes only the target on an outdoor ride, never the end; without one the app derives it. A climb, a gradient or terrain is a note on the step (note), never a target, and speed is a result, never a target. A bike tree may carry test: 'ramp' or '20min' for an FTP test ride; it is stored on the slot (get_program shows it as rideTest), a tree without test clears it, and sets[] leaves it. To write the app's own FTP test, send ftpTest: 'ramp' (10 min warm-up, then 1 min steps from 100 W up by 20 W to 500 W; the rider taps Lap when they cannot hold the watts, which ends the ride; FTP = 75% of the best 1 min power) or '20min' (20 min warm-up with two 1 min hard efforts, 5 min easy, 20 min all-out, 10 min cool-down; FTP = 95% of the all-out average) in place of sets[] or workout. Outdoors a test ride is ridden by effort, never a heart rate cap. After the ride get_ride gives the proposed FTP. Ramp, free, outdoor and test on a run or swim are refused. A ride that is running keeps the plan it started with: a program edit applies from the next ride.",
+        "Endurance steps (swim, bike or run exercises only): a set with stepKind (warmup, work, recovery, cooldown, rest) is one step of a structured session. It ends on exactly one of durationSeconds, distanceMeters or endsOnLap: true. Optional targets (1-2 entries, the shape of a step target in logeverylift://docs/workout-steps; the second caps the first), cadenceLow and cadenceHigh, and for swims stroke, equipment, sendOffSeconds and poolLengthM on the slot; note is a short cue. A repeat block is one set per round: the sets of block 1 round 1, then block 1 round 2, and so on, each with blockId and blockRound, every round the same. Instead of sets[] you can send workout: a step tree with repeats, and it becomes the set list. Either every set of a slot is a step or none is. For a user with endurance features on, a bike or run slot always holds steps: plain bike and run sets are stored as steps (each set one step, its targetHeartRateZone a zone target on LTHR, its rest a rest step after it; a run set with time and distance ends on its time, or on its distance when its weekly-sync anchor is the distance alone, with that pace as a target, the second one when the set has a zone; its inclinePercent becomes the step's incline). The whole slot is checked after the write and a broken one is refused with the set numbers.",
+        "Bike steps also take (in sets and in the tree): ramp {anchor ftp or absolute, from, to} in place of the target (no cap with a ramp), free: true for a spin with no target, and an outdoor target (outdoorTarget on a set, outdoor in the tree) that changes only the target on an outdoor ride, never the end; without one the app derives it. A climb, a gradient or terrain is a note on the step (note), never a target, and speed is a result, never a target. A bike tree may carry test: 'ramp' or '20min' for an FTP test ride; it is stored on the slot (get_program shows it as rideTest), a tree without test clears it, and sets[] leaves it. To write the app's own FTP test, send ftpTest: 'ramp' (10 min warm-up, then 1 min steps from 100 W up by 20 W to 500 W; the rider taps Lap when they cannot hold the watts, which ends the ride; FTP = 75% of the best 1 min power) or '20min' (20 min warm-up with two 1 min hard efforts, 5 min easy, 20 min all-out, 10 min cool-down; FTP = 95% of the all-out average) in place of sets[] or workout. Outdoors a test ride is ridden by effort, never a heart rate cap. After the ride get_ride gives the proposed FTP. Ramp and free on a run or swim, and outdoor and test on a swim, are refused. A ride that is running keeps the plan it started with: a program edit applies from the next ride.",
+        "Run steps also take (in sets and in the tree): incline (inclinePercent on a set, -3 to 30 with one decimal) and belt (beltKmh on a set, 1 to 25 km/h with one decimal), both for the treadmill. belt is the speed a treadmill step starts at; without one the app takes it from the pace target, the runner's own belts in that heart rate zone, or the zone's pace, so write it only for a fixed speed (strides, a walk). An incline carries over to the next steps until a step has its own. An outdoor target (outdoorTarget on a set, outdoor in the tree) is used on an outdoor run in place of the target; without one the app derives it (a heart rate cap on easy and long steps, effort on strides and short hard steps). Treadmill stride rule: a belt takes 5 to 15 s to speed up, so write treadmill strides as 30 s work steps (not 20 s) with their belt, and the easy step between them with its own belt (the belt never carries over from a work step). A climb is a note on the step, never a target. A run tree may carry test: '30min' for the run threshold test (stored as rideTest). To write the app's own run test, send runTest: 'treadmill' or 'outdoor' in place of sets[] or workout (warm-up 15 min with 3 x 1 min pickups, then the test as a 10 min and a 20 min step at effort 9-10 with the note 'Run as hard as you can hold for 30 min', then 10 min easy; the treadmill one starts at 10.0 km/h and its 20 min step keeps the belt the runner ended the 10 min on). The runner picks the mode at the start; a test does not start within 7 days of being sick. After the run get_ride gives the proposed LTHR (the 20 min step's average heart rate) and threshold pace (the whole 30 min). A run that is running keeps the plan it started with, as a ride does.",
         "operation='remove': requires programExerciseId.",
         `Every operation requires reason and expectedVersion (the program's version). The result has the program's new version. ${REVISION_RULES}`,
         `On add and update: ${LIMITS_TEXT}`,
@@ -431,6 +434,8 @@ export function registerProgramTools(server: McpServer, userId: string, clientId
         workout: z.unknown().optional(),
         // The app's FTP test template as the step tree (a bike slot).
         ftpTest: z.enum(RIDE_TESTS).optional(),
+        // The app's run threshold test template as the step tree (a run slot).
+        runTest: z.enum(RUN_TEST_MODES).optional(),
         reason: reasonArg,
         expectedVersion: expectedVersionArg,
         sets: z
@@ -458,7 +463,9 @@ export function registerProgramTools(server: McpServer, userId: string, clientId
       // week of the active (or scheduled) cycle that holds it.
       const scopeFor = (programId: number): Promise<LimitScope> => programLimitScope(db, userId, programId);
       if ([args.workout, args.sets, args.ftpTest].filter((x) => x !== undefined).length > 1) return fail("send one of sets, workout or ftpTest");
+      if (args.runTest !== undefined && [args.workout, args.sets, args.ftpTest].some((x) => x !== undefined)) return fail("send one of sets, workout, ftpTest or runTest");
       if (args.ftpTest !== undefined) args = { ...args, workout: ftpTestWorkout(args.ftpTest) };
+      if (args.runTest !== undefined) args = { ...args, workout: runTestWorkout(args.runTest) };
       // A step tree also sets the slot's FTP test: its `test`, or none.
       let rideTest: { rideTest: Workout["test"] | null } | null = null;
       if (args.workout !== undefined) {

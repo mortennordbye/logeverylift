@@ -18,6 +18,7 @@ import { rideGarminView } from "@/lib/ride-garmin";
 import { thresholdValues } from "@/lib/session-compliance";
 import { getUserSettings } from "@/lib/user-settings";
 import { rideFtpTest } from "@/lib/ride-ftp";
+import { runReport } from "@/lib/run-report";
 import { ftpTestThreshold } from "@/lib/utils/ftp-tests";
 import { localDateStr } from "@/lib/utils/user-date";
 import { bikeStepRows, plannedRideNumbers } from "@/lib/utils/bike-ride-view";
@@ -38,6 +39,8 @@ export async function rideReport(userId: string, by: { rideId?: number; workoutS
     .where(
       and(
         eq(rides.userId, userId),
+        // A ride's report; runReport reads a run (rideOrRunReport).
+        eq(rides.sport, "bike"),
         by.rideId != null
           ? eq(rides.id, by.rideId)
           : by.workoutSessionId != null
@@ -76,6 +79,7 @@ export async function rideReport(userId: string, by: { rideId?: number; workoutS
 
   return {
     rideId: ride.id,
+    sport: "bike" as const,
     workoutSessionId: ride.sessionId,
     plannedSessionId: session?.plannedSessionId ?? null,
     programExerciseId: ride.programExerciseId,
@@ -199,4 +203,28 @@ export async function rideReport(userId: string, by: { rideId?: number; workoutS
 }
 
 export type RideReport = NonNullable<Awaited<ReturnType<typeof rideReport>>>;
+
+/**
+ * The user's latest ride or run (docs/plans/run-logger.md, step 5): of a
+ * workout session, of a program exercise, or of that exercise in that
+ * session (a session can hold a ride and a run). A ride reads as
+ * `rideReport`, a run as `runReport`. Null when there is none.
+ */
+export async function rideOrRunReport(userId: string, by: { workoutSessionId?: number; programExerciseId?: number }) {
+  const [ride] = await db
+    .select()
+    .from(rides)
+    .where(
+      and(
+        eq(rides.userId, userId),
+        by.workoutSessionId != null ? eq(rides.sessionId, by.workoutSessionId) : undefined,
+        by.programExerciseId != null ? eq(rides.programExerciseId, by.programExerciseId) : undefined,
+      ),
+    )
+    .orderBy(desc(rides.startedAt), desc(rides.id))
+    .limit(1);
+  if (!ride) return null;
+  if (ride.sport === "run") return runReport(userId, ride);
+  return rideReport(userId, { rideId: ride.id });
+}
 

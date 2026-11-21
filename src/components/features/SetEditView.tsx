@@ -205,7 +205,7 @@ function SetEditForm({
   const repsMin = isWorkout ? 0 : 1;
   const [duration, setDuration] = useState(override?.durationSeconds ?? Number(set.durationSeconds ?? 0));
   const [startDelay, setStartDelay] = useState(override?.startDelaySeconds ?? set.startDelaySeconds ?? 0);
-  // A ride has no default distance: the field starts empty (0).
+  // A ride or a run has no default distance: the field starts empty (0).
   const startDistance = set.distanceMeters ?? cfg.defaultDistanceM;
   const [distanceMeters, setDistanceMeters] = useState(startDistance ?? 0);
   const [distanceStr, setDistanceStr] = useState(startDistance != null ? metersToInput(startDistance) : "");

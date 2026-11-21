@@ -290,6 +290,10 @@ test("skip, undo, +1 min, ±5 W, pause and End ride save the right status, time 
   // Later leaves the table unsaved; the exercise then shows the summary, ended early, plan only.
   await page.getByRole("link", { name: "Later" }).click();
   await expect(page).toHaveURL(/\/$/);
+  // The URL turns to home with its skeleton while the page is still on its way. A goto
+  // then cuts that fetch, and the router falls back to loading home in full, which
+  // interrupts the goto (Linux WebKit). Wait for the home page itself first.
+  await expect(page.getByRole("button", { name: "Edit home" })).toBeVisible();
   await page.goto(`/programs/${s.programId}/workout/exercises/${s.peId}`);
   // A streamed copy of the page can sit hidden for a moment: look at the visible one.
   const visible = (id: string) => page.getByTestId(id).filter({ visible: true });

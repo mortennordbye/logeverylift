@@ -30,6 +30,7 @@ import { fail, failInternal, ok } from "@/lib/mcp/result";
 import { REVISION_RULES, assistantContext, expectedVersionArg, planErrorResult, reasonArg } from "@/lib/mcp/revisions";
 import { userToday } from "@/lib/user-settings";
 import { toDateStr } from "@/lib/utils/cycle-position";
+import { paceSeconds, paceText } from "@/lib/utils/run-numbers";
 import { strengthDefault, strengthTable } from "@/lib/utils/strength-goal";
 import { THRESHOLD_MEASURE, currentThresholds, isStale, minSec, protocolsFor, thresholdWarnings, weeksSince } from "@/lib/utils/thresholds";
 import { dateStr, dayOfWeek, testData } from "@/lib/validators/athlete-profile";
@@ -44,7 +45,7 @@ function thresholdOut(t: ThresholdRow, today: string) {
     kind: t.kind,
     value: Math.round(t.value * 1000) / 1000,
     unit: m === "watts" ? "W" : m === "bpm" ? "bpm" : "m/s",
-    ...(m === "runPace" ? { paceSecondsPerKm: Math.round(1000 / t.value), pace: `${minSec(1000 / t.value)} /km` } : {}),
+    ...(m === "runPace" ? { paceSecondsPerKm: paceSeconds(1000 / t.value), pace: paceText(1000 / t.value) } : {}),
     ...(m === "swimPace" ? { paceSecondsPer100m: Math.round(100 / t.value), pace: `${minSec(100 / t.value)} /100m` } : {}),
     measuredOn: t.measuredOn,
     source: t.source,

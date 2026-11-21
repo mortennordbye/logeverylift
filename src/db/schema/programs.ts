@@ -160,7 +160,8 @@ export const programExercises = pgTable("program_exercises", {
   // Bike exercises: the FTP test the ride is, "ramp" or "20min" (RIDE_TESTS in
   // src/lib/utils/workout-steps.ts; docs/plans/bike-ride-logger.md, 4.9). The
   // step tree carries it as `test`. Null for any other ride or exercise.
-  rideTest: text("ride_test", { enum: ["ramp", "20min"] }),
+  // A run exercise: "30min", the run threshold test (RUN_TESTS, docs/plans/run-logger.md, 4.10).
+  rideTest: text("ride_test", { enum: ["ramp", "20min", "30min"] }),
   deletedAt: timestamp("deleted_at"),
 });
 
@@ -198,8 +199,12 @@ export const programSets = pgTable("program_sets", {
   // toward, in seconds. Null = duration not periodized. Set when a periodized set is
   // switched to Time mode; the active cycle scales durationSeconds from this each week.
   peakDurationSeconds: integer("peak_duration_seconds"),
-  // For running: treadmill incline (whole percent, 0-30)
-  inclinePercent: integer("incline_percent"),
+  // For running: treadmill incline in percent, -3 to 30 with one decimal
+  // (docs/plans/run-logger.md, step 0).
+  inclinePercent: real("incline_percent"),
+  // A treadmill run step's belt speed in km/h, written on the step (4.2). Null
+  // means the belt comes from the step's target.
+  beltKmh: real("belt_kmh"),
   // For running: target heart rate zone (1-5)
   targetHeartRateZone: integer("target_heart_rate_zone"),
   // Rest after this set (seconds)

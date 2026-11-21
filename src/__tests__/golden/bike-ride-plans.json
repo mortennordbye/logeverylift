@@ -1,0 +1,5588 @@
+{
+ "tempo/0/indoor": {
+  "v": 1,
+  "mode": "indoor",
+  "name": "Tempo",
+  "thresholds": {
+   "ftp": 250,
+   "lthr_bike": 165
+  },
+  "steps": [
+   {
+    "key": "s1",
+    "programSetId": 1000,
+    "step": {
+     "type": "warmup",
+     "end": {
+      "type": "time",
+      "seconds": 900
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "ftp",
+      "zone": 2
+     },
+     "id": "s1"
+    },
+    "round": null,
+    "seconds": 900,
+    "estSeconds": 900,
+    "target": {
+     "low": 137.5,
+     "high": 185,
+     "unit": "W",
+     "text": "138-185 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": null,
+     "high": 134,
+     "unit": "bpm",
+     "text": "HR under 134",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 138,
+     "to": 185
+    }
+   },
+   {
+    "key": "s3#1",
+    "programSetId": 1001,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 600
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "ftp",
+      "low": 88,
+      "high": 93
+     },
+     "id": "s3"
+    },
+    "round": {
+     "index": 1,
+     "of": 3
+    },
+    "seconds": 600,
+    "estSeconds": 600,
+    "target": {
+     "low": 220,
+     "high": 232.5,
+     "unit": "W",
+     "text": "220-233 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 149,
+     "high": 153,
+     "unit": "bpm",
+     "text": "HR 149-153",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 220,
+     "to": 233
+    }
+   },
+   {
+    "key": "s4#1",
+    "programSetId": 1002,
+    "step": {
+     "type": "recovery",
+     "end": {
+      "type": "time",
+      "seconds": 300
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "ftp",
+      "zone": 1
+     },
+     "id": "s4"
+    },
+    "round": {
+     "index": 1,
+     "of": 3
+    },
+    "seconds": 300,
+    "estSeconds": 300,
+    "target": {
+     "low": null,
+     "high": 135,
+     "unit": "W",
+     "text": "up to 135 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 2,
+     "high": 2,
+     "unit": "RPE",
+     "text": "Effort 2",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": null,
+     "to": 135
+    }
+   },
+   {
+    "key": "s3#2",
+    "programSetId": 1003,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 600
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "ftp",
+      "low": 88,
+      "high": 93
+     },
+     "id": "s3"
+    },
+    "round": {
+     "index": 2,
+     "of": 3
+    },
+    "seconds": 600,
+    "estSeconds": 600,
+    "target": {
+     "low": 220,
+     "high": 232.5,
+     "unit": "W",
+     "text": "220-233 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 149,
+     "high": 153,
+     "unit": "bpm",
+     "text": "HR 149-153",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 220,
+     "to": 233
+    }
+   },
+   {
+    "key": "s4#2",
+    "programSetId": 1004,
+    "step": {
+     "type": "recovery",
+     "end": {
+      "type": "time",
+      "seconds": 300
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "ftp",
+      "zone": 1
+     },
+     "id": "s4"
+    },
+    "round": {
+     "index": 2,
+     "of": 3
+    },
+    "seconds": 300,
+    "estSeconds": 300,
+    "target": {
+     "low": null,
+     "high": 135,
+     "unit": "W",
+     "text": "up to 135 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 2,
+     "high": 2,
+     "unit": "RPE",
+     "text": "Effort 2",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": null,
+     "to": 135
+    }
+   },
+   {
+    "key": "s3#3",
+    "programSetId": 1005,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 600
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "ftp",
+      "low": 88,
+      "high": 93
+     },
+     "id": "s3"
+    },
+    "round": {
+     "index": 3,
+     "of": 3
+    },
+    "seconds": 600,
+    "estSeconds": 600,
+    "target": {
+     "low": 220,
+     "high": 232.5,
+     "unit": "W",
+     "text": "220-233 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 149,
+     "high": 153,
+     "unit": "bpm",
+     "text": "HR 149-153",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 220,
+     "to": 233
+    }
+   },
+   {
+    "key": "s5",
+    "programSetId": 1007,
+    "step": {
+     "type": "cooldown",
+     "end": {
+      "type": "time",
+      "seconds": 600
+     },
+     "id": "s5"
+    },
+    "round": null,
+    "seconds": 600,
+    "estSeconds": 600,
+    "target": null,
+    "target2": null,
+    "outdoor": {
+     "low": null,
+     "high": 134,
+     "unit": "bpm",
+     "text": "HR under 134",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": null
+   }
+  ],
+  "dropped": [
+   {
+    "key": "s4#3",
+    "programSetId": 1006,
+    "step": {
+     "type": "recovery",
+     "end": {
+      "type": "time",
+      "seconds": 300
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "ftp",
+      "zone": 1
+     },
+     "id": "s4"
+    },
+    "round": {
+     "index": 3,
+     "of": 3
+    }
+   }
+  ]
+ },
+ "tempo/0/outdoor": {
+  "v": 1,
+  "mode": "outdoor",
+  "name": "Tempo",
+  "thresholds": {
+   "ftp": 250,
+   "lthr_bike": 165
+  },
+  "steps": [
+   {
+    "key": "s1",
+    "programSetId": 1000,
+    "step": {
+     "type": "warmup",
+     "end": {
+      "type": "time",
+      "seconds": 900
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "ftp",
+      "zone": 2
+     },
+     "id": "s1"
+    },
+    "round": null,
+    "seconds": 900,
+    "estSeconds": 900,
+    "target": {
+     "low": 137.5,
+     "high": 185,
+     "unit": "W",
+     "text": "138-185 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": null,
+     "high": 134,
+     "unit": "bpm",
+     "text": "HR under 134",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 138,
+     "to": 185
+    }
+   },
+   {
+    "key": "s3#1",
+    "programSetId": 1001,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 600
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "ftp",
+      "low": 88,
+      "high": 93
+     },
+     "id": "s3"
+    },
+    "round": {
+     "index": 1,
+     "of": 3
+    },
+    "seconds": 600,
+    "estSeconds": 600,
+    "target": {
+     "low": 220,
+     "high": 232.5,
+     "unit": "W",
+     "text": "220-233 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 149,
+     "high": 153,
+     "unit": "bpm",
+     "text": "HR 149-153",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 220,
+     "to": 233
+    }
+   },
+   {
+    "key": "s4#1",
+    "programSetId": 1002,
+    "step": {
+     "type": "recovery",
+     "end": {
+      "type": "time",
+      "seconds": 300
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "ftp",
+      "zone": 1
+     },
+     "id": "s4"
+    },
+    "round": {
+     "index": 1,
+     "of": 3
+    },
+    "seconds": 300,
+    "estSeconds": 300,
+    "target": {
+     "low": null,
+     "high": 135,
+     "unit": "W",
+     "text": "up to 135 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 2,
+     "high": 2,
+     "unit": "RPE",
+     "text": "Effort 2",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": null,
+     "to": 135
+    }
+   },
+   {
+    "key": "s3#2",
+    "programSetId": 1003,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 600
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "ftp",
+      "low": 88,
+      "high": 93
+     },
+     "id": "s3"
+    },
+    "round": {
+     "index": 2,
+     "of": 3
+    },
+    "seconds": 600,
+    "estSeconds": 600,
+    "target": {
+     "low": 220,
+     "high": 232.5,
+     "unit": "W",
+     "text": "220-233 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 149,
+     "high": 153,
+     "unit": "bpm",
+     "text": "HR 149-153",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 220,
+     "to": 233
+    }
+   },
+   {
+    "key": "s4#2",
+    "programSetId": 1004,
+    "step": {
+     "type": "recovery",
+     "end": {
+      "type": "time",
+      "seconds": 300
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "ftp",
+      "zone": 1
+     },
+     "id": "s4"
+    },
+    "round": {
+     "index": 2,
+     "of": 3
+    },
+    "seconds": 300,
+    "estSeconds": 300,
+    "target": {
+     "low": null,
+     "high": 135,
+     "unit": "W",
+     "text": "up to 135 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 2,
+     "high": 2,
+     "unit": "RPE",
+     "text": "Effort 2",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": null,
+     "to": 135
+    }
+   },
+   {
+    "key": "s3#3",
+    "programSetId": 1005,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 600
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "ftp",
+      "low": 88,
+      "high": 93
+     },
+     "id": "s3"
+    },
+    "round": {
+     "index": 3,
+     "of": 3
+    },
+    "seconds": 600,
+    "estSeconds": 600,
+    "target": {
+     "low": 220,
+     "high": 232.5,
+     "unit": "W",
+     "text": "220-233 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 149,
+     "high": 153,
+     "unit": "bpm",
+     "text": "HR 149-153",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 220,
+     "to": 233
+    }
+   },
+   {
+    "key": "s5",
+    "programSetId": 1007,
+    "step": {
+     "type": "cooldown",
+     "end": {
+      "type": "time",
+      "seconds": 600
+     },
+     "id": "s5"
+    },
+    "round": null,
+    "seconds": 600,
+    "estSeconds": 600,
+    "target": null,
+    "target2": null,
+    "outdoor": {
+     "low": null,
+     "high": 134,
+     "unit": "bpm",
+     "text": "HR under 134",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": null
+   }
+  ],
+  "dropped": [
+   {
+    "key": "s4#3",
+    "programSetId": 1006,
+    "step": {
+     "type": "recovery",
+     "end": {
+      "type": "time",
+      "seconds": 300
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "ftp",
+      "zone": 1
+     },
+     "id": "s4"
+    },
+    "round": {
+     "index": 3,
+     "of": 3
+    }
+   }
+  ]
+ },
+ "tempo/1/indoor": {
+  "v": 1,
+  "mode": "indoor",
+  "name": "Tempo",
+  "thresholds": {},
+  "steps": [
+   {
+    "key": "s1",
+    "programSetId": 1000,
+    "step": {
+     "type": "warmup",
+     "end": {
+      "type": "time",
+      "seconds": 900
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "ftp",
+      "zone": 2
+     },
+     "id": "s1"
+    },
+    "round": null,
+    "seconds": 900,
+    "estSeconds": 900,
+    "target": {
+     "low": null,
+     "high": null,
+     "unit": "W",
+     "text": "Z2 power (no ftp set)",
+     "missing": "ftp"
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 2,
+     "high": 2,
+     "unit": "RPE",
+     "text": "Effort 2",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": null
+   },
+   {
+    "key": "s3#1",
+    "programSetId": 1001,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 600
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "ftp",
+      "low": 88,
+      "high": 93
+     },
+     "id": "s3"
+    },
+    "round": {
+     "index": 1,
+     "of": 3
+    },
+    "seconds": 600,
+    "estSeconds": 600,
+    "target": {
+     "low": null,
+     "high": null,
+     "unit": "W",
+     "text": "88-93% FTP (no ftp set)",
+     "missing": "ftp"
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 6,
+     "high": 6,
+     "unit": "RPE",
+     "text": "Effort 6",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": null
+   },
+   {
+    "key": "s4#1",
+    "programSetId": 1002,
+    "step": {
+     "type": "recovery",
+     "end": {
+      "type": "time",
+      "seconds": 300
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "ftp",
+      "zone": 1
+     },
+     "id": "s4"
+    },
+    "round": {
+     "index": 1,
+     "of": 3
+    },
+    "seconds": 300,
+    "estSeconds": 300,
+    "target": {
+     "low": null,
+     "high": null,
+     "unit": "W",
+     "text": "Z1 power (no ftp set)",
+     "missing": "ftp"
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 2,
+     "high": 2,
+     "unit": "RPE",
+     "text": "Effort 2",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": null
+   },
+   {
+    "key": "s3#2",
+    "programSetId": 1003,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 600
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "ftp",
+      "low": 88,
+      "high": 93
+     },
+     "id": "s3"
+    },
+    "round": {
+     "index": 2,
+     "of": 3
+    },
+    "seconds": 600,
+    "estSeconds": 600,
+    "target": {
+     "low": null,
+     "high": null,
+     "unit": "W",
+     "text": "88-93% FTP (no ftp set)",
+     "missing": "ftp"
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 6,
+     "high": 6,
+     "unit": "RPE",
+     "text": "Effort 6",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": null
+   },
+   {
+    "key": "s4#2",
+    "programSetId": 1004,
+    "step": {
+     "type": "recovery",
+     "end": {
+      "type": "time",
+      "seconds": 300
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "ftp",
+      "zone": 1
+     },
+     "id": "s4"
+    },
+    "round": {
+     "index": 2,
+     "of": 3
+    },
+    "seconds": 300,
+    "estSeconds": 300,
+    "target": {
+     "low": null,
+     "high": null,
+     "unit": "W",
+     "text": "Z1 power (no ftp set)",
+     "missing": "ftp"
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 2,
+     "high": 2,
+     "unit": "RPE",
+     "text": "Effort 2",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": null
+   },
+   {
+    "key": "s3#3",
+    "programSetId": 1005,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 600
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "ftp",
+      "low": 88,
+      "high": 93
+     },
+     "id": "s3"
+    },
+    "round": {
+     "index": 3,
+     "of": 3
+    },
+    "seconds": 600,
+    "estSeconds": 600,
+    "target": {
+     "low": null,
+     "high": null,
+     "unit": "W",
+     "text": "88-93% FTP (no ftp set)",
+     "missing": "ftp"
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 6,
+     "high": 6,
+     "unit": "RPE",
+     "text": "Effort 6",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": null
+   },
+   {
+    "key": "s5",
+    "programSetId": 1007,
+    "step": {
+     "type": "cooldown",
+     "end": {
+      "type": "time",
+      "seconds": 600
+     },
+     "id": "s5"
+    },
+    "round": null,
+    "seconds": 600,
+    "estSeconds": 600,
+    "target": null,
+    "target2": null,
+    "outdoor": {
+     "low": 2,
+     "high": 2,
+     "unit": "RPE",
+     "text": "Effort 2",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": null
+   }
+  ],
+  "dropped": [
+   {
+    "key": "s4#3",
+    "programSetId": 1006,
+    "step": {
+     "type": "recovery",
+     "end": {
+      "type": "time",
+      "seconds": 300
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "ftp",
+      "zone": 1
+     },
+     "id": "s4"
+    },
+    "round": {
+     "index": 3,
+     "of": 3
+    }
+   }
+  ]
+ },
+ "tempo/1/outdoor": {
+  "v": 1,
+  "mode": "outdoor",
+  "name": "Tempo",
+  "thresholds": {},
+  "steps": [
+   {
+    "key": "s1",
+    "programSetId": 1000,
+    "step": {
+     "type": "warmup",
+     "end": {
+      "type": "time",
+      "seconds": 900
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "ftp",
+      "zone": 2
+     },
+     "id": "s1"
+    },
+    "round": null,
+    "seconds": 900,
+    "estSeconds": 900,
+    "target": {
+     "low": null,
+     "high": null,
+     "unit": "W",
+     "text": "Z2 power (no ftp set)",
+     "missing": "ftp"
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 2,
+     "high": 2,
+     "unit": "RPE",
+     "text": "Effort 2",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": null
+   },
+   {
+    "key": "s3#1",
+    "programSetId": 1001,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 600
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "ftp",
+      "low": 88,
+      "high": 93
+     },
+     "id": "s3"
+    },
+    "round": {
+     "index": 1,
+     "of": 3
+    },
+    "seconds": 600,
+    "estSeconds": 600,
+    "target": {
+     "low": null,
+     "high": null,
+     "unit": "W",
+     "text": "88-93% FTP (no ftp set)",
+     "missing": "ftp"
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 6,
+     "high": 6,
+     "unit": "RPE",
+     "text": "Effort 6",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": null
+   },
+   {
+    "key": "s4#1",
+    "programSetId": 1002,
+    "step": {
+     "type": "recovery",
+     "end": {
+      "type": "time",
+      "seconds": 300
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "ftp",
+      "zone": 1
+     },
+     "id": "s4"
+    },
+    "round": {
+     "index": 1,
+     "of": 3
+    },
+    "seconds": 300,
+    "estSeconds": 300,
+    "target": {
+     "low": null,
+     "high": null,
+     "unit": "W",
+     "text": "Z1 power (no ftp set)",
+     "missing": "ftp"
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 2,
+     "high": 2,
+     "unit": "RPE",
+     "text": "Effort 2",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": null
+   },
+   {
+    "key": "s3#2",
+    "programSetId": 1003,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 600
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "ftp",
+      "low": 88,
+      "high": 93
+     },
+     "id": "s3"
+    },
+    "round": {
+     "index": 2,
+     "of": 3
+    },
+    "seconds": 600,
+    "estSeconds": 600,
+    "target": {
+     "low": null,
+     "high": null,
+     "unit": "W",
+     "text": "88-93% FTP (no ftp set)",
+     "missing": "ftp"
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 6,
+     "high": 6,
+     "unit": "RPE",
+     "text": "Effort 6",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": null
+   },
+   {
+    "key": "s4#2",
+    "programSetId": 1004,
+    "step": {
+     "type": "recovery",
+     "end": {
+      "type": "time",
+      "seconds": 300
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "ftp",
+      "zone": 1
+     },
+     "id": "s4"
+    },
+    "round": {
+     "index": 2,
+     "of": 3
+    },
+    "seconds": 300,
+    "estSeconds": 300,
+    "target": {
+     "low": null,
+     "high": null,
+     "unit": "W",
+     "text": "Z1 power (no ftp set)",
+     "missing": "ftp"
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 2,
+     "high": 2,
+     "unit": "RPE",
+     "text": "Effort 2",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": null
+   },
+   {
+    "key": "s3#3",
+    "programSetId": 1005,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 600
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "ftp",
+      "low": 88,
+      "high": 93
+     },
+     "id": "s3"
+    },
+    "round": {
+     "index": 3,
+     "of": 3
+    },
+    "seconds": 600,
+    "estSeconds": 600,
+    "target": {
+     "low": null,
+     "high": null,
+     "unit": "W",
+     "text": "88-93% FTP (no ftp set)",
+     "missing": "ftp"
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 6,
+     "high": 6,
+     "unit": "RPE",
+     "text": "Effort 6",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": null
+   },
+   {
+    "key": "s5",
+    "programSetId": 1007,
+    "step": {
+     "type": "cooldown",
+     "end": {
+      "type": "time",
+      "seconds": 600
+     },
+     "id": "s5"
+    },
+    "round": null,
+    "seconds": 600,
+    "estSeconds": 600,
+    "target": null,
+    "target2": null,
+    "outdoor": {
+     "low": 2,
+     "high": 2,
+     "unit": "RPE",
+     "text": "Effort 2",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": null
+   }
+  ],
+  "dropped": [
+   {
+    "key": "s4#3",
+    "programSetId": 1006,
+    "step": {
+     "type": "recovery",
+     "end": {
+      "type": "time",
+      "seconds": 300
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "ftp",
+      "zone": 1
+     },
+     "id": "s4"
+    },
+    "round": {
+     "index": 3,
+     "of": 3
+    }
+   }
+  ]
+ },
+ "mixed/0/indoor": {
+  "v": 1,
+  "mode": "indoor",
+  "name": "Mixed ends",
+  "thresholds": {
+   "ftp": 250,
+   "lthr_bike": 165
+  },
+  "steps": [
+   {
+    "key": "s1",
+    "programSetId": 1000,
+    "step": {
+     "type": "warmup",
+     "end": {
+      "type": "time",
+      "seconds": 600
+     },
+     "ramp": {
+      "anchor": "ftp",
+      "from": 50,
+      "to": 75
+     },
+     "id": "s1"
+    },
+    "round": null,
+    "seconds": 600,
+    "estSeconds": 600,
+    "target": {
+     "low": 125,
+     "high": 187.5,
+     "unit": "W",
+     "text": "125 to 188 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": null,
+     "high": 134,
+     "unit": "bpm",
+     "text": "HR under 134",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 125,
+     "to": 188
+    }
+   },
+   {
+    "key": "s2",
+    "programSetId": 1001,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "distance",
+      "meters": 20000
+     },
+     "target": {
+      "metric": "pace",
+      "anchor": "absolute",
+      "low": 8,
+      "high": 9
+     },
+     "id": "s2"
+    },
+    "round": null,
+    "seconds": 2353,
+    "estSeconds": 2353,
+    "target": {
+     "low": 8,
+     "high": 9,
+     "unit": "m/s",
+     "text": "1:51-2:05/km",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": null,
+    "outdoor2": null,
+    "power": null
+   },
+   {
+    "key": "s3",
+    "programSetId": 1002,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "distance",
+      "meters": 5000
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "ftp",
+      "zone": 3
+     },
+     "target2": {
+      "metric": "hr",
+      "anchor": "lthr",
+      "zone": 3
+     },
+     "id": "s3"
+    },
+    "round": null,
+    "seconds": null,
+    "estSeconds": 720,
+    "target": {
+     "low": 187.5,
+     "high": 222.5,
+     "unit": "W",
+     "text": "188-223 W",
+     "missing": null
+    },
+    "target2": {
+     "low": 148.5,
+     "high": 153.45,
+     "unit": "bpm",
+     "text": "149-153 bpm",
+     "missing": null
+    },
+    "outdoor": {
+     "low": 149,
+     "high": 153,
+     "unit": "bpm",
+     "text": "HR 149-153",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 188,
+     "to": 223
+    }
+   },
+   {
+    "key": "s4",
+    "programSetId": 1003,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "lap"
+     },
+     "free": true,
+     "id": "s4"
+    },
+    "round": null,
+    "seconds": null,
+    "estSeconds": 600,
+    "target": null,
+    "target2": null,
+    "outdoor": {
+     "low": 2,
+     "high": 2,
+     "unit": "RPE",
+     "text": "Effort 2",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": null
+   },
+   {
+    "key": "s5",
+    "programSetId": 1004,
+    "step": {
+     "type": "rest",
+     "end": {
+      "type": "time",
+      "seconds": 120
+     },
+     "id": "s5"
+    },
+    "round": null,
+    "seconds": 120,
+    "estSeconds": 120,
+    "target": null,
+    "target2": null,
+    "outdoor": null,
+    "outdoor2": null,
+    "power": null
+   },
+   {
+    "key": "s6",
+    "programSetId": 1005,
+    "step": {
+     "type": "cooldown",
+     "end": {
+      "type": "time",
+      "seconds": 300
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "absolute",
+      "low": 100,
+      "high": 140
+     },
+     "outdoor": {
+      "metric": "hr",
+      "anchor": "lthr",
+      "zone": 1
+     },
+     "id": "s6"
+    },
+    "round": null,
+    "seconds": 300,
+    "estSeconds": 300,
+    "target": {
+     "low": 100,
+     "high": 140,
+     "unit": "W",
+     "text": "100-140 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": null,
+     "high": 132,
+     "unit": "bpm",
+     "text": "HR under 132",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 100,
+     "to": 140
+    }
+   }
+  ],
+  "dropped": []
+ },
+ "mixed/0/outdoor": {
+  "v": 1,
+  "mode": "outdoor",
+  "name": "Mixed ends",
+  "thresholds": {
+   "ftp": 250,
+   "lthr_bike": 165
+  },
+  "steps": [
+   {
+    "key": "s1",
+    "programSetId": 1000,
+    "step": {
+     "type": "warmup",
+     "end": {
+      "type": "time",
+      "seconds": 600
+     },
+     "ramp": {
+      "anchor": "ftp",
+      "from": 50,
+      "to": 75
+     },
+     "id": "s1"
+    },
+    "round": null,
+    "seconds": 600,
+    "estSeconds": 600,
+    "target": {
+     "low": 125,
+     "high": 187.5,
+     "unit": "W",
+     "text": "125 to 188 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": null,
+     "high": 134,
+     "unit": "bpm",
+     "text": "HR under 134",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 125,
+     "to": 188
+    }
+   },
+   {
+    "key": "s2",
+    "programSetId": 1001,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "distance",
+      "meters": 20000
+     },
+     "target": {
+      "metric": "pace",
+      "anchor": "absolute",
+      "low": 8,
+      "high": 9
+     },
+     "id": "s2"
+    },
+    "round": null,
+    "seconds": null,
+    "estSeconds": 2880,
+    "target": {
+     "low": 8,
+     "high": 9,
+     "unit": "m/s",
+     "text": "1:51-2:05/km",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": null,
+    "outdoor2": null,
+    "power": null
+   },
+   {
+    "key": "s3",
+    "programSetId": 1002,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "distance",
+      "meters": 5000
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "ftp",
+      "zone": 3
+     },
+     "target2": {
+      "metric": "hr",
+      "anchor": "lthr",
+      "zone": 3
+     },
+     "id": "s3"
+    },
+    "round": null,
+    "seconds": null,
+    "estSeconds": 720,
+    "target": {
+     "low": 187.5,
+     "high": 222.5,
+     "unit": "W",
+     "text": "188-223 W",
+     "missing": null
+    },
+    "target2": {
+     "low": 148.5,
+     "high": 153.45,
+     "unit": "bpm",
+     "text": "149-153 bpm",
+     "missing": null
+    },
+    "outdoor": {
+     "low": 149,
+     "high": 153,
+     "unit": "bpm",
+     "text": "HR 149-153",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 188,
+     "to": 223
+    }
+   },
+   {
+    "key": "s4",
+    "programSetId": 1003,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "lap"
+     },
+     "free": true,
+     "id": "s4"
+    },
+    "round": null,
+    "seconds": null,
+    "estSeconds": 600,
+    "target": null,
+    "target2": null,
+    "outdoor": {
+     "low": 2,
+     "high": 2,
+     "unit": "RPE",
+     "text": "Effort 2",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": null
+   },
+   {
+    "key": "s5",
+    "programSetId": 1004,
+    "step": {
+     "type": "rest",
+     "end": {
+      "type": "time",
+      "seconds": 120
+     },
+     "id": "s5"
+    },
+    "round": null,
+    "seconds": 120,
+    "estSeconds": 120,
+    "target": null,
+    "target2": null,
+    "outdoor": null,
+    "outdoor2": null,
+    "power": null
+   },
+   {
+    "key": "s6",
+    "programSetId": 1005,
+    "step": {
+     "type": "cooldown",
+     "end": {
+      "type": "time",
+      "seconds": 300
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "absolute",
+      "low": 100,
+      "high": 140
+     },
+     "outdoor": {
+      "metric": "hr",
+      "anchor": "lthr",
+      "zone": 1
+     },
+     "id": "s6"
+    },
+    "round": null,
+    "seconds": 300,
+    "estSeconds": 300,
+    "target": {
+     "low": 100,
+     "high": 140,
+     "unit": "W",
+     "text": "100-140 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": null,
+     "high": 132,
+     "unit": "bpm",
+     "text": "HR under 132",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 100,
+     "to": 140
+    }
+   }
+  ],
+  "dropped": []
+ },
+ "mixed/1/indoor": {
+  "v": 1,
+  "mode": "indoor",
+  "name": "Mixed ends",
+  "thresholds": {},
+  "steps": [
+   {
+    "key": "s1",
+    "programSetId": 1000,
+    "step": {
+     "type": "warmup",
+     "end": {
+      "type": "time",
+      "seconds": 600
+     },
+     "ramp": {
+      "anchor": "ftp",
+      "from": 50,
+      "to": 75
+     },
+     "id": "s1"
+    },
+    "round": null,
+    "seconds": 600,
+    "estSeconds": 600,
+    "target": {
+     "low": null,
+     "high": null,
+     "unit": "W",
+     "text": "ramp 50 to 75% FTP (no ftp set)",
+     "missing": "ftp"
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 2,
+     "high": 2,
+     "unit": "RPE",
+     "text": "Effort 2",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": null
+   },
+   {
+    "key": "s2",
+    "programSetId": 1001,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "distance",
+      "meters": 20000
+     },
+     "target": {
+      "metric": "pace",
+      "anchor": "absolute",
+      "low": 8,
+      "high": 9
+     },
+     "id": "s2"
+    },
+    "round": null,
+    "seconds": 2353,
+    "estSeconds": 2353,
+    "target": {
+     "low": 8,
+     "high": 9,
+     "unit": "m/s",
+     "text": "1:51-2:05/km",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": null,
+    "outdoor2": null,
+    "power": null
+   },
+   {
+    "key": "s3",
+    "programSetId": 1002,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "distance",
+      "meters": 5000
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "ftp",
+      "zone": 3
+     },
+     "target2": {
+      "metric": "hr",
+      "anchor": "lthr",
+      "zone": 3
+     },
+     "id": "s3"
+    },
+    "round": null,
+    "seconds": null,
+    "estSeconds": 720,
+    "target": {
+     "low": null,
+     "high": null,
+     "unit": "W",
+     "text": "Z3 power (no ftp set)",
+     "missing": "ftp"
+    },
+    "target2": {
+     "low": null,
+     "high": null,
+     "unit": "bpm",
+     "text": "Z3 HR (no lthr_bike set)",
+     "missing": "lthr_bike"
+    },
+    "outdoor": {
+     "low": 6,
+     "high": 6,
+     "unit": "RPE",
+     "text": "Effort 6",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": null
+   },
+   {
+    "key": "s4",
+    "programSetId": 1003,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "lap"
+     },
+     "free": true,
+     "id": "s4"
+    },
+    "round": null,
+    "seconds": null,
+    "estSeconds": 600,
+    "target": null,
+    "target2": null,
+    "outdoor": {
+     "low": 2,
+     "high": 2,
+     "unit": "RPE",
+     "text": "Effort 2",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": null
+   },
+   {
+    "key": "s5",
+    "programSetId": 1004,
+    "step": {
+     "type": "rest",
+     "end": {
+      "type": "time",
+      "seconds": 120
+     },
+     "id": "s5"
+    },
+    "round": null,
+    "seconds": 120,
+    "estSeconds": 120,
+    "target": null,
+    "target2": null,
+    "outdoor": null,
+    "outdoor2": null,
+    "power": null
+   },
+   {
+    "key": "s6",
+    "programSetId": 1005,
+    "step": {
+     "type": "cooldown",
+     "end": {
+      "type": "time",
+      "seconds": 300
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "absolute",
+      "low": 100,
+      "high": 140
+     },
+     "outdoor": {
+      "metric": "hr",
+      "anchor": "lthr",
+      "zone": 1
+     },
+     "id": "s6"
+    },
+    "round": null,
+    "seconds": 300,
+    "estSeconds": 300,
+    "target": {
+     "low": 100,
+     "high": 140,
+     "unit": "W",
+     "text": "100-140 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 2,
+     "high": 2,
+     "unit": "RPE",
+     "text": "Effort 2",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 100,
+     "to": 140
+    }
+   }
+  ],
+  "dropped": []
+ },
+ "mixed/1/outdoor": {
+  "v": 1,
+  "mode": "outdoor",
+  "name": "Mixed ends",
+  "thresholds": {},
+  "steps": [
+   {
+    "key": "s1",
+    "programSetId": 1000,
+    "step": {
+     "type": "warmup",
+     "end": {
+      "type": "time",
+      "seconds": 600
+     },
+     "ramp": {
+      "anchor": "ftp",
+      "from": 50,
+      "to": 75
+     },
+     "id": "s1"
+    },
+    "round": null,
+    "seconds": 600,
+    "estSeconds": 600,
+    "target": {
+     "low": null,
+     "high": null,
+     "unit": "W",
+     "text": "ramp 50 to 75% FTP (no ftp set)",
+     "missing": "ftp"
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 2,
+     "high": 2,
+     "unit": "RPE",
+     "text": "Effort 2",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": null
+   },
+   {
+    "key": "s2",
+    "programSetId": 1001,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "distance",
+      "meters": 20000
+     },
+     "target": {
+      "metric": "pace",
+      "anchor": "absolute",
+      "low": 8,
+      "high": 9
+     },
+     "id": "s2"
+    },
+    "round": null,
+    "seconds": null,
+    "estSeconds": 2880,
+    "target": {
+     "low": 8,
+     "high": 9,
+     "unit": "m/s",
+     "text": "1:51-2:05/km",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": null,
+    "outdoor2": null,
+    "power": null
+   },
+   {
+    "key": "s3",
+    "programSetId": 1002,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "distance",
+      "meters": 5000
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "ftp",
+      "zone": 3
+     },
+     "target2": {
+      "metric": "hr",
+      "anchor": "lthr",
+      "zone": 3
+     },
+     "id": "s3"
+    },
+    "round": null,
+    "seconds": null,
+    "estSeconds": 720,
+    "target": {
+     "low": null,
+     "high": null,
+     "unit": "W",
+     "text": "Z3 power (no ftp set)",
+     "missing": "ftp"
+    },
+    "target2": {
+     "low": null,
+     "high": null,
+     "unit": "bpm",
+     "text": "Z3 HR (no lthr_bike set)",
+     "missing": "lthr_bike"
+    },
+    "outdoor": {
+     "low": 6,
+     "high": 6,
+     "unit": "RPE",
+     "text": "Effort 6",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": null
+   },
+   {
+    "key": "s4",
+    "programSetId": 1003,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "lap"
+     },
+     "free": true,
+     "id": "s4"
+    },
+    "round": null,
+    "seconds": null,
+    "estSeconds": 600,
+    "target": null,
+    "target2": null,
+    "outdoor": {
+     "low": 2,
+     "high": 2,
+     "unit": "RPE",
+     "text": "Effort 2",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": null
+   },
+   {
+    "key": "s5",
+    "programSetId": 1004,
+    "step": {
+     "type": "rest",
+     "end": {
+      "type": "time",
+      "seconds": 120
+     },
+     "id": "s5"
+    },
+    "round": null,
+    "seconds": 120,
+    "estSeconds": 120,
+    "target": null,
+    "target2": null,
+    "outdoor": null,
+    "outdoor2": null,
+    "power": null
+   },
+   {
+    "key": "s6",
+    "programSetId": 1005,
+    "step": {
+     "type": "cooldown",
+     "end": {
+      "type": "time",
+      "seconds": 300
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "absolute",
+      "low": 100,
+      "high": 140
+     },
+     "outdoor": {
+      "metric": "hr",
+      "anchor": "lthr",
+      "zone": 1
+     },
+     "id": "s6"
+    },
+    "round": null,
+    "seconds": 300,
+    "estSeconds": 300,
+    "target": {
+     "low": 100,
+     "high": 140,
+     "unit": "W",
+     "text": "100-140 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 2,
+     "high": 2,
+     "unit": "RPE",
+     "text": "Effort 2",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 100,
+     "to": 140
+    }
+   }
+  ],
+  "dropped": []
+ },
+ "ramp/0/indoor": {
+  "v": 1,
+  "mode": "indoor",
+  "name": "Ramp test",
+  "test": "ramp",
+  "thresholds": {
+   "ftp": 250,
+   "lthr_bike": 165
+  },
+  "steps": [
+   {
+    "key": "s1",
+    "programSetId": 1000,
+    "step": {
+     "type": "warmup",
+     "end": {
+      "type": "time",
+      "seconds": 300
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "ftp",
+      "low": 40,
+      "high": 50
+     },
+     "id": "s1"
+    },
+    "round": null,
+    "seconds": 300,
+    "estSeconds": 300,
+    "target": {
+     "low": 100,
+     "high": 125,
+     "unit": "W",
+     "text": "100-125 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 2,
+     "high": 2,
+     "unit": "RPE",
+     "text": "Effort 2",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 100,
+     "to": 125
+    }
+   },
+   {
+    "key": "s2",
+    "programSetId": 1001,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "absolute",
+      "low": 100,
+      "high": 100
+     },
+     "id": "s2"
+    },
+    "round": null,
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": 100,
+     "high": 100,
+     "unit": "W",
+     "text": "100 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 2,
+     "high": 2,
+     "unit": "RPE",
+     "text": "Effort 2",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 100,
+     "to": 100
+    }
+   },
+   {
+    "key": "s3",
+    "programSetId": 1002,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "absolute",
+      "low": 120,
+      "high": 120
+     },
+     "id": "s3"
+    },
+    "round": null,
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": 120,
+     "high": 120,
+     "unit": "W",
+     "text": "120 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 2,
+     "high": 2,
+     "unit": "RPE",
+     "text": "Effort 2",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 120,
+     "to": 120
+    }
+   },
+   {
+    "key": "s4",
+    "programSetId": 1003,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "absolute",
+      "low": 140,
+      "high": 140
+     },
+     "id": "s4"
+    },
+    "round": null,
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": 140,
+     "high": 140,
+     "unit": "W",
+     "text": "140 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 4,
+     "high": 4,
+     "unit": "RPE",
+     "text": "Effort 4",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 140,
+     "to": 140
+    }
+   },
+   {
+    "key": "s5",
+    "programSetId": 1004,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "absolute",
+      "low": 160,
+      "high": 160
+     },
+     "id": "s5"
+    },
+    "round": null,
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": 160,
+     "high": 160,
+     "unit": "W",
+     "text": "160 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 4,
+     "high": 4,
+     "unit": "RPE",
+     "text": "Effort 4",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 160,
+     "to": 160
+    }
+   },
+   {
+    "key": "s6",
+    "programSetId": 1005,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "absolute",
+      "low": 180,
+      "high": 180
+     },
+     "id": "s6"
+    },
+    "round": null,
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": 180,
+     "high": 180,
+     "unit": "W",
+     "text": "180 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 4,
+     "high": 4,
+     "unit": "RPE",
+     "text": "Effort 4",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 180,
+     "to": 180
+    }
+   },
+   {
+    "key": "s7",
+    "programSetId": 1006,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "absolute",
+      "low": 200,
+      "high": 200
+     },
+     "id": "s7"
+    },
+    "round": null,
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": 200,
+     "high": 200,
+     "unit": "W",
+     "text": "200 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 6,
+     "high": 6,
+     "unit": "RPE",
+     "text": "Effort 6",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 200,
+     "to": 200
+    }
+   },
+   {
+    "key": "s8",
+    "programSetId": 1007,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "absolute",
+      "low": 220,
+      "high": 220
+     },
+     "id": "s8"
+    },
+    "round": null,
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": 220,
+     "high": 220,
+     "unit": "W",
+     "text": "220 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 6,
+     "high": 6,
+     "unit": "RPE",
+     "text": "Effort 6",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 220,
+     "to": 220
+    }
+   },
+   {
+    "key": "s9",
+    "programSetId": 1008,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "absolute",
+      "low": 240,
+      "high": 240
+     },
+     "id": "s9"
+    },
+    "round": null,
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": 240,
+     "high": 240,
+     "unit": "W",
+     "text": "240 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 7,
+     "high": 7,
+     "unit": "RPE",
+     "text": "Effort 7",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 240,
+     "to": 240
+    }
+   },
+   {
+    "key": "s10",
+    "programSetId": 1009,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "absolute",
+      "low": 260,
+      "high": 260
+     },
+     "id": "s10"
+    },
+    "round": null,
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": 260,
+     "high": 260,
+     "unit": "W",
+     "text": "260 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 7,
+     "high": 7,
+     "unit": "RPE",
+     "text": "Effort 7",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 260,
+     "to": 260
+    }
+   },
+   {
+    "key": "s11",
+    "programSetId": 1010,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "absolute",
+      "low": 280,
+      "high": 280
+     },
+     "id": "s11"
+    },
+    "round": null,
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": 280,
+     "high": 280,
+     "unit": "W",
+     "text": "280 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 8,
+     "high": 8,
+     "unit": "RPE",
+     "text": "Effort 8",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 280,
+     "to": 280
+    }
+   },
+   {
+    "key": "s12",
+    "programSetId": 1011,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "absolute",
+      "low": 300,
+      "high": 300
+     },
+     "id": "s12"
+    },
+    "round": null,
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": 300,
+     "high": 300,
+     "unit": "W",
+     "text": "300 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 8,
+     "high": 8,
+     "unit": "RPE",
+     "text": "Effort 8",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 300,
+     "to": 300
+    }
+   },
+   {
+    "key": "s13",
+    "programSetId": 1012,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "absolute",
+      "low": 320,
+      "high": 320
+     },
+     "id": "s13"
+    },
+    "round": null,
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": 320,
+     "high": 320,
+     "unit": "W",
+     "text": "320 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 9,
+     "high": 9,
+     "unit": "RPE",
+     "text": "Effort 9",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 320,
+     "to": 320
+    }
+   },
+   {
+    "key": "s14",
+    "programSetId": 1013,
+    "step": {
+     "type": "cooldown",
+     "end": {
+      "type": "time",
+      "seconds": 300
+     },
+     "id": "s14"
+    },
+    "round": null,
+    "seconds": 300,
+    "estSeconds": 300,
+    "target": null,
+    "target2": null,
+    "outdoor": {
+     "low": 2,
+     "high": 2,
+     "unit": "RPE",
+     "text": "Effort 2",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": null
+   }
+  ],
+  "dropped": []
+ },
+ "ramp/0/outdoor": {
+  "v": 1,
+  "mode": "outdoor",
+  "name": "Ramp test",
+  "test": "ramp",
+  "thresholds": {
+   "ftp": 250,
+   "lthr_bike": 165
+  },
+  "steps": [
+   {
+    "key": "s1",
+    "programSetId": 1000,
+    "step": {
+     "type": "warmup",
+     "end": {
+      "type": "time",
+      "seconds": 300
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "ftp",
+      "low": 40,
+      "high": 50
+     },
+     "id": "s1"
+    },
+    "round": null,
+    "seconds": 300,
+    "estSeconds": 300,
+    "target": {
+     "low": 100,
+     "high": 125,
+     "unit": "W",
+     "text": "100-125 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 2,
+     "high": 2,
+     "unit": "RPE",
+     "text": "Effort 2",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 100,
+     "to": 125
+    }
+   },
+   {
+    "key": "s2",
+    "programSetId": 1001,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "absolute",
+      "low": 100,
+      "high": 100
+     },
+     "id": "s2"
+    },
+    "round": null,
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": 100,
+     "high": 100,
+     "unit": "W",
+     "text": "100 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 2,
+     "high": 2,
+     "unit": "RPE",
+     "text": "Effort 2",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 100,
+     "to": 100
+    }
+   },
+   {
+    "key": "s3",
+    "programSetId": 1002,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "absolute",
+      "low": 120,
+      "high": 120
+     },
+     "id": "s3"
+    },
+    "round": null,
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": 120,
+     "high": 120,
+     "unit": "W",
+     "text": "120 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 2,
+     "high": 2,
+     "unit": "RPE",
+     "text": "Effort 2",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 120,
+     "to": 120
+    }
+   },
+   {
+    "key": "s4",
+    "programSetId": 1003,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "absolute",
+      "low": 140,
+      "high": 140
+     },
+     "id": "s4"
+    },
+    "round": null,
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": 140,
+     "high": 140,
+     "unit": "W",
+     "text": "140 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 4,
+     "high": 4,
+     "unit": "RPE",
+     "text": "Effort 4",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 140,
+     "to": 140
+    }
+   },
+   {
+    "key": "s5",
+    "programSetId": 1004,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "absolute",
+      "low": 160,
+      "high": 160
+     },
+     "id": "s5"
+    },
+    "round": null,
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": 160,
+     "high": 160,
+     "unit": "W",
+     "text": "160 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 4,
+     "high": 4,
+     "unit": "RPE",
+     "text": "Effort 4",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 160,
+     "to": 160
+    }
+   },
+   {
+    "key": "s6",
+    "programSetId": 1005,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "absolute",
+      "low": 180,
+      "high": 180
+     },
+     "id": "s6"
+    },
+    "round": null,
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": 180,
+     "high": 180,
+     "unit": "W",
+     "text": "180 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 4,
+     "high": 4,
+     "unit": "RPE",
+     "text": "Effort 4",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 180,
+     "to": 180
+    }
+   },
+   {
+    "key": "s7",
+    "programSetId": 1006,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "absolute",
+      "low": 200,
+      "high": 200
+     },
+     "id": "s7"
+    },
+    "round": null,
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": 200,
+     "high": 200,
+     "unit": "W",
+     "text": "200 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 6,
+     "high": 6,
+     "unit": "RPE",
+     "text": "Effort 6",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 200,
+     "to": 200
+    }
+   },
+   {
+    "key": "s8",
+    "programSetId": 1007,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "absolute",
+      "low": 220,
+      "high": 220
+     },
+     "id": "s8"
+    },
+    "round": null,
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": 220,
+     "high": 220,
+     "unit": "W",
+     "text": "220 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 6,
+     "high": 6,
+     "unit": "RPE",
+     "text": "Effort 6",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 220,
+     "to": 220
+    }
+   },
+   {
+    "key": "s9",
+    "programSetId": 1008,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "absolute",
+      "low": 240,
+      "high": 240
+     },
+     "id": "s9"
+    },
+    "round": null,
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": 240,
+     "high": 240,
+     "unit": "W",
+     "text": "240 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 7,
+     "high": 7,
+     "unit": "RPE",
+     "text": "Effort 7",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 240,
+     "to": 240
+    }
+   },
+   {
+    "key": "s10",
+    "programSetId": 1009,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "absolute",
+      "low": 260,
+      "high": 260
+     },
+     "id": "s10"
+    },
+    "round": null,
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": 260,
+     "high": 260,
+     "unit": "W",
+     "text": "260 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 7,
+     "high": 7,
+     "unit": "RPE",
+     "text": "Effort 7",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 260,
+     "to": 260
+    }
+   },
+   {
+    "key": "s11",
+    "programSetId": 1010,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "absolute",
+      "low": 280,
+      "high": 280
+     },
+     "id": "s11"
+    },
+    "round": null,
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": 280,
+     "high": 280,
+     "unit": "W",
+     "text": "280 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 8,
+     "high": 8,
+     "unit": "RPE",
+     "text": "Effort 8",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 280,
+     "to": 280
+    }
+   },
+   {
+    "key": "s12",
+    "programSetId": 1011,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "absolute",
+      "low": 300,
+      "high": 300
+     },
+     "id": "s12"
+    },
+    "round": null,
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": 300,
+     "high": 300,
+     "unit": "W",
+     "text": "300 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 8,
+     "high": 8,
+     "unit": "RPE",
+     "text": "Effort 8",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 300,
+     "to": 300
+    }
+   },
+   {
+    "key": "s13",
+    "programSetId": 1012,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "absolute",
+      "low": 320,
+      "high": 320
+     },
+     "id": "s13"
+    },
+    "round": null,
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": 320,
+     "high": 320,
+     "unit": "W",
+     "text": "320 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 9,
+     "high": 9,
+     "unit": "RPE",
+     "text": "Effort 9",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 320,
+     "to": 320
+    }
+   },
+   {
+    "key": "s14",
+    "programSetId": 1013,
+    "step": {
+     "type": "cooldown",
+     "end": {
+      "type": "time",
+      "seconds": 300
+     },
+     "id": "s14"
+    },
+    "round": null,
+    "seconds": 300,
+    "estSeconds": 300,
+    "target": null,
+    "target2": null,
+    "outdoor": {
+     "low": 2,
+     "high": 2,
+     "unit": "RPE",
+     "text": "Effort 2",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": null
+   }
+  ],
+  "dropped": []
+ },
+ "ramp/1/indoor": {
+  "v": 1,
+  "mode": "indoor",
+  "name": "Ramp test",
+  "test": "ramp",
+  "thresholds": {},
+  "steps": [
+   {
+    "key": "s1",
+    "programSetId": 1000,
+    "step": {
+     "type": "warmup",
+     "end": {
+      "type": "time",
+      "seconds": 300
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "ftp",
+      "low": 40,
+      "high": 50
+     },
+     "id": "s1"
+    },
+    "round": null,
+    "seconds": 300,
+    "estSeconds": 300,
+    "target": {
+     "low": null,
+     "high": null,
+     "unit": "W",
+     "text": "40-50% FTP (no ftp set)",
+     "missing": "ftp"
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 2,
+     "high": 2,
+     "unit": "RPE",
+     "text": "Effort 2",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": null
+   },
+   {
+    "key": "s2",
+    "programSetId": 1001,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "absolute",
+      "low": 100,
+      "high": 100
+     },
+     "id": "s2"
+    },
+    "round": null,
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": 100,
+     "high": 100,
+     "unit": "W",
+     "text": "100 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 5,
+     "high": 5,
+     "unit": "RPE",
+     "text": "Effort 5",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 100,
+     "to": 100
+    }
+   },
+   {
+    "key": "s3",
+    "programSetId": 1002,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "absolute",
+      "low": 120,
+      "high": 120
+     },
+     "id": "s3"
+    },
+    "round": null,
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": 120,
+     "high": 120,
+     "unit": "W",
+     "text": "120 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 5,
+     "high": 5,
+     "unit": "RPE",
+     "text": "Effort 5",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 120,
+     "to": 120
+    }
+   },
+   {
+    "key": "s4",
+    "programSetId": 1003,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "absolute",
+      "low": 140,
+      "high": 140
+     },
+     "id": "s4"
+    },
+    "round": null,
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": 140,
+     "high": 140,
+     "unit": "W",
+     "text": "140 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 6,
+     "high": 6,
+     "unit": "RPE",
+     "text": "Effort 6",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 140,
+     "to": 140
+    }
+   },
+   {
+    "key": "s5",
+    "programSetId": 1004,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "absolute",
+      "low": 160,
+      "high": 160
+     },
+     "id": "s5"
+    },
+    "round": null,
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": 160,
+     "high": 160,
+     "unit": "W",
+     "text": "160 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 6,
+     "high": 6,
+     "unit": "RPE",
+     "text": "Effort 6",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 160,
+     "to": 160
+    }
+   },
+   {
+    "key": "s6",
+    "programSetId": 1005,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "absolute",
+      "low": 180,
+      "high": 180
+     },
+     "id": "s6"
+    },
+    "round": null,
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": 180,
+     "high": 180,
+     "unit": "W",
+     "text": "180 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 7,
+     "high": 7,
+     "unit": "RPE",
+     "text": "Effort 7",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 180,
+     "to": 180
+    }
+   },
+   {
+    "key": "s7",
+    "programSetId": 1006,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "absolute",
+      "low": 200,
+      "high": 200
+     },
+     "id": "s7"
+    },
+    "round": null,
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": 200,
+     "high": 200,
+     "unit": "W",
+     "text": "200 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 7,
+     "high": 7,
+     "unit": "RPE",
+     "text": "Effort 7",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 200,
+     "to": 200
+    }
+   },
+   {
+    "key": "s8",
+    "programSetId": 1007,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "absolute",
+      "low": 220,
+      "high": 220
+     },
+     "id": "s8"
+    },
+    "round": null,
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": 220,
+     "high": 220,
+     "unit": "W",
+     "text": "220 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 8,
+     "high": 8,
+     "unit": "RPE",
+     "text": "Effort 8",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 220,
+     "to": 220
+    }
+   },
+   {
+    "key": "s9",
+    "programSetId": 1008,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "absolute",
+      "low": 240,
+      "high": 240
+     },
+     "id": "s9"
+    },
+    "round": null,
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": 240,
+     "high": 240,
+     "unit": "W",
+     "text": "240 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 8,
+     "high": 8,
+     "unit": "RPE",
+     "text": "Effort 8",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 240,
+     "to": 240
+    }
+   },
+   {
+    "key": "s10",
+    "programSetId": 1009,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "absolute",
+      "low": 260,
+      "high": 260
+     },
+     "id": "s10"
+    },
+    "round": null,
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": 260,
+     "high": 260,
+     "unit": "W",
+     "text": "260 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 9,
+     "high": 9,
+     "unit": "RPE",
+     "text": "Effort 9",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 260,
+     "to": 260
+    }
+   },
+   {
+    "key": "s11",
+    "programSetId": 1010,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "absolute",
+      "low": 280,
+      "high": 280
+     },
+     "id": "s11"
+    },
+    "round": null,
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": 280,
+     "high": 280,
+     "unit": "W",
+     "text": "280 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 9,
+     "high": 9,
+     "unit": "RPE",
+     "text": "Effort 9",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 280,
+     "to": 280
+    }
+   },
+   {
+    "key": "s12",
+    "programSetId": 1011,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "absolute",
+      "low": 300,
+      "high": 300
+     },
+     "id": "s12"
+    },
+    "round": null,
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": 300,
+     "high": 300,
+     "unit": "W",
+     "text": "300 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 10,
+     "high": 10,
+     "unit": "RPE",
+     "text": "Effort 10",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 300,
+     "to": 300
+    }
+   },
+   {
+    "key": "s13",
+    "programSetId": 1012,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "absolute",
+      "low": 320,
+      "high": 320
+     },
+     "id": "s13"
+    },
+    "round": null,
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": 320,
+     "high": 320,
+     "unit": "W",
+     "text": "320 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 10,
+     "high": 10,
+     "unit": "RPE",
+     "text": "Effort 10",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 320,
+     "to": 320
+    }
+   },
+   {
+    "key": "s14",
+    "programSetId": 1013,
+    "step": {
+     "type": "cooldown",
+     "end": {
+      "type": "time",
+      "seconds": 300
+     },
+     "id": "s14"
+    },
+    "round": null,
+    "seconds": 300,
+    "estSeconds": 300,
+    "target": null,
+    "target2": null,
+    "outdoor": {
+     "low": 2,
+     "high": 2,
+     "unit": "RPE",
+     "text": "Effort 2",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": null
+   }
+  ],
+  "dropped": []
+ },
+ "ramp/1/outdoor": {
+  "v": 1,
+  "mode": "outdoor",
+  "name": "Ramp test",
+  "test": "ramp",
+  "thresholds": {},
+  "steps": [
+   {
+    "key": "s1",
+    "programSetId": 1000,
+    "step": {
+     "type": "warmup",
+     "end": {
+      "type": "time",
+      "seconds": 300
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "ftp",
+      "low": 40,
+      "high": 50
+     },
+     "id": "s1"
+    },
+    "round": null,
+    "seconds": 300,
+    "estSeconds": 300,
+    "target": {
+     "low": null,
+     "high": null,
+     "unit": "W",
+     "text": "40-50% FTP (no ftp set)",
+     "missing": "ftp"
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 2,
+     "high": 2,
+     "unit": "RPE",
+     "text": "Effort 2",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": null
+   },
+   {
+    "key": "s2",
+    "programSetId": 1001,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "absolute",
+      "low": 100,
+      "high": 100
+     },
+     "id": "s2"
+    },
+    "round": null,
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": 100,
+     "high": 100,
+     "unit": "W",
+     "text": "100 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 5,
+     "high": 5,
+     "unit": "RPE",
+     "text": "Effort 5",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 100,
+     "to": 100
+    }
+   },
+   {
+    "key": "s3",
+    "programSetId": 1002,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "absolute",
+      "low": 120,
+      "high": 120
+     },
+     "id": "s3"
+    },
+    "round": null,
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": 120,
+     "high": 120,
+     "unit": "W",
+     "text": "120 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 5,
+     "high": 5,
+     "unit": "RPE",
+     "text": "Effort 5",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 120,
+     "to": 120
+    }
+   },
+   {
+    "key": "s4",
+    "programSetId": 1003,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "absolute",
+      "low": 140,
+      "high": 140
+     },
+     "id": "s4"
+    },
+    "round": null,
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": 140,
+     "high": 140,
+     "unit": "W",
+     "text": "140 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 6,
+     "high": 6,
+     "unit": "RPE",
+     "text": "Effort 6",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 140,
+     "to": 140
+    }
+   },
+   {
+    "key": "s5",
+    "programSetId": 1004,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "absolute",
+      "low": 160,
+      "high": 160
+     },
+     "id": "s5"
+    },
+    "round": null,
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": 160,
+     "high": 160,
+     "unit": "W",
+     "text": "160 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 6,
+     "high": 6,
+     "unit": "RPE",
+     "text": "Effort 6",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 160,
+     "to": 160
+    }
+   },
+   {
+    "key": "s6",
+    "programSetId": 1005,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "absolute",
+      "low": 180,
+      "high": 180
+     },
+     "id": "s6"
+    },
+    "round": null,
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": 180,
+     "high": 180,
+     "unit": "W",
+     "text": "180 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 7,
+     "high": 7,
+     "unit": "RPE",
+     "text": "Effort 7",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 180,
+     "to": 180
+    }
+   },
+   {
+    "key": "s7",
+    "programSetId": 1006,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "absolute",
+      "low": 200,
+      "high": 200
+     },
+     "id": "s7"
+    },
+    "round": null,
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": 200,
+     "high": 200,
+     "unit": "W",
+     "text": "200 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 7,
+     "high": 7,
+     "unit": "RPE",
+     "text": "Effort 7",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 200,
+     "to": 200
+    }
+   },
+   {
+    "key": "s8",
+    "programSetId": 1007,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "absolute",
+      "low": 220,
+      "high": 220
+     },
+     "id": "s8"
+    },
+    "round": null,
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": 220,
+     "high": 220,
+     "unit": "W",
+     "text": "220 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 8,
+     "high": 8,
+     "unit": "RPE",
+     "text": "Effort 8",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 220,
+     "to": 220
+    }
+   },
+   {
+    "key": "s9",
+    "programSetId": 1008,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "absolute",
+      "low": 240,
+      "high": 240
+     },
+     "id": "s9"
+    },
+    "round": null,
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": 240,
+     "high": 240,
+     "unit": "W",
+     "text": "240 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 8,
+     "high": 8,
+     "unit": "RPE",
+     "text": "Effort 8",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 240,
+     "to": 240
+    }
+   },
+   {
+    "key": "s10",
+    "programSetId": 1009,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "absolute",
+      "low": 260,
+      "high": 260
+     },
+     "id": "s10"
+    },
+    "round": null,
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": 260,
+     "high": 260,
+     "unit": "W",
+     "text": "260 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 9,
+     "high": 9,
+     "unit": "RPE",
+     "text": "Effort 9",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 260,
+     "to": 260
+    }
+   },
+   {
+    "key": "s11",
+    "programSetId": 1010,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "absolute",
+      "low": 280,
+      "high": 280
+     },
+     "id": "s11"
+    },
+    "round": null,
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": 280,
+     "high": 280,
+     "unit": "W",
+     "text": "280 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 9,
+     "high": 9,
+     "unit": "RPE",
+     "text": "Effort 9",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 280,
+     "to": 280
+    }
+   },
+   {
+    "key": "s12",
+    "programSetId": 1011,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "absolute",
+      "low": 300,
+      "high": 300
+     },
+     "id": "s12"
+    },
+    "round": null,
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": 300,
+     "high": 300,
+     "unit": "W",
+     "text": "300 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 10,
+     "high": 10,
+     "unit": "RPE",
+     "text": "Effort 10",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 300,
+     "to": 300
+    }
+   },
+   {
+    "key": "s13",
+    "programSetId": 1012,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "absolute",
+      "low": 320,
+      "high": 320
+     },
+     "id": "s13"
+    },
+    "round": null,
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": 320,
+     "high": 320,
+     "unit": "W",
+     "text": "320 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 10,
+     "high": 10,
+     "unit": "RPE",
+     "text": "Effort 10",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 320,
+     "to": 320
+    }
+   },
+   {
+    "key": "s14",
+    "programSetId": 1013,
+    "step": {
+     "type": "cooldown",
+     "end": {
+      "type": "time",
+      "seconds": 300
+     },
+     "id": "s14"
+    },
+    "round": null,
+    "seconds": 300,
+    "estSeconds": 300,
+    "target": null,
+    "target2": null,
+    "outdoor": {
+     "low": 2,
+     "high": 2,
+     "unit": "RPE",
+     "text": "Effort 2",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": null
+   }
+  ],
+  "dropped": []
+ },
+ "twenty/0/indoor": {
+  "v": 1,
+  "mode": "indoor",
+  "name": "20 min test",
+  "test": "20min",
+  "thresholds": {
+   "ftp": 250,
+   "lthr_bike": 165
+  },
+  "steps": [
+   {
+    "key": "s1",
+    "programSetId": 1000,
+    "step": {
+     "type": "warmup",
+     "end": {
+      "type": "time",
+      "seconds": 1200
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "ftp",
+      "zone": 2
+     },
+     "id": "s1"
+    },
+    "round": null,
+    "seconds": 1200,
+    "estSeconds": 1200,
+    "target": {
+     "low": 137.5,
+     "high": 185,
+     "unit": "W",
+     "text": "138-185 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 2,
+     "high": 2,
+     "unit": "RPE",
+     "text": "Effort 2",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 138,
+     "to": 185
+    }
+   },
+   {
+    "key": "s3#1",
+    "programSetId": 1001,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "ftp",
+      "low": 110,
+      "high": 120
+     },
+     "id": "s3"
+    },
+    "round": {
+     "index": 1,
+     "of": 3
+    },
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": 275,
+     "high": 300,
+     "unit": "W",
+     "text": "275-300 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 8,
+     "high": 8,
+     "unit": "RPE",
+     "text": "Effort 8",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 275,
+     "to": 300
+    }
+   },
+   {
+    "key": "s4#1",
+    "programSetId": 1002,
+    "step": {
+     "type": "recovery",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "id": "s4"
+    },
+    "round": {
+     "index": 1,
+     "of": 3
+    },
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": null,
+    "target2": null,
+    "outdoor": {
+     "low": 2,
+     "high": 2,
+     "unit": "RPE",
+     "text": "Effort 2",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": null
+   },
+   {
+    "key": "s3#2",
+    "programSetId": 1003,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "ftp",
+      "low": 110,
+      "high": 120
+     },
+     "id": "s3"
+    },
+    "round": {
+     "index": 2,
+     "of": 3
+    },
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": 275,
+     "high": 300,
+     "unit": "W",
+     "text": "275-300 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 8,
+     "high": 8,
+     "unit": "RPE",
+     "text": "Effort 8",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 275,
+     "to": 300
+    }
+   },
+   {
+    "key": "s4#2",
+    "programSetId": 1004,
+    "step": {
+     "type": "recovery",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "id": "s4"
+    },
+    "round": {
+     "index": 2,
+     "of": 3
+    },
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": null,
+    "target2": null,
+    "outdoor": {
+     "low": 2,
+     "high": 2,
+     "unit": "RPE",
+     "text": "Effort 2",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": null
+   },
+   {
+    "key": "s3#3",
+    "programSetId": 1005,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "ftp",
+      "low": 110,
+      "high": 120
+     },
+     "id": "s3"
+    },
+    "round": {
+     "index": 3,
+     "of": 3
+    },
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": 275,
+     "high": 300,
+     "unit": "W",
+     "text": "275-300 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 8,
+     "high": 8,
+     "unit": "RPE",
+     "text": "Effort 8",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 275,
+     "to": 300
+    }
+   },
+   {
+    "key": "s5",
+    "programSetId": 1007,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 1200
+     },
+     "id": "s5"
+    },
+    "round": null,
+    "seconds": 1200,
+    "estSeconds": 1200,
+    "target": null,
+    "target2": null,
+    "outdoor": null,
+    "outdoor2": null,
+    "power": null
+   },
+   {
+    "key": "s6",
+    "programSetId": 1008,
+    "step": {
+     "type": "cooldown",
+     "end": {
+      "type": "lap"
+     },
+     "id": "s6"
+    },
+    "round": null,
+    "seconds": null,
+    "estSeconds": 600,
+    "target": null,
+    "target2": null,
+    "outdoor": {
+     "low": 2,
+     "high": 2,
+     "unit": "RPE",
+     "text": "Effort 2",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": null
+   }
+  ],
+  "dropped": [
+   {
+    "key": "s4#3",
+    "programSetId": 1006,
+    "step": {
+     "type": "recovery",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "id": "s4"
+    },
+    "round": {
+     "index": 3,
+     "of": 3
+    }
+   }
+  ]
+ },
+ "twenty/0/outdoor": {
+  "v": 1,
+  "mode": "outdoor",
+  "name": "20 min test",
+  "test": "20min",
+  "thresholds": {
+   "ftp": 250,
+   "lthr_bike": 165
+  },
+  "steps": [
+   {
+    "key": "s1",
+    "programSetId": 1000,
+    "step": {
+     "type": "warmup",
+     "end": {
+      "type": "time",
+      "seconds": 1200
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "ftp",
+      "zone": 2
+     },
+     "id": "s1"
+    },
+    "round": null,
+    "seconds": 1200,
+    "estSeconds": 1200,
+    "target": {
+     "low": 137.5,
+     "high": 185,
+     "unit": "W",
+     "text": "138-185 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 2,
+     "high": 2,
+     "unit": "RPE",
+     "text": "Effort 2",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 138,
+     "to": 185
+    }
+   },
+   {
+    "key": "s3#1",
+    "programSetId": 1001,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "ftp",
+      "low": 110,
+      "high": 120
+     },
+     "id": "s3"
+    },
+    "round": {
+     "index": 1,
+     "of": 3
+    },
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": 275,
+     "high": 300,
+     "unit": "W",
+     "text": "275-300 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 8,
+     "high": 8,
+     "unit": "RPE",
+     "text": "Effort 8",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 275,
+     "to": 300
+    }
+   },
+   {
+    "key": "s4#1",
+    "programSetId": 1002,
+    "step": {
+     "type": "recovery",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "id": "s4"
+    },
+    "round": {
+     "index": 1,
+     "of": 3
+    },
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": null,
+    "target2": null,
+    "outdoor": {
+     "low": 2,
+     "high": 2,
+     "unit": "RPE",
+     "text": "Effort 2",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": null
+   },
+   {
+    "key": "s3#2",
+    "programSetId": 1003,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "ftp",
+      "low": 110,
+      "high": 120
+     },
+     "id": "s3"
+    },
+    "round": {
+     "index": 2,
+     "of": 3
+    },
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": 275,
+     "high": 300,
+     "unit": "W",
+     "text": "275-300 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 8,
+     "high": 8,
+     "unit": "RPE",
+     "text": "Effort 8",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 275,
+     "to": 300
+    }
+   },
+   {
+    "key": "s4#2",
+    "programSetId": 1004,
+    "step": {
+     "type": "recovery",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "id": "s4"
+    },
+    "round": {
+     "index": 2,
+     "of": 3
+    },
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": null,
+    "target2": null,
+    "outdoor": {
+     "low": 2,
+     "high": 2,
+     "unit": "RPE",
+     "text": "Effort 2",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": null
+   },
+   {
+    "key": "s3#3",
+    "programSetId": 1005,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "ftp",
+      "low": 110,
+      "high": 120
+     },
+     "id": "s3"
+    },
+    "round": {
+     "index": 3,
+     "of": 3
+    },
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": 275,
+     "high": 300,
+     "unit": "W",
+     "text": "275-300 W",
+     "missing": null
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 8,
+     "high": 8,
+     "unit": "RPE",
+     "text": "Effort 8",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": {
+     "from": 275,
+     "to": 300
+    }
+   },
+   {
+    "key": "s5",
+    "programSetId": 1007,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 1200
+     },
+     "id": "s5"
+    },
+    "round": null,
+    "seconds": 1200,
+    "estSeconds": 1200,
+    "target": null,
+    "target2": null,
+    "outdoor": null,
+    "outdoor2": null,
+    "power": null
+   },
+   {
+    "key": "s6",
+    "programSetId": 1008,
+    "step": {
+     "type": "cooldown",
+     "end": {
+      "type": "lap"
+     },
+     "id": "s6"
+    },
+    "round": null,
+    "seconds": null,
+    "estSeconds": 600,
+    "target": null,
+    "target2": null,
+    "outdoor": {
+     "low": 2,
+     "high": 2,
+     "unit": "RPE",
+     "text": "Effort 2",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": null
+   }
+  ],
+  "dropped": [
+   {
+    "key": "s4#3",
+    "programSetId": 1006,
+    "step": {
+     "type": "recovery",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "id": "s4"
+    },
+    "round": {
+     "index": 3,
+     "of": 3
+    }
+   }
+  ]
+ },
+ "twenty/1/indoor": {
+  "v": 1,
+  "mode": "indoor",
+  "name": "20 min test",
+  "test": "20min",
+  "thresholds": {},
+  "steps": [
+   {
+    "key": "s1",
+    "programSetId": 1000,
+    "step": {
+     "type": "warmup",
+     "end": {
+      "type": "time",
+      "seconds": 1200
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "ftp",
+      "zone": 2
+     },
+     "id": "s1"
+    },
+    "round": null,
+    "seconds": 1200,
+    "estSeconds": 1200,
+    "target": {
+     "low": null,
+     "high": null,
+     "unit": "W",
+     "text": "Z2 power (no ftp set)",
+     "missing": "ftp"
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 2,
+     "high": 2,
+     "unit": "RPE",
+     "text": "Effort 2",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": null
+   },
+   {
+    "key": "s3#1",
+    "programSetId": 1001,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "ftp",
+      "low": 110,
+      "high": 120
+     },
+     "id": "s3"
+    },
+    "round": {
+     "index": 1,
+     "of": 3
+    },
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": null,
+     "high": null,
+     "unit": "W",
+     "text": "110-120% FTP (no ftp set)",
+     "missing": "ftp"
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 8,
+     "high": 8,
+     "unit": "RPE",
+     "text": "Effort 8",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": null
+   },
+   {
+    "key": "s4#1",
+    "programSetId": 1002,
+    "step": {
+     "type": "recovery",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "id": "s4"
+    },
+    "round": {
+     "index": 1,
+     "of": 3
+    },
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": null,
+    "target2": null,
+    "outdoor": {
+     "low": 2,
+     "high": 2,
+     "unit": "RPE",
+     "text": "Effort 2",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": null
+   },
+   {
+    "key": "s3#2",
+    "programSetId": 1003,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "ftp",
+      "low": 110,
+      "high": 120
+     },
+     "id": "s3"
+    },
+    "round": {
+     "index": 2,
+     "of": 3
+    },
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": null,
+     "high": null,
+     "unit": "W",
+     "text": "110-120% FTP (no ftp set)",
+     "missing": "ftp"
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 8,
+     "high": 8,
+     "unit": "RPE",
+     "text": "Effort 8",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": null
+   },
+   {
+    "key": "s4#2",
+    "programSetId": 1004,
+    "step": {
+     "type": "recovery",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "id": "s4"
+    },
+    "round": {
+     "index": 2,
+     "of": 3
+    },
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": null,
+    "target2": null,
+    "outdoor": {
+     "low": 2,
+     "high": 2,
+     "unit": "RPE",
+     "text": "Effort 2",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": null
+   },
+   {
+    "key": "s3#3",
+    "programSetId": 1005,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "ftp",
+      "low": 110,
+      "high": 120
+     },
+     "id": "s3"
+    },
+    "round": {
+     "index": 3,
+     "of": 3
+    },
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": null,
+     "high": null,
+     "unit": "W",
+     "text": "110-120% FTP (no ftp set)",
+     "missing": "ftp"
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 8,
+     "high": 8,
+     "unit": "RPE",
+     "text": "Effort 8",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": null
+   },
+   {
+    "key": "s5",
+    "programSetId": 1007,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 1200
+     },
+     "id": "s5"
+    },
+    "round": null,
+    "seconds": 1200,
+    "estSeconds": 1200,
+    "target": null,
+    "target2": null,
+    "outdoor": null,
+    "outdoor2": null,
+    "power": null
+   },
+   {
+    "key": "s6",
+    "programSetId": 1008,
+    "step": {
+     "type": "cooldown",
+     "end": {
+      "type": "lap"
+     },
+     "id": "s6"
+    },
+    "round": null,
+    "seconds": null,
+    "estSeconds": 600,
+    "target": null,
+    "target2": null,
+    "outdoor": {
+     "low": 2,
+     "high": 2,
+     "unit": "RPE",
+     "text": "Effort 2",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": null
+   }
+  ],
+  "dropped": [
+   {
+    "key": "s4#3",
+    "programSetId": 1006,
+    "step": {
+     "type": "recovery",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "id": "s4"
+    },
+    "round": {
+     "index": 3,
+     "of": 3
+    }
+   }
+  ]
+ },
+ "twenty/1/outdoor": {
+  "v": 1,
+  "mode": "outdoor",
+  "name": "20 min test",
+  "test": "20min",
+  "thresholds": {},
+  "steps": [
+   {
+    "key": "s1",
+    "programSetId": 1000,
+    "step": {
+     "type": "warmup",
+     "end": {
+      "type": "time",
+      "seconds": 1200
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "ftp",
+      "zone": 2
+     },
+     "id": "s1"
+    },
+    "round": null,
+    "seconds": 1200,
+    "estSeconds": 1200,
+    "target": {
+     "low": null,
+     "high": null,
+     "unit": "W",
+     "text": "Z2 power (no ftp set)",
+     "missing": "ftp"
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 2,
+     "high": 2,
+     "unit": "RPE",
+     "text": "Effort 2",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": null
+   },
+   {
+    "key": "s3#1",
+    "programSetId": 1001,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "ftp",
+      "low": 110,
+      "high": 120
+     },
+     "id": "s3"
+    },
+    "round": {
+     "index": 1,
+     "of": 3
+    },
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": null,
+     "high": null,
+     "unit": "W",
+     "text": "110-120% FTP (no ftp set)",
+     "missing": "ftp"
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 8,
+     "high": 8,
+     "unit": "RPE",
+     "text": "Effort 8",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": null
+   },
+   {
+    "key": "s4#1",
+    "programSetId": 1002,
+    "step": {
+     "type": "recovery",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "id": "s4"
+    },
+    "round": {
+     "index": 1,
+     "of": 3
+    },
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": null,
+    "target2": null,
+    "outdoor": {
+     "low": 2,
+     "high": 2,
+     "unit": "RPE",
+     "text": "Effort 2",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": null
+   },
+   {
+    "key": "s3#2",
+    "programSetId": 1003,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "ftp",
+      "low": 110,
+      "high": 120
+     },
+     "id": "s3"
+    },
+    "round": {
+     "index": 2,
+     "of": 3
+    },
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": null,
+     "high": null,
+     "unit": "W",
+     "text": "110-120% FTP (no ftp set)",
+     "missing": "ftp"
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 8,
+     "high": 8,
+     "unit": "RPE",
+     "text": "Effort 8",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": null
+   },
+   {
+    "key": "s4#2",
+    "programSetId": 1004,
+    "step": {
+     "type": "recovery",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "id": "s4"
+    },
+    "round": {
+     "index": 2,
+     "of": 3
+    },
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": null,
+    "target2": null,
+    "outdoor": {
+     "low": 2,
+     "high": 2,
+     "unit": "RPE",
+     "text": "Effort 2",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": null
+   },
+   {
+    "key": "s3#3",
+    "programSetId": 1005,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "target": {
+      "metric": "power",
+      "anchor": "ftp",
+      "low": 110,
+      "high": 120
+     },
+     "id": "s3"
+    },
+    "round": {
+     "index": 3,
+     "of": 3
+    },
+    "seconds": 60,
+    "estSeconds": 60,
+    "target": {
+     "low": null,
+     "high": null,
+     "unit": "W",
+     "text": "110-120% FTP (no ftp set)",
+     "missing": "ftp"
+    },
+    "target2": null,
+    "outdoor": {
+     "low": 8,
+     "high": 8,
+     "unit": "RPE",
+     "text": "Effort 8",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": null
+   },
+   {
+    "key": "s5",
+    "programSetId": 1007,
+    "step": {
+     "type": "work",
+     "end": {
+      "type": "time",
+      "seconds": 1200
+     },
+     "id": "s5"
+    },
+    "round": null,
+    "seconds": 1200,
+    "estSeconds": 1200,
+    "target": null,
+    "target2": null,
+    "outdoor": null,
+    "outdoor2": null,
+    "power": null
+   },
+   {
+    "key": "s6",
+    "programSetId": 1008,
+    "step": {
+     "type": "cooldown",
+     "end": {
+      "type": "lap"
+     },
+     "id": "s6"
+    },
+    "round": null,
+    "seconds": null,
+    "estSeconds": 600,
+    "target": null,
+    "target2": null,
+    "outdoor": {
+     "low": 2,
+     "high": 2,
+     "unit": "RPE",
+     "text": "Effort 2",
+     "missing": null
+    },
+    "outdoor2": null,
+    "power": null
+   }
+  ],
+  "dropped": [
+   {
+    "key": "s4#3",
+    "programSetId": 1006,
+    "step": {
+     "type": "recovery",
+     "end": {
+      "type": "time",
+      "seconds": 60
+     },
+     "id": "s4"
+    },
+    "round": {
+     "index": 3,
+     "of": 3
+    }
+   }
+  ]
+ }
+}

@@ -67,6 +67,16 @@ describe("rideScreen", () => {
     expect(s.profile.markerX).toBeCloseTo(bar.x + (bar.w * 198) / 900, 1);
   });
 
+  it("+1 min widens the step's bar in the mini profile, as the total grows", () => {
+    // +1 min on step 2 (900 s) at 910 s; 198 s into it.
+    const t = rideTimeline(indoor, [ev("start", 0), ev("extend", 910, 60)], at(900 + 198));
+    const s = rideScreen(indoor, t)!;
+    expect(s.total).toBe("18:18 of 66:00 + open");
+    const [warm, work] = s.profile.bars;
+    expect(work.w / warm.w).toBeCloseTo(960 / 900, 2);
+    expect(s.profile.markerX).toBeCloseTo(work.x + (work.w * 198) / 960, 1);
+  });
+
   it("±5 W moves the watts; at ±50 W the button stops", () => {
     const events = [ev("start", 0), ...Array.from({ length: 10 }, (_, i) => ev("nudge", 910 + i, 5))];
     const s = rideScreen(indoor, rideTimeline(indoor, events, at(930)))!;

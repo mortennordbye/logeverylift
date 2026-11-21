@@ -1,0 +1,612 @@
+<title>Run Logger Plan</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+.phone, .real { box-sizing: border-box; }
+/* Layout: one reading column for the plan; phone mockups in a wrapping row, always in the app's dark look. */
+:root {
+  --bg: #f6f7f9; --fg: #15171c; --muted: #5d6470; --line: #dfe3ea; --panel: #ffffff;
+  --accent: #3d63e0; --accent-soft: #e6ecfd; --warn: #b4501a; --ok: #1f7a4d;
+  --display: "Space Grotesk", "Inter", system-ui, sans-serif;
+  --body: "Inter", system-ui, -apple-system, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  /* phone (app look, fixed dark) */
+  --ph-bg: #0b0b0c; --ph-card: #1a1b1f; --ph-card2: #24262c; --ph-fg: #f4f5f7; --ph-muted: #9097a3; --ph-line: #2c2e35; --ph-accent: #6b8cff;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #111318; --fg: #eceef2; --muted: #9aa1ad; --line: #2a2e37; --panel: #181b21;
+  --accent: #7d9bff; --accent-soft: #1f2741; --warn: #f0965e; --ok: #5cc994; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #111318; --fg: #eceef2; --muted: #9aa1ad; --line: #2a2e37; --panel: #181b21;
+  --accent: #7d9bff; --accent-soft: #1f2741; --warn: #f0965e; --ok: #5cc994; color-scheme: dark }
+body { background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 15px; line-height: 1.55; }
+.wrap { max-width: 1080px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 32px 64px; }
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; line-height: 1.2; }
+h1 { font-size: 32px; margin: 0 0 6px; }
+h2 { font-size: 22px; margin: 44px 0 12px; padding-top: 18px; border-top: 1px solid var(--line); }
+h3 { font-size: 17px; margin: 22px 0 8px; }
+p, li { max-width: 72ch; }
+.lede { color: var(--muted); font-size: 16px; margin: 0; }
+.meta { font-size: 13px; color: var(--muted); margin-top: 10px; }
+code { font-family: var(--mono); font-size: 0.86em; background: var(--accent-soft); padding: 1px 5px; border-radius: 4px; }
+.find { display: grid; gap: 10px; margin: 14px 0; }
+.find div { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+.find b { display: block; font-size: 14px; }
+.find span { color: var(--muted); font-size: 14px; }
+.screens { display: flex; flex-wrap: wrap; gap: 22px; margin: 18px 0 8px; }
+.shot { display: flex; flex-direction: column; gap: 8px; width: 290px; max-width: 100%; }
+.shot figcaption { font-size: 13px; color: var(--muted); }
+.shot figcaption b { color: var(--fg); display: block; font-size: 14px; }
+figure { margin: 0; }
+.tag { display: inline-block; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 8px; border-radius: 99px; margin-bottom: 4px; }
+.tag.before { background: color-mix(in oklab, var(--warn) 18%, transparent); color: var(--warn); }
+.tag.after { background: var(--accent-soft); color: var(--accent); }
+.real { width: 290px; max-width: 100%; border-radius: 26px; border: 1px solid var(--line); display: block; }
+
+/* phone mockup */
+.phone { width: 290px; max-width: 100%; min-height: 560px; background: var(--ph-bg); color: var(--ph-fg); border-radius: 26px; border: 1px solid #000; padding: 14px 14px 12px; display: flex; flex-direction: column; gap: 10px; font-size: 13px; line-height: 1.35; box-shadow: 0 10px 30px rgb(0 0 0 / 0.18); position: relative; overflow: hidden; }
+.ph-top { display: flex; justify-content: space-between; color: var(--ph-accent); font-size: 13px; }
+.ph-title { font-family: var(--display); font-size: 24px; font-weight: 700; margin: 0; }
+.ph-sub { color: var(--ph-muted); font-size: 12px; }
+.seg { display: grid; grid-template-columns: 1fr 1fr; background: var(--ph-card2); border-radius: 10px; padding: 3px; font-size: 12px; font-weight: 600; text-align: center; }
+.seg span { padding: 6px; border-radius: 8px; color: var(--ph-muted); }
+.seg span.on { background: var(--ph-bg); color: var(--ph-fg); }
+.ph-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.ph-chip { background: var(--ph-card2); border-radius: 99px; padding: 3px 9px; font-size: 11px; color: var(--ph-fg); }
+.profile { background: var(--ph-card); border-radius: 12px; padding: 10px 10px 6px; }
+.profile svg { display: block; width: 100%; height: auto; }
+.profile .axis { display: flex; justify-content: space-between; color: var(--ph-muted); font-size: 10px; font-variant-numeric: tabular-nums; margin-top: 3px; }
+.steps { display: flex; flex-direction: column; background: var(--ph-card); border-radius: 12px; }
+.step { display: grid; grid-template-columns: 22px 1fr auto; gap: 8px; align-items: center; padding: 9px 10px; border-top: 1px solid var(--ph-line); }
+.step:first-child { border-top: 0; }
+.step .n { width: 22px; height: 22px; border-radius: 50%; background: var(--ph-card2); display: grid; place-items: center; font-size: 11px; color: var(--ph-muted); }
+.step .nm { font-weight: 600; font-size: 13px; }
+.step .tg { color: var(--ph-muted); font-size: 11px; }
+.step .rt { text-align: right; font-variant-numeric: tabular-nums; }
+.step .rt b { display: block; font-size: 13px; }
+.step .rt span { color: var(--ph-muted); font-size: 11px; }
+.step.easy .nm { color: var(--ph-muted); }
+.ph-bar { margin-top: auto; display: grid; grid-template-columns: 1fr; gap: 6px; }
+.btn { border-radius: 12px; padding: 12px; text-align: center; font-weight: 600; font-size: 14px; }
+.btn.pri { background: var(--ph-accent); color: #0b0b0c; }
+.btn.sec { background: var(--ph-card2); color: var(--ph-fg); }
+.btn.ghost { color: var(--ph-accent); padding: 6px; font-weight: 500; }
+/* ride mode */
+.ride-head { display: flex; justify-content: space-between; color: var(--ph-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.ride-step { font-family: var(--display); font-size: 20px; font-weight: 700; }
+.clock { font-family: var(--display); font-size: 68px; font-weight: 600; letter-spacing: -0.02em; text-align: center; font-variant-numeric: tabular-nums; line-height: 1; margin: 6px 0 0; }
+.clock-sub { text-align: center; color: var(--ph-muted); font-size: 12px; }
+.target { background: var(--ph-card); border-radius: 14px; padding: 12px; text-align: center; }
+.target .w { font-family: var(--display); font-size: 36px; font-weight: 700; color: var(--ph-accent); font-variant-numeric: tabular-nums; }
+.target .w small { font-size: 16px; color: var(--ph-muted); font-weight: 500; }
+.target .row { display: flex; justify-content: center; gap: 14px; color: var(--ph-fg); font-size: 12px; margin-top: 4px; }
+.target .row span { color: var(--ph-muted); }
+.nudge { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+.nudge div { background: var(--ph-card2); border-radius: 10px; padding: 10px 4px; text-align: center; font-weight: 600; font-size: 13px; }
+.track { height: 6px; border-radius: 3px; background: var(--ph-card2); position: relative; overflow: hidden; }
+.track i { position: absolute; inset: 0 auto 0 0; width: 37%; background: var(--ph-accent); }
+.next { background: var(--ph-card); border-radius: 12px; padding: 9px 11px; display: flex; justify-content: space-between; font-size: 12px; }
+.next span { color: var(--ph-muted); }
+.controls { display: grid; grid-template-columns: 1fr 1.4fr 1fr; gap: 6px; margin-top: auto; }
+.controls div { border-radius: 12px; padding: 12px 4px; text-align: center; font-weight: 600; background: var(--ph-card2); }
+.controls .main { background: var(--ph-accent); color: #0b0b0c; }
+/* sheet */
+.dim { position: absolute; inset: 0; background: rgb(0 0 0 / 0.55); }
+.sheet { position: absolute; inset: auto 0 0 0; background: var(--ph-card); border-radius: 18px 18px 0 0; padding: 14px; display: flex; flex-direction: column; gap: 9px; }
+.sheet-h { display: flex; justify-content: space-between; align-items: baseline; }
+.sheet-h b { font-size: 15px; }
+.sheet-h span { color: var(--ph-accent); font-size: 13px; }
+.plan-line { color: var(--ph-muted); font-size: 11px; }
+.fields { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.field { background: var(--ph-bg); border-radius: 10px; padding: 7px 9px; }
+.field label { display: block; color: var(--ph-muted); font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase; }
+.field div { font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.field div small { font-size: 11px; color: var(--ph-muted); font-weight: 500; }
+.field.empty div { color: var(--ph-muted); font-weight: 500; font-size: 13px; }
+.field.wide { grid-column: span 2; }
+.rpe { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
+.rpe div { background: var(--ph-bg); border-radius: 8px; text-align: center; padding: 7px 0; font-weight: 600; }
+.rpe .on { background: var(--ph-accent); color: #0b0b0c; }
+/* summary */
+.kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.kpi { background: var(--ph-card); border-radius: 10px; padding: 8px; }
+.kpi label { color: var(--ph-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; }
+.kpi div { font-family: var(--display); font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.res { display: grid; grid-template-columns: 1fr auto auto; gap: 4px 10px; background: var(--ph-card); border-radius: 12px; padding: 9px 11px; font-size: 12px; font-variant-numeric: tabular-nums; }
+.res .h { color: var(--ph-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; }
+.res .lo { color: #f0a35e; }
+.garmin { border: 1px dashed var(--ph-line); border-radius: 12px; padding: 9px 11px; font-size: 12px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.garmin span { color: var(--ph-muted); }
+.garmin b { color: var(--ph-accent); white-space: nowrap; }
+/* lock screen */
+.lock { background: linear-gradient(180deg, #1c2340, #0b0b0c 70%); }
+.lock .time { font-family: var(--display); font-size: 58px; font-weight: 600; text-align: center; margin-top: 18px; }
+.lock .date { text-align: center; color: var(--ph-muted); }
+.note { background: rgb(40 42 50 / 0.92); border-radius: 16px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
+.note .app { display: flex; justify-content: space-between; font-size: 11px; color: var(--ph-muted); }
+.note b { font-size: 13px; }
+.note span { font-size: 12px; color: #d6d9e0; }
+
+/* plan tables and steps */
+.tbl { overflow-x: auto; margin: 10px 0; }
+table { border-collapse: collapse; width: 100%; min-width: 560px; font-size: 14px; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 600; }
+ol.build { padding-left: 0; list-style: none; counter-reset: s; display: grid; gap: 10px; }
+ol.build li { counter-increment: s; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px 12px 52px; position: relative; max-width: none; }
+ol.build li::before { content: counter(s); position: absolute; left: 14px; top: 12px; width: 26px; height: 26px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-weight: 700; display: grid; place-items: center; font-size: 13px; }
+ol.build li b { display: block; }
+ol.build .chk { color: var(--muted); font-size: 13px; margin-top: 4px; }
+.dec { display: grid; gap: 10px; }
+.dec div { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+.dec b { display: block; }
+.dec .rec { color: var(--accent); font-size: 13px; font-weight: 600; margin-top: 4px; }
+pre { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; overflow-x: auto; font-family: var(--mono); font-size: 12.5px; line-height: 1.5; }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+.two > div { min-width: 0; }
+ul.plain { padding-left: 18px; }
+.open { color: var(--warn) !important; }
+ol.build { counter-reset: s -1; }
+.ph-mode { display: flex; justify-content: space-between; background: var(--ph-card); border-radius: 10px; padding: 8px 10px; font-size: 12px; }
+.ph-mode b { color: var(--ph-fg); }
+.ph-mode span { color: var(--ph-accent); }
+.belt { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.belt div { background: var(--ph-card2); border-radius: 10px; padding: 8px 4px; text-align: center; font-size: 12px; font-weight: 600; }
+.belt div span { display: block; color: var(--ph-muted); font-size: 10px; font-weight: 500; }
+</style>
+
+<div class="wrap">
+<h1>Run logger</h1>
+<p class="lede">Give the run exercise what the bike got: a planned view, a run mode that guides each step and saves it, Treadmill and Outdoor, step alerts, Garmin fill and the numbers a runner uses. Plus the edge cases a run has and a ride does not.</p>
+<p class="meta">Version 4 · 2026-11-20 · for your yes. Nothing is built. Four reviews (code, running coach, screens, logic) checked version 1. The full build brief is <code>docs/plans/run-logger.md</code>, written so that a new session can build it with no chat history.</p>
+
+<h2>What the reviews changed</h2>
+<div class="find">
+  <div><b>Code</b><span>Incline is a whole number in the database, and every step write sets it to null today. It becomes a decimal and a real step field. The step snapshot and the ride lookup are fixed to the bike, so both get the sport from the plan. Multisport Garmin files are read per part. Run cadence from Garmin is doubled, as on the Garmin pages.</span></div>
+  <div><b>Running coach</b><span>Easy heart rate targets are caps: under the cap is a pass, so the summary shows no ↓ for an easy run. Run pace zones (Friel) are added. A heart rate step starts the belt at the slow end of its pace zone (zone 2 is 8.2 km/h for you), with "Adjust after 6 min". Treadmill strides become 30 s, because a belt takes 5 to 15 s to speed up. 1% incline counts as flat. Brick runs start on effort for 10 min. The threshold test gets checks, safety lines and a 7 day wait after illness.</span></div>
+  <div><b>Screens</b><span>The belt − and + move into the target card and are larger, away from +1 min, so a wet finger cannot add time by mistake. Outdoor runs say that alerts are off, offer beeps with the screen on, and lock the controls against pocket taps. A strides block has its own screen. In a brick, the ride's done screen goes straight to Start run, with a live T2.</span></div>
+  <div><b>Logic</b><span>Each step's end rule and belt speed are fixed at start, so a later Garmin correction cannot move the steps. A recovery never takes the stride speed. A late Lap tap at the end of a rep lands on the right step. A queued ride event cannot restart the ride while the brick run runs. Distance builds only while running, not while paused.</span></div>
+  <div><b>Added from the reviews</b><span>A surface choice outdoors (Road, or Trail or snow, where pace targets become heart rate). An optional reason when you end early. Pain links to the injury log.</span></div>
+</div>
+
+<h2>What I found</h2>
+<div class="find">
+  <div><b>Your run programs are plain sets</b><span>"2 Base · Run" is one 75 min set at heart rate zone 2. The strides are only in the note. "Brick run · 40 min" is two plain sets (10 min zone 2, 30 min zone 3). No run program holds steps.</span></div>
+  <div><b>Play on a run does not run a clock</b><span>Play opens <code>LogRunModal</code>, which starts at 5 km (<code>defaultDistanceM: 5000</code>). For the 75 min set that gives 15:00 /km. This is the same failure as the 40 km bike guess.</span></div>
+  <div><b>The guided player is weak for a run</b><span>It opens only from a planned session of today, keeps everything in the phone's browser storage, saves nothing per step, sends no alerts and gets no Garmin fill.</span></div>
+  <div><b>Most of your runs are on a treadmill</b><span>8 of your last 10 runs. Garmin says "Treadmill pace is not measured", so the watch distance is a guess. The belt speed you set on the machine is the true pace.</span></div>
+  <div><b>Run power is not a usable target</b><span>Your watch gives about 295 W on the treadmill (easy, HR 135) and about 375 W outside (HR 153). The numbers do not compare across modes, so this plan uses pace and heart rate, not power.</span></div>
+  <div><b>Your zones are guesses from Garmin</b><span>LTHR 180 and threshold pace 5:39 /km are Garmin estimates. Your easy treadmill run (HR 135 at 7:33 /km) is zone 1, which fits them, so it was simply easy. The run threshold test (step 8) replaces the guesses with a measured value.</span></div>
+  <div><b>Most of the bike build can be used again</b><span>The clock and event list, saving each step, the lap and time split for Garmin, and push all work for a run. The parts tied to watts need a run version: ±5 W, NP and IF, the outdoor target and the FTP test.</span></div>
+</div>
+
+<h2>Before and after</h2>
+<div class="screens">
+  <figure class="shot">
+    <div class="phone">
+      <div class="dim"></div>
+      <div class="sheet">
+        <div class="sheet-h"><b>Log Run</b><span>Cancel</span></div>
+        <div class="plan-line">2 Base · Run · set 1 · HR zone 2</div>
+        <div class="fields">
+          <div class="field"><label>Distance</label><div>5.00 <small>km</small></div></div>
+          <div class="field"><label>Duration</label><div>75:00</div></div>
+          <div class="field"><label>Pace</label><div>15:00 <small>/km</small></div></div>
+          <div class="field"><label>Incline</label><div>0 <small>%</small></div></div>
+        </div>
+        <div class="btn pri">Log Run</div>
+      </div>
+    </div>
+    <figcaption><span class="tag before">Before</span><b>Play opens a form</b>No clock. 5 km is a guess, so the pace is wrong. Strides are not there.</figcaption>
+  </figure>
+
+  <figure class="shot">
+    <div class="phone">
+      <div class="ph-top"><span>‹ Workout</span><span>Edit</span></div>
+      <p class="ph-title">Run</p>
+      <div class="ph-sub">75 min · load about 60 · threshold 5:39 /km</div>
+      <div class="ph-mode"><b>Treadmill</b><span>Change</span></div>
+      <div class="profile">
+        <svg viewBox="0 0 260 80" role="img" aria-label="Planned heart rate profile">
+          <rect x="0" y="0" width="260" height="20" fill="#24262c" opacity="0.5"/>
+          <line x1="0" y1="20" x2="260" y2="20" stroke="#2c2e35"/>
+          <line x1="0" y1="40" x2="260" y2="40" stroke="#2c2e35"/>
+          <line x1="0" y1="60" x2="260" y2="60" stroke="#2c2e35"/>
+          <rect x="0" y="58" width="34" height="22" fill="#6b8cff" opacity="0.45"/>
+          <rect x="35" y="44" width="173" height="36" fill="#6b8cff" opacity="0.8"/>
+          <rect x="209" y="66" width="3" height="14" fill="#6b8cff" opacity="0.45"/>
+          <rect x="212" y="14" width="2" height="66" fill="#6b8cff"/>
+          <rect x="214" y="66" width="5" height="14" fill="#6b8cff" opacity="0.45"/>
+          <rect x="219" y="14" width="2" height="66" fill="#6b8cff"/>
+          <rect x="221" y="66" width="5" height="14" fill="#6b8cff" opacity="0.45"/>
+          <rect x="226" y="14" width="2" height="66" fill="#6b8cff"/>
+          <rect x="228" y="66" width="5" height="14" fill="#6b8cff" opacity="0.45"/>
+          <rect x="233" y="14" width="2" height="66" fill="#6b8cff"/>
+          <rect x="235" y="66" width="5" height="14" fill="#6b8cff" opacity="0.45"/>
+          <rect x="240" y="14" width="2" height="66" fill="#6b8cff"/>
+          <rect x="242" y="66" width="5" height="14" fill="#6b8cff" opacity="0.45"/>
+          <rect x="247" y="14" width="2" height="66" fill="#6b8cff"/>
+          <rect x="250" y="70" width="10" height="10" fill="#6b8cff" opacity="0.35"/>
+          <text x="2" y="16" fill="#9097a3" font-size="8">Z4</text>
+          <text x="2" y="36" fill="#9097a3" font-size="8">Z3</text>
+          <text x="40" y="56" fill="#0b0b0c" font-size="8">Z2 · HR 153-160</text>
+        </svg>
+        <div class="axis"><span>0</span><span>30</span><span>60</span><span>75 min</span></div>
+      </div>
+      <div class="steps">
+        <div class="step easy"><div class="n">1</div><div><div class="nm">Warm-up</div><div class="tg">Belt 7.5 km/h · incline 1%</div></div><div class="rt"><b>10:00</b><span>Z1</span></div></div>
+        <div class="step"><div class="n">2</div><div><div class="nm">Steady</div><div class="tg">HR under 160 · start 8.2 km/h</div></div><div class="rt"><b>50:00</b><span>Z2</span></div></div>
+        <div class="step"><div class="n">3</div><div><div class="nm">Strides 6 ×</div><div class="tg">30 s · 13.0 km/h · 1:30 easy between</div></div><div class="rt"><b>12:00</b><span>Fast</span></div></div>
+        <div class="step easy"><div class="n">4</div><div><div class="nm">Cool-down</div><div class="tg">Walk 5.5 km/h</div></div><div class="rt"><b>3:00</b><span>Z1</span></div></div>
+      </div>
+      <div class="ph-bar"><div class="btn pri">Start run</div><div class="btn ghost">Log by hand</div></div>
+    </div>
+    <figcaption><span class="tag after">After</span><b>Run exercise, ready</b>The plan as steps, with the belt speed to set on the machine. Mode chosen for you, with Change.</figcaption>
+  </figure>
+
+  <figure class="shot">
+    <div class="phone">
+      <div class="ride-head"><span>Treadmill · step 2 of 4</span><span>24:20 of 75:00</span></div>
+      <div class="track"><i></i></div>
+      <div class="ride-step">Steady</div>
+      <div class="clock">35:40</div>
+      <div class="clock-sub">left in this step</div>
+      <div class="target" style="display:grid;grid-template-columns:56px 1fr 56px;align-items:center;gap:6px">
+        <div class="btn sec" style="padding:18px 0;font-size:22px">−</div>
+        <div><div class="ph-sub">Belt</div><div class="w">8.5 <small>km/h</small></div><div class="ph-sub">Plan 8.2</div></div>
+        <div class="btn sec" style="padding:18px 0;font-size:22px">+</div>
+      </div>
+      <div class="belt" style="grid-template-columns:44px 1fr 44px"><div>−</div><div><span>Incline</span>1%</div><div>+</div></div>
+      <div class="ph-sub" style="text-align:center">HR under 160 · 7:04 /km</div>
+      <div class="next"><span>Next</span>Strides 6 × 30 s · 13.0 km/h</div>
+      <div class="controls"><div>+1 min</div><div class="main">Pause</div><div>Hold to skip</div></div>
+    </div>
+    <figcaption><span class="tag after">After</span><b>Run mode, treadmill</b>Tap − or + when you change the belt. The app then has your belt pace and distance, which the watch cannot measure.</figcaption>
+  </figure>
+
+  <figure class="shot">
+    <div class="phone">
+      <div class="ride-head"><span>Outdoor · Road · step 3 of 4</span><span>61:10 of 75:00</span></div>
+      <div class="track"><i style="width:81%"></i></div>
+      <div class="ride-step">Stride 3 of 6</div>
+      <div class="clock">0:12</div>
+      <div class="clock-sub">● ● ○ ○ ○ ○</div>
+      <div class="target"><div class="w">Fast <small>and relaxed</small></div><div class="row">then 1:30 easy jog</div></div>
+      <div class="garmin"><span>Step alerts are off · Keep the screen on for beeps, or follow your watch</span></div>
+      <div class="next"><span>Next</span>Cool-down · walk 3 min</div>
+      <div class="controls" style="grid-template-columns:1fr"><div>Controls locked · Hold to unlock</div></div>
+    </div>
+    <figcaption><span class="tag after">After</span><b>Outdoor, strides block</b>No alerts in this build (push stays off). With the screen on it beeps at each rep. The controls lock so a pocket cannot tap them.</figcaption>
+  </figure>
+
+  <figure class="shot">
+    <div class="phone">
+      <div class="ph-top"><span>‹ Workout</span><span></span></div>
+      <p class="ph-title">Run done</p>
+      <div class="ph-sub">Treadmill · distance from the belt</div>
+      <div class="kpis">
+        <div class="kpi"><label>Time</label><div>75:02</div></div>
+        <div class="kpi"><label>Distance</label><div>9.8 km</div></div>
+        <div class="kpi"><label>Pace</label><div>7:39 <small style="font-size:10px">/km</small></div></div>
+        <div class="kpi"><label>Avg HR</label><div>141</div></div>
+        <div class="kpi"><label>Load est.</label><div>58</div></div>
+        <div class="kpi"><label>Drift</label><div>3% <small style="font-size:10px">steady</small></div></div>
+      </div>
+      <div class="res">
+        <span class="h">Step</span><span class="h">Plan</span><span class="h">Done</span>
+        <span>Warm-up</span><span>7.5 · Z1</span><span>7.5 · HR 124</span>
+        <span>Steady</span><span>8.2 · HR 160</span><span>8.5 · HR 146</span>
+        <span>Strides</span><span>6 × 30 s</span><span>6 of 6</span>
+        <span>Cool-down</span><span>5.5 · Z1</span><span>5.5 · HR 118</span>
+      </div>
+      <div class="plan-line">km/h · HR. Under an easy cap is a pass.</div>
+      <div class="garmin"><span>Steps filled from Garmin</span><b>Undo</b></div>
+      <div class="ph-bar"><div class="btn sec">Done</div></div>
+    </div>
+    <figcaption><span class="tag after">After</span><b>Summary</b>Plan against done in the same units. An arrow shows only when a step misses a range or goes over a cap. Drift under 5% shows as steady.</figcaption>
+  </figure>
+</div>
+
+<h2>Run exercise screen, all states (step 2)</h2>
+<p>The states the pictures above do not show. Each is built in step 2 and checked against its screenshot at 390 and 320 px.</p>
+<div class="screens">
+  <figure class="shot">
+    <div class="phone">
+      <div class="ph-top"><span>‹ Workout</span><span>Edit</span></div>
+      <p class="ph-title">Run</p>
+      <div class="ph-sub">75 min · load about 70 · threshold 5:39 /km</div>
+      <div class="ph-mode"><b>Treadmill</b><span>Change</span></div>
+      <div class="profile">
+        <svg viewBox="0 0 260 80" role="img" aria-label="Planned heart rate profile">
+          <rect x="0" y="0" width="260" height="20" fill="#24262c" opacity="0.5"/>
+          <line x1="0" y1="20" x2="260" y2="20" stroke="#2c2e35"/>
+          <line x1="0" y1="40" x2="260" y2="40" stroke="#2c2e35"/>
+          <line x1="0" y1="60" x2="260" y2="60" stroke="#2c2e35"/>
+          <rect x="0" y="62" width="34" height="18" fill="#6b8cff" opacity="0.35"/>
+          <rect x="35" y="50" width="173" height="30" fill="#6b8cff" opacity="0.6"/>
+          <line x1="35" y1="44" x2="208" y2="44" stroke="#6b8cff" stroke-dasharray="2 2"/>
+          <rect x="210" y="14" width="3" height="66" fill="#6b8cff"/><rect x="213" y="66" width="4" height="14" fill="#6b8cff" opacity="0.35"/>
+          <rect x="217" y="14" width="3" height="66" fill="#6b8cff"/><rect x="220" y="66" width="4" height="14" fill="#6b8cff" opacity="0.35"/>
+          <rect x="224" y="14" width="3" height="66" fill="#6b8cff"/><rect x="227" y="66" width="4" height="14" fill="#6b8cff" opacity="0.35"/>
+          <rect x="231" y="14" width="3" height="66" fill="#6b8cff"/><rect x="234" y="66" width="4" height="14" fill="#6b8cff" opacity="0.35"/>
+          <rect x="238" y="14" width="3" height="66" fill="#6b8cff"/><rect x="241" y="66" width="4" height="14" fill="#6b8cff" opacity="0.35"/>
+          <rect x="245" y="14" width="3" height="66" fill="#6b8cff"/><rect x="248" y="66" width="4" height="14" fill="#6b8cff" opacity="0.35"/>
+          <rect x="252" y="68" width="8" height="12" fill="#6b8cff" opacity="0.3"/>
+          <text x="2" y="16" fill="#9097a3" font-size="8">Z4</text>
+          <text x="2" y="36" fill="#9097a3" font-size="8">Z3</text>
+          <text x="40" y="40" fill="#f4f5f7" font-size="8">Z2 · HR under 160</text>
+        </svg>
+        <div class="axis"><span>0</span><span>30</span><span>60</span><span>75 min</span></div>
+      </div>
+      <div class="ph-chips" style="justify-content:space-around;text-align:center">
+        <div><b>10.1</b><div class="ph-sub">km est.</div></div><div><b>70</b><div class="ph-sub">load</div></div><div><b>50 min</b><div class="ph-sub">in Z2</div></div>
+      </div>
+      <div><div class="track" style="display:flex;gap:2px;background:none"><i style="position:static;width:auto;flex:22;opacity:.35"></i><i style="position:static;width:auto;flex:50;opacity:.55"></i><i style="position:static;width:auto;flex:3;opacity:.95"></i></div>
+      <div class="axis" style="display:flex;justify-content:space-between;color:var(--ph-muted);font-size:10px;margin-top:3px"><span>Z1 22</span><span>Z2 50</span><span>Z5 3 min</span></div></div>
+      <div class="steps">
+        <div class="step easy"><div class="n">1</div><div><div class="nm">Warm-up</div><div class="tg">Belt 7.5 km/h · incline 1%</div></div><div class="rt"><b>10:00</b><span>Z1</span></div></div>
+        <div class="step"><div class="n">2</div><div><div class="nm">Steady</div><div class="tg">HR under 160 · start 8.2 km/h</div></div><div class="rt"><b>50:00</b><span>Z2</span></div></div>
+        <div class="step"><div class="n">3</div><div><div class="nm">Strides 6 ×</div><div class="tg">30 s · 13.0 km/h · 1:30 easy between</div></div><div class="rt"><b>12:00</b><span>Fast</span></div></div>
+        <div class="step easy"><div class="n">4</div><div><div class="nm">Cool-down</div><div class="tg">Walk 5.5 km/h</div></div><div class="rt"><b>3:00</b><span>Z1</span></div></div>
+      </div>
+      <div class="ph-bar"><div class="btn pri">Start run</div><div class="btn ghost">Log by hand</div></div>
+    </div>
+    <figcaption><span class="tag after">Step 2</span><b>Ready, treadmill, as built</b>The picture above with the numbers the brief asks for: distance from the belts, load and the main zone, then time in heart rate zones. A dashed line is a cap (R13).</figcaption>
+  </figure>
+  <figure class="shot">
+    <div class="phone">
+      <div class="ph-top"><span>‹ Workout</span><span>Edit</span></div>
+      <p class="ph-title">Run</p>
+      <div class="ph-sub">75 min · load about 70 · threshold 5:39 /km</div>
+      <div class="ph-mode"><b>Treadmill</b><span>Change</span></div>
+      <div class="dim"></div>
+      <div class="sheet">
+        <div class="sheet-h"><b>Where do you run</b><span>Cancel</span></div>
+        <div class="ph-mode" style="background:var(--ph-card2)"><b>Treadmill</b><span>✓</span></div>
+        <div class="ph-mode" style="background:var(--ph-card2)"><b>Outdoor</b><span></span></div>
+        <div class="plan-line">The mode is fixed when the run starts.</div>
+      </div>
+    </div>
+    <figcaption><span class="tag after">Step 2</span><b>Change opens a sheet</b>Two options, before the start only. The current mode has the check.</figcaption>
+  </figure>
+  <figure class="shot">
+    <div class="phone">
+      <div class="ph-top"><span>‹ Workout</span><span>Edit</span></div>
+      <p class="ph-title">Run</p>
+      <div class="ph-sub">75 min · load about 70 · LTHR 180</div>
+      <div class="ph-mode"><b>Outdoor</b><span>Change</span></div>
+      <div class="seg"><span class="on">Road</span><span>Trail or snow</span></div>
+      <div class="profile">
+        <svg viewBox="0 0 260 80" role="img" aria-label="Planned heart rate profile">
+          <rect x="0" y="0" width="260" height="20" fill="#24262c" opacity="0.5"/>
+          <line x1="0" y1="20" x2="260" y2="20" stroke="#2c2e35"/>
+          <line x1="0" y1="40" x2="260" y2="40" stroke="#2c2e35"/>
+          <line x1="0" y1="60" x2="260" y2="60" stroke="#2c2e35"/>
+          <rect x="0" y="62" width="34" height="18" fill="#6b8cff" opacity="0.35"/>
+          <rect x="35" y="50" width="173" height="30" fill="#6b8cff" opacity="0.6"/>
+          <line x1="35" y1="44" x2="208" y2="44" stroke="#6b8cff" stroke-dasharray="2 2"/>
+          <rect x="210" y="14" width="3" height="66" fill="#6b8cff"/><rect x="213" y="66" width="4" height="14" fill="#6b8cff" opacity="0.35"/>
+          <rect x="217" y="14" width="3" height="66" fill="#6b8cff"/><rect x="220" y="66" width="4" height="14" fill="#6b8cff" opacity="0.35"/>
+          <rect x="224" y="14" width="3" height="66" fill="#6b8cff"/><rect x="227" y="66" width="4" height="14" fill="#6b8cff" opacity="0.35"/>
+          <rect x="231" y="14" width="3" height="66" fill="#6b8cff"/><rect x="234" y="66" width="4" height="14" fill="#6b8cff" opacity="0.35"/>
+          <rect x="238" y="14" width="3" height="66" fill="#6b8cff"/><rect x="241" y="66" width="4" height="14" fill="#6b8cff" opacity="0.35"/>
+          <rect x="245" y="14" width="3" height="66" fill="#6b8cff"/><rect x="248" y="66" width="4" height="14" fill="#6b8cff" opacity="0.35"/>
+          <rect x="252" y="68" width="8" height="12" fill="#6b8cff" opacity="0.3"/>
+          <text x="2" y="16" fill="#9097a3" font-size="8">Z4</text>
+          <text x="2" y="36" fill="#9097a3" font-size="8">Z3</text>
+          <text x="40" y="40" fill="#f4f5f7" font-size="8">Z2 · HR under 160</text>
+        </svg>
+        <div class="axis"><span>0</span><span>30</span><span>60</span><span>75 min</span></div>
+      </div>
+      <div class="steps">
+        <div class="step easy"><div class="n">1</div><div><div class="nm">Warm-up</div><div class="tg">HR under 151</div></div><div class="rt"><b>10:00</b><span>Z1</span></div></div>
+        <div class="step"><div class="n">2</div><div><div class="nm">Steady</div><div class="tg">HR under 160</div></div><div class="rt"><b>50:00</b><span>Z2</span></div></div>
+        <div class="step"><div class="n">3</div><div><div class="nm">Strides 6 ×</div><div class="tg">30 s · Fast and relaxed · 1:30 easy between</div></div><div class="rt"><b>12:00</b><span>Fast</span></div></div>
+        <div class="step easy"><div class="n">4</div><div><div class="nm">Cool-down</div><div class="tg">Effort 1-2</div></div><div class="rt"><b>3:00</b><span>Z1</span></div></div>
+      </div>
+      <div class="garmin"><span>Step alerts are off · Keep the screen on for beeps, or follow your watch</span></div>
+      <div class="ph-bar"><div class="btn pri">Start run</div><div class="btn ghost">Log by hand</div></div>
+    </div>
+    <figcaption><span class="tag after">Step 2</span><b>Ready, outdoor</b>Outdoor adds the surface choice. Easy steps show a heart rate cap, strides show effort. On Trail or snow a pace target shows as the heart rate of its zone, else as effort (R14). The alerts row shows before the start only (4.6).</figcaption>
+  </figure>
+  <figure class="shot">
+    <div class="phone">
+      <div class="ph-top"><span>‹ Workout</span><span>Edit</span></div>
+      <p class="ph-title">Run</p>
+      <div class="ph-sub">75 min · load about 70 · LTHR 180</div>
+      <div class="ph-mode"><b>Treadmill</b><span>Change</span></div>
+      <div class="garmin" style="border-style:solid;background:var(--ph-card)"><span>Set your threshold pace to see belt speeds</span><b>Set pace</b></div>
+      <div class="steps">
+        <div class="step easy"><div class="n">1</div><div><div class="nm">Warm-up</div><div class="tg">Belt 7.5 km/h · incline 1%</div></div><div class="rt"><b>10:00</b><span>Z1</span></div></div>
+        <div class="step"><div class="n">2</div><div><div class="nm">Steady</div><div class="tg">HR under 160 · set the belt by feel</div></div><div class="rt"><b>50:00</b><span>Z2</span></div></div>
+        <div class="step"><div class="n">3</div><div><div class="nm">Strides 6 ×</div><div class="tg">30 s · 13.0 km/h · 1:30 easy between</div></div><div class="rt"><b>12:00</b><span>Fast</span></div></div>
+        <div class="step easy"><div class="n">4</div><div><div class="nm">Cool-down</div><div class="tg">Walk 5.5 km/h</div></div><div class="rt"><b>3:00</b><span>Z1</span></div></div>
+      </div>
+      <div class="ph-bar"><div class="btn pri">Start run</div><div class="btn ghost">Log by hand</div></div>
+    </div>
+    <figcaption><span class="tag after">Step 2</span><b>Empty state, no threshold pace</b>A belt written on the step and the walk still show. A heart rate step has no start speed. Set pace opens the training numbers.</figcaption>
+  </figure>
+  <figure class="shot">
+    <div class="phone">
+      <div class="ph-top"><span>‹ Workout</span><span>Edit</span></div>
+      <p class="ph-title">Run</p>
+      <div class="ph-sub">75 min · load about 70 · threshold 5:39 /km</div>
+      <div class="ph-mode"><b>Treadmill</b><span>Change</span></div>
+      <div class="profile">
+        <svg viewBox="0 0 260 80" role="img" aria-label="Planned profile">
+          <rect x="0" y="0" width="260" height="20" fill="#24262c" opacity="0.5"/>
+          <line x1="0" y1="20" x2="260" y2="20" stroke="#2c2e35"/>
+          <line x1="0" y1="40" x2="260" y2="40" stroke="#2c2e35"/>
+          <line x1="0" y1="60" x2="260" y2="60" stroke="#2c2e35"/>
+          <rect x="0" y="62" width="34" height="18" fill="#6b8cff" opacity="0.35"/>
+          <rect x="35" y="50" width="173" height="30" fill="#6b8cff" opacity="0.6"/>
+          <line x1="35" y1="44" x2="208" y2="44" stroke="#6b8cff" stroke-dasharray="2 2"/>
+          <rect x="210" y="14" width="3" height="66" fill="#6b8cff"/><rect x="213" y="66" width="4" height="14" fill="#6b8cff" opacity="0.35"/>
+          <rect x="217" y="14" width="3" height="66" fill="#6b8cff"/><rect x="220" y="66" width="4" height="14" fill="#6b8cff" opacity="0.35"/>
+          <rect x="224" y="14" width="3" height="66" fill="#6b8cff"/><rect x="227" y="66" width="4" height="14" fill="#6b8cff" opacity="0.35"/>
+          <rect x="231" y="14" width="3" height="66" fill="#6b8cff"/><rect x="234" y="66" width="4" height="14" fill="#6b8cff" opacity="0.35"/>
+          <rect x="238" y="14" width="3" height="66" fill="#6b8cff"/><rect x="241" y="66" width="4" height="14" fill="#6b8cff" opacity="0.35"/>
+          <rect x="245" y="14" width="3" height="66" fill="#6b8cff"/><rect x="248" y="66" width="4" height="14" fill="#6b8cff" opacity="0.35"/>
+          <rect x="252" y="68" width="8" height="12" fill="#6b8cff" opacity="0.3"/>
+          <text x="2" y="16" fill="#9097a3" font-size="8">Z4</text>
+          <text x="2" y="36" fill="#9097a3" font-size="8">Z3</text>
+          <text x="40" y="40" fill="#f4f5f7" font-size="8">Z2 · Effort 3</text>
+        </svg>
+        <div class="axis"><span>0</span><span>30</span><span>60</span><span>75 min</span></div>
+      </div>
+      <div class="ph-chips" style="justify-content:space-around;text-align:center"><div><b>10.1</b><div class="ph-sub">km est.</div></div><div><b>70</b><div class="ph-sub">load</div></div><div><b>50 min</b><div class="ph-sub">in Z2</div></div></div>
+      <div class="steps">
+        <div class="step easy"><div class="n">1</div><div><div class="nm">Warm-up</div><div class="tg">Belt 7.5 km/h · incline 1%</div></div><div class="rt"><b>10:00</b><span>Z1</span></div></div>
+        <div class="step"><div class="n">2</div><div><div class="nm">Steady</div><div class="tg">Effort 3 · start 8.2 km/h</div></div><div class="rt"><b>50:00</b><span>Z2</span></div></div>
+        <div class="step"><div class="n">3</div><div><div class="nm">Strides 6 ×</div><div class="tg">30 s · 13.0 km/h · 1:30 easy between</div></div><div class="rt"><b>12:00</b><span>Fast</span></div></div>
+        <div class="step easy"><div class="n">4</div><div><div class="nm">Cool-down</div><div class="tg">Walk 5.5 km/h</div></div><div class="rt"><b>3:00</b><span>Z1</span></div></div>
+      </div>
+      <div class="ph-bar"><div class="btn pri">Start run</div><div class="btn ghost">Log by hand</div></div>
+    </div>
+    <figcaption><span class="tag after">Step 2</span><b>Empty state, no LTHR</b>Heart rate targets show as effort (Z1 2, Z2 3, Z3 5, Z4 7, Z5 9). No zone bar.</figcaption>
+  </figure>
+  <figure class="shot">
+    <div class="phone">
+      <div class="ph-top"><span>‹ Workout</span><span>Edit</span></div>
+      <p class="ph-title">Run</p>
+      <div class="ph-sub">75 min · load about 70 · threshold 5:39 /km</div>
+      <div class="ph-mode"><b>Treadmill</b><span></span></div>
+      <div class="steps">
+        <div class="step easy"><div class="n">1</div><div><div class="nm">Warm-up</div><div class="tg">Belt 7.5 km/h · incline 1%</div></div><div class="rt"><b>10:00</b><span>Z1</span></div></div>
+        <div class="step"><div class="n">2</div><div><div class="nm">Steady</div><div class="tg">HR under 160 · start 8.2 km/h</div></div><div class="rt"><b>50:00</b><span>Z2</span></div></div>
+        <div class="step"><div class="n">3</div><div><div class="nm">Strides 6 ×</div><div class="tg">30 s · 13.0 km/h · 1:30 easy between</div></div><div class="rt"><b>12:00</b><span>Fast</span></div></div>
+        <div class="step easy"><div class="n">4</div><div><div class="nm">Cool-down</div><div class="tg">Walk 5.5 km/h</div></div><div class="rt"><b>3:00</b><span>Z1</span></div></div>
+      </div>
+      <div class="ph-bar"><div class="ph-sub" style="text-align:center">Run running</div><div class="btn pri">Resume</div></div>
+    </div>
+    <figcaption><span class="tag after">Step 2</span><b>Empty state, a run already running</b>Resume in place of Start run, no Change and no Log by hand. When a ride or another run is running, the line says "A ride is running" and Resume opens it.</figcaption>
+  </figure>
+  <figure class="shot">
+    <div class="phone">
+      <div class="ph-top"><span></span><span></span></div>
+      <div style="background:var(--ph-accent);color:#0b0b0c;border-radius:18px;padding:14px;display:flex;flex-direction:column;gap:6px">
+        <div style="font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;opacity:.75">Today</div>
+        <div style="font-family:var(--display);font-size:26px;font-weight:700;text-transform:uppercase;line-height:1.1">2 Base · Run</div>
+        <div style="font-size:13px;font-weight:500;opacity:.8">Run · Treadmill · 75 min</div>
+        <div style="background:#fff;color:var(--ph-accent);border-radius:14px;padding:12px;text-align:center;font-weight:700;margin-top:8px">▶ Start Today's Workout</div>
+      </div>
+    </div>
+    <figcaption><span class="tag after">Step 2</span><b>Planned day card</b>The home Today card on a day whose program is one run: the sport, the mode the run opens in (R4) and the time, in place of "1 exercise · 4 steps".</figcaption>
+  </figure>
+</div>
+
+<h2>Treadmill and outdoor</h2>
+<div class="tbl"><table>
+<tr><th></th><th>Treadmill</th><th>Outdoor</th></tr>
+<tr><td>Main target</td><td>Belt speed in km/h and incline, from the pace target and your threshold pace</td><td>Pace, heart rate or effort, from the rules below</td></tr>
+<tr><td>Second line</td><td>Heart rate, pace in min/km</td><td>Heart rate or pace, whichever is not the main one</td></tr>
+<tr><td>Heart rate step</td><td>"Start near 8.0 km/h", from your last treadmill run in that zone, else from your threshold pace</td><td>Heart rate range</td></tr>
+<tr><td>Steps end on</td><td>Time, or distance counted from the belt</td><td>Time, or distance as an estimated time with Lap to end it early</td></tr>
+<tr><td>Controls</td><td>Belt ±0.5 km/h, incline ±0.5%, +1 min, hold to skip, pause, Lap</td><td>+1 min, hold to skip, pause, Lap</td></tr>
+<tr><td>Pace and distance come from</td><td>The belt (the watch is a backup)</td><td>Garmin, after the run</td></tr>
+<tr><td>Results per step</td><td>Belt speed, incline, avg and max HR, cadence</td><td>Time, distance, pace, avg and max HR, cadence, climbing</td></tr>
+</table></div>
+
+<h3>Outdoor target when the AI wrote none</h3>
+<div class="tbl"><table>
+<tr><th>Step</th><th>Outdoor target</th></tr>
+<tr><td>Warm-up, cool-down, easy and long runs</td><td>Heart rate cap at the top of the zone (hills and wind do not push you too hard)</td></tr>
+<tr><td>Tempo, threshold and intervals of 3 min or more</td><td>Pace range, heart rate as the second line</td></tr>
+<tr><td>Under 3 min, strides, hill repeats</td><td>Effort ("fast and relaxed", "hard"), the climb in the note</td></tr>
+<tr><td>Walk breaks and recovery</td><td>Effort 2, "easy jog or walk"</td></tr>
+</table></div>
+<p>Without a run LTHR, heart rate targets become effort targets. Without a threshold pace, pace targets show in % and "Set your threshold pace".</p>
+
+<h2>Run rules</h2>
+<ul class="plain">
+  <li><b>One session machine.</b> A run uses the same server session, frozen plan, event list and timeline as a ride. The table <code>rides</code> gets a <code>sport</code> column. No second table.</li>
+  <li><b>Belt events.</b> On a treadmill each step starts with its planned belt speed. Each ± tap stores the new speed and incline with its time. Distance and pace come from these events.</li>
+  <li><b>Nothing to type during a run.</b> Each step saves its time when it ends. After the run, one table, filled from the belt, with effort once.</li>
+  <li><b>A running session is frozen.</b> AI changes to the program apply from the next run.</li>
+  <li><b>Brick.</b> When a ride of a brick ends, its summary shows "Brick run next · Start run". The gap between ride end and run start is stored as the change time (T2).</li>
+  <li><b>Load.</b> From pace and threshold pace. On a treadmill the incline counts (grade-adjusted pace), so an incline run no longer falls back to effort load. Outdoor uses Garmin's grade-adjusted pace from the stream. Each estimate is marked "est.".</li>
+</ul>
+
+<h2>Edge cases</h2>
+<div class="tbl"><table>
+<tr><th>Case</th><th>What the app does</th></tr>
+<tr><td>You change the belt on the machine but not in the app</td><td>The step keeps its planned speed. The results table is filled from the plan, and you can fix each row. A Garmin heart rate far from the target shows the mismatch.</td></tr>
+<tr><td>Treadmill takes 5 to 15 s to speed up</td><td>"Speed up to 13.0 km/h" shows 10 s before any step whose belt differs by 1 km/h or more. Treadmill strides are written as 30 s.</td></tr>
+<tr><td>Heart rate step on a treadmill</td><td>A start speed from your treadmill steps in that zone in the last 6 weeks. With too little history: the slow end of the zone's pace (zone 2 is 8.2 km/h for you), with "Adjust after 6 min".</td></tr><tr><td>You step off the belt (drink, toilet)</td><td>Tap Pause. No distance builds while paused. Resume says "Set belt 8.2 km/h".</td></tr><tr><td>A recovery after a fast stride</td><td>The recovery has its own belt speed and never takes the stride's 13 km/h.</td></tr><tr><td>Snow, ice or trail</td><td>Choose Trail or snow before start. Pace targets become heart rate, and the load does not use pace.</td></tr><tr><td>You stop for pain</td><td>End run, reason Pain. It links to the injury log.</td></tr>
+<tr><td>Treadmill in mph</td><td>Not in this build (R6). Convert by hand: 5 mph is 8.0 km/h. mph goes to the backlog.</td></tr>
+<tr><td>Garmin changes the treadmill distance later (calibration)</td><td>The belt wins. Garmin distance fills only when there are no belt events.</td></tr>
+<tr><td>Distance step outdoors</td><td>Runs on the time your target pace gives ("1 km · about 4:50"). Lap ends it early, +1 min extends it. Garmin laps correct the split after.</td></tr>
+<tr><td>Traffic lights, Garmin auto-pause</td><td>The app clock runs on. Garmin pauses become gaps in the split, as for the bike.</td></tr>
+<tr><td>Phone locked in a pocket</td><td>No alerts in this build (push stays off). Steps still end and save on time. Before start the app says so and suggests the screen on or the watch.</td></tr>
+<tr><td>Strides and repeats under 60 s</td><td>Their own screen ("Stride 3 of 6"). With the screen on, a beep for each. Hold to skip skips the rest of the block. Where push works, one alert at block start and one at the end.</td></tr><tr><td>Lap tapped a few seconds after a rep already ended on its time</td><td>Within 30 s, the lap moves that rep's end. The next step does not get cut short.</td></tr><tr><td>Brick run off the bike</td><td>The first 10 min are on effort with "Short quick steps", under a zone 2 cap. Heart rate runs 5 to 10 bpm high, which is normal.</td></tr>
+<tr><td>Run and walk intervals</td><td>The walk is a recovery step with an effort target.</td></tr>
+<tr><td>Hill repeats</td><td>Outdoor: effort and heart rate, the climb in the note. Treadmill: the step holds an incline.</td></tr>
+<tr><td>Track session (8 × 400 m)</td><td>Outdoor mode, distance steps, Lap ends each rep.</td></tr>
+<tr><td>Garmin triathlon mode (one multisport file)</td><td>The fill reads the run part of the file.</td></tr>
+<tr><td>Ride still open when you start the brick run</td><td>"End ride and start run". Only one session runs at a time.</td></tr>
+<tr><td>Two runs on one day</td><td>Garmin matches by time overlap, as for the bike. Two matches: "Two Garmin runs match · Pick".</td></tr>
+<tr><td>No signal on the trail</td><td>Events queue on the phone, "Saved on this phone", sent later.</td></tr>
+<tr><td>You stop early</td><td>Done steps stay saved. An ended-early long run does not count as a done key session.</td></tr>
+<tr><td>A run with no plan</td><td>"Log by hand" as today, without the 5 km guess.</td></tr>
+<tr><td>App update during a run</td><td>The existing stale-bundle handling keeps the steps. Never deploy while you train.</td></tr>
+<tr><td>Users without endurance features</td><td>Today's run screen. Only the 5 km guess goes.</td></tr>
+</table></div>
+
+<h2>What changes</h2>
+<ul class="plain">
+  <li>Plain run sets of endurance users become steps, one time, keeping each zone. Every writer of run sets writes steps.</li>
+  <li>The run exercise shows the plan view, run mode, results and summary. The run ring in the workout list opens the run exercise, as the bike ring does.</li>
+  <li>The AI tools write and read the new run fields. A new step field <code>incline</code> for treadmill steps (the column <code>inclinePercent</code> exists).</li>
+  <li>The AI rewrites your run programs (93, 97, 102, 106, 95, 104): strides and race-feel parts from the notes become steps.</li>
+  <li><code>/planned/[id]/play</code> opens run mode for a run-only program.</li>
+</ul>
+
+<h2>What does not change</h2>
+<ul class="plain">
+  <li>The bike, swim and strength screens.</li>
+  <li>Your zones and thresholds, until you save a test result.</li>
+  <li>Garmin records the run. The app guides and logs.</li>
+</ul>
+
+<h2>Limits of a web app on an iPhone</h2>
+<ul class="plain">
+  <li>No live pace or heart rate in the app: Safari has no Bluetooth, and GPS stops when the screen locks. The watch shows live numbers.</li>
+  <li>No sound with the screen locked. Push is the only alert then, and it can come a few seconds late.</li>
+  <li>No sending workouts to the watch (parked as E3).</li>
+</ul>
+
+<h2>Steps in order</h2>
+<ol class="build">
+  <li><b>Groundwork</b>Sport on <code>rides</code>, belt and incline events, run targets and outdoor targets in the step model, the timeline for pace and belt distance, every reader of step targets.<div class="chk">Done when: timeline unit tests for belt events, belt distance, distance steps outdoors and short-step blocks.</div></li>
+  <li><b>One run model</b>Plain run sets become steps. Writers write steps. The 5 km guess goes. Then the AI rewrites your run programs.<div class="chk">Done when: a second run of the move changes nothing, and the revision restores it.</div></li>
+  <li><b>Run exercise screen</b>Plan chart, step list with belt speeds, mode row, empty states.<div class="chk">Done when: screenshots at 390 and 320 px match the picture above.</div></li>
+  <li><b>Run mode</b>Clock, belt and incline controls, Lap, short-step cues, outdoor view, each step saved, brick hand-off.<div class="chk">Done when: e2e saves every step with the right belt speeds, reload resumes at the right second, offline steps send later.</div></li>
+  <li><b>Results and numbers</b>Results table, summary, load with incline, pace and distance from the belt.<div class="chk">Done when: unit tests with the numbers in the picture (9.8 km, 7:39 /km).</div></li>
+  <li><b>AI tools</b>Run fields in <code>edit_program_exercise</code>, run sessions in <code>get_ride</code>, docs.<div class="chk">Done when: integration tests write and read each new field.</div></li>
+  <li><b>Push</b>Run alert text, one alert per short-step block.<div class="chk">Done when: a test run on your phone in the dev setup sends each alert.</div></li>
+  <li><b>Garmin fill and stream numbers</b>Run and treadmill match, multisport files, belt before Garmin, grade-adjusted pace, drift, time in zones.<div class="chk">Done when: tests with a stored treadmill file and an outdoor file.</div></li>
+  <li><b>Run threshold test</b>30 min test templates for treadmill and outdoor. Threshold pace and LTHR from the last 20 min, "Save".<div class="chk">Done when: unit tests for both results; saving changes the targets.</div></li>
+</ol>
+
+<h2>How you check the result</h2>
+<ul class="plain">
+  <li>After step 3: run "2 Base · Run" on the treadmill from start to end. Every step saves.</li>
+  <li>After step 6: an outdoor run with the phone locked. An alert comes at each step.</li>
+  <li>After step 7: after the Garmin sync, heart rate fills, and the distance is the belt's.</li>
+</ul>
+
+<h2>Decisions</h2>
+<p>All are made. R6 to R9 are your answers of 2026-11-20.</p>
+<div class="dec">
+  <div><b>R1 Run only</b>Swim later, in its own change.<div class="rec">Recommended</div></div>
+  <div><b>R2 Endurance users only</b>Others keep today's screen, without the 5 km guess.<div class="rec">Recommended</div></div>
+  <div><b>R3 Two modes, Treadmill and Outdoor</b>Default: the planned session's mode, else the last run of this exercise, else the mode you used most in the last 4 weeks. Garmin's activity type corrects it after.<div class="rec">Recommended</div></div>
+  <div><b>R4 The belt is the treadmill's pace</b>Belt events give distance and pace. Garmin's treadmill distance is a backup.<div class="rec">Recommended</div></div>
+  <div><b>R5 No run power</b>Wrist power differs too much between treadmill and outdoor.<div class="rec">Recommended</div></div>
+  <div><b class="open">R6 Units</b>km/h and min/km only now, mph and min/mi later in the backlog. Or both now.<div class="rec">Your choice: km only now, mph to the backlog</div></div>
+  <div><b class="open">R7 Push keys</b>Outdoor runs depend on alerts. Push is off in prod until the keys are set. Set them in this build?<div class="rec">Your choice: no. Run alerts ship off, as for the bike. The app says "Step alerts are off" before start. The keys stay in the backlog.</div></div>
+  <div><b class="open">R8 Run threshold test in this build</b>Your LTHR and threshold pace are Garmin guesses, and your easy runs sit below the planned zone 2.<div class="rec">Your choice: yes, step 8</div></div>
+  <div><b class="open">R9 Outdoor distance steps</b>End on the estimated time (Lap ends early), or wait for a Lap tap.<div class="rec">Your choice: estimated time</div></div>
+  <div><b>R10 One session table</b><code>rides</code> gets a sport column. No rename and no second table.<div class="rec">Recommended</div></div>
+</div>
+</div>

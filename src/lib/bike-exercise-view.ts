@@ -8,7 +8,7 @@
  */
 
 import { db } from "@/db";
-import { rides, workoutSessions, workoutSets, type RideMode } from "@/db/schema";
+import { rides, workoutSessions, workoutSets, type RideMode, type RideSport } from "@/db/schema";
 import { getRide, type RideView } from "@/lib/actions/rides";
 import { garminAllowedFor } from "@/lib/garmin/access";
 import { rideGarminView, type RideGarminView } from "@/lib/ride-garmin";
@@ -19,7 +19,8 @@ import { toDateStr } from "@/lib/utils/cycle-position";
 import { rideFtpTest, type RideFtpTest } from "@/lib/ride-ftp";
 import { buildWorkout, type StepRow } from "@/lib/utils/program-steps";
 import type { StepLog } from "@/lib/utils/ride-results";
-import { buildRidePlan, rideTimeline, type RideEventInput, type RidePlan } from "@/lib/utils/ride-timeline";
+import { buildRidePlan, planSport, rideTimeline, type RideEventInput, type RidePlan } from "@/lib/utils/ride-timeline";
+import { beltResults } from "@/lib/utils/run-screen";
 import { parseWorkout, type RideTest } from "@/lib/utils/workout-steps";
 import { and, desc, eq, gt, inArray, sql } from "drizzle-orm";
 
@@ -40,13 +41,13 @@ export type BikeExerciseData = {
 /** A ride counts as this workout's for this long after its start (step 3 choice, section 9). */
 export const RIDE_RECENT_MS = 12 * 60 * 60 * 1000;
 
-/** The user's latest ride of this program exercise started in the last 12 hours, with whether its workout is still open. */
-async function recentRide(userId: string, programExerciseId: number) {
+/** The user's latest ride (or run) of this program exercise started in the last 12 hours, with whether its workout is still open. */
+export async function recentRide(userId: string, programExerciseId: number, sport: RideSport = "bike") {
   const [row] = await db
     .select({ id: rides.id, status: rides.status, sessionOpen: sql<boolean>`not ${workoutSessions.isCompleted}` })
     .from(rides)
     .innerJoin(workoutSessions, eq(workoutSessions.id, rides.sessionId))
-    .where(and(eq(rides.userId, userId), eq(rides.programExerciseId, programExerciseId), gt(rides.startedAt, new Date(Date.now() - RIDE_RECENT_MS))))
+    .where(and(eq(rides.userId, userId), eq(rides.sport, sport), eq(rides.programExerciseId, programExerciseId), gt(rides.startedAt, new Date(Date.now() - RIDE_RECENT_MS))))
     .orderBy(desc(rides.startedAt))
     .limit(1);
   return row ?? null;
@@ -58,11 +59,11 @@ async function recentRide(userId: string, programExerciseId: number) {
  * it ended), so ride mode saves its last steps and finishes the workout.
  * Null when there is none: the page shows the bike screen.
  */
-export async function rideOfExercise(userId: string, programExerciseId: number): Promise<{ view: RideView; sessionCompleted: boolean } | null> {
+export async function rideOfExercise(userId: string, programExerciseId: number, sport: RideSport = "bike"): Promise<{ view: RideView; sessionCompleted: boolean } | null> {
   const active = await getRide({});
   let view = active.success && active.data?.ride.programExerciseId === programExerciseId ? active.data : null;
   if (!view) {
-    const recent = await recentRide(userId, programExerciseId);
+    const recent = await recentRide(userId, programExerciseId, sport);
     if (!recent?.sessionOpen) return null;
     const r = await getRide({ rideId: recent.id });
     view = r.success ? r.data : null;
@@ -81,7 +82,7 @@ async function lastRideMode(userId: string, programExerciseId: number): Promise<
     .select({ mode: sql<RideMode>`coalesce(${workoutSessions.rideMode}, ${rides.mode})` })
     .from(rides)
     .leftJoin(workoutSessions, eq(workoutSessions.id, rides.sessionId))
-    .where(and(eq(rides.userId, userId), eq(rides.programExerciseId, programExerciseId)))
+    .where(and(eq(rides.userId, userId), eq(rides.sport, "bike"), eq(rides.programExerciseId, programExerciseId)))
     .orderBy(desc(rides.startedAt))
     .limit(1);
   return row?.mode ?? null;
@@ -174,6 +175,8 @@ async function stepLogs(userId: string, sessionId: number, programSetIds: number
       climbM: workoutSets.climbM,
       rpe: workoutSets.rpe,
       sources: workoutSets.sources,
+      // A treadmill run step's incline (docs/plans/run-logger.md, 4.7); the run summary reads it.
+      inclinePercent: workoutSets.inclinePercent,
     })
     .from(workoutSets)
     .innerJoin(workoutSessions, eq(workoutSessions.id, workoutSets.sessionId))
@@ -196,12 +199,25 @@ export async function rideStepLogs(
   userId: string,
   view: Pick<RideView, "plan" | "serverNow"> & { events: RideEventInput[]; ride: Pick<RideView["ride"], "sessionId" | "heartbeatAt"> },
 ): Promise<{ logs: Record<number, StepLog>; timeline: ReturnType<typeof rideTimeline>; unsaved: boolean }> {
-  const logs = await stepLogs(userId, view.ride.sessionId, view.plan.steps.map((s) => s.programSetId));
   const timeline = rideTimeline(view.plan, view.events, view.serverNow, { heartbeatAt: view.ride.heartbeatAt });
+  // Only the steps this ride ran: after Ride again (or Run again) the session still holds the earlier ride's rows of steps this one did not reach.
+  const ran = timeline.steps.map((t) => t.programSetId);
+  const logs = await stepLogs(userId, view.ride.sessionId, ran);
   let unsaved = false;
+  // A treadmill run's step not saved yet shows its belt numbers (docs/plans/run-logger.md, 4.7).
+  const belt = planSport(view.plan) === "run" && view.plan.mode === "indoor";
   for (const t of timeline.steps) {
-    if (logs[t.programSetId]) continue;
+    const row = logs[t.programSetId];
+    // A row whose time the clock saved but not this ride's time is the earlier ride's (Ride again): this ride's step is not saved yet.
+    // A row with no clock time (the assistant's, logged with no time) is this ride's, as is a status the assistant changed.
+    const earlier = row && row.sources?.durationSeconds === "clock" && row.durationSeconds !== t.activeSeconds;
+    if (row && !earlier) {
+      // Its time is the ride's clock when the row has none.
+      if (row.durationSeconds === null) logs[t.programSetId] = { ...row, durationSeconds: t.activeSeconds };
+      continue;
+    }
     unsaved = true;
+    const b = belt ? beltResults(t) : {};
     logs[t.programSetId] = {
       status: t.status,
       durationSeconds: t.activeSeconds,
@@ -216,6 +232,8 @@ export async function rideStepLogs(
       climbM: null,
       rpe: null,
       sources: null,
+      ...(b.distanceMeters !== undefined && { distanceMeters: b.distanceMeters, avgSpeed: b.avgSpeed ?? null, sources: { distanceMeters: "belt" as const, avgSpeed: "belt" as const } }),
+      ...(b.inclinePercent !== undefined && { inclinePercent: b.inclinePercent }),
     };
   }
   return { logs, timeline, unsaved };

@@ -5,6 +5,7 @@
  * Pure: the rows come from one read in src/lib/home/core.ts.
  */
 
+import type { RideMode } from "@/db/schema/rides";
 import { estimateSessionMinutes } from "@/lib/utils/plan-templates";
 
 /** One row of the read: a program exercise and one of its sets (null for an exercise with no sets). */
@@ -24,6 +25,8 @@ export type PlanRow = {
   blockId?: number | null;
   blockRound?: number | null;
   endsOnLap?: boolean | null;
+  /** The exercise's sport: "run" makes a run day (docs/plans/run-logger.md, planned day card). */
+  discipline?: string | null;
 };
 
 export type TodayPlan = {
@@ -38,6 +41,10 @@ export type TodayPlan = {
   exercises: { name: string; sets: string }[];
   /** The names after those. */
   more: string[];
+  /** A program of one run exercise with steps: its program exercise, whose run mode home reads (planned day card, docs/plans/run-logger.md). */
+  runExerciseId?: number;
+  /** That run's mode (R4), read on home for an endurance user only: the card says "Run · Treadmill · 75 min". */
+  runMode?: RideMode;
 };
 
 const num = (n: number) => String(Number(n.toFixed(2)));
@@ -111,5 +118,6 @@ export function todayPlanFrom(rows: PlanRow[], shown = 3): TodayPlan | null {
       return { name: e.name, sets: parts.join(" · ") };
     }),
     more: list.slice(shown).map((e) => e.name),
+    ...(byExercise.size === 1 && rows.every((r) => r.discipline === "run" && r.stepKind != null) && { runExerciseId: rows[0].programExerciseId }),
   };
 }
