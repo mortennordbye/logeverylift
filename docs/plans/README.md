@@ -77,4 +77,4 @@ brief here before code. Inputs: the audit (`docs/triathlon-coach-audit.md`) and 
 | C6, D1 (the step editor follows as C6b) | [Endurance in the app (views, guided player, pool view, step results) and load without Garmin](endurance-app.md) | done |
 | D2 part 2, D3, D4 | [Training limits part 2, strength by phase and readiness swaps](limits-strength-readiness.md) | done (#233) |
 | E1, E2 | [Nutrition and race-day plan](nutrition-and-race-day.md) | done |
-| (after E) | [Strict session targets: targets by place, coach proposals](strict-targets.md) | building |
+| (after E) | [Strict session targets: targets by place, coach proposals](strict-targets.md) | done (#269, #270, #271) |
