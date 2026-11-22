@@ -183,10 +183,15 @@ export function RideSummary({
                 <span className="text-right text-muted-foreground tabular-nums whitespace-nowrap">{r.plan ?? "–"}</span>
                 <span className={`w-20 text-right tabular-nums whitespace-nowrap ${r.done === "Skipped" || r.done === "Not ridden" ? "text-muted-foreground" : "font-semibold"}`}>
                   {r.done}
-                  {r.under && (
-                    <span aria-label="under target" className="ml-0.5">
-                      ↓
+                  {r.mark && (
+                    <span aria-label={r.mark === "↑" ? "over target" : "under target"} className="ml-0.5">
+                      {r.mark}
                     </span>
+                  )}
+                  {r.extra && (
+                    <small className="block text-[11px] font-normal text-muted-foreground" data-testid="row-extra">
+                      {r.extra}
+                    </small>
                   )}
                   {r.onTarget !== null && (
                     <small className="block text-[11px] font-normal text-muted-foreground" data-testid="row-on-target">

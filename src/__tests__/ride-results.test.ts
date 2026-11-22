@@ -232,6 +232,26 @@ describe("rideSummary", () => {
     ]);
   });
 
+  it("the session check's rule: ↑ over past 3 W, a warm-up and recovery not judged, other targets out in extra (docs/plans/session-check.md, decision 3)", () => {
+    const logs = filled();
+    logs[1] = log({ avgPower: 60 });
+    logs[2] = log({ avgPower: 150 });
+    logs[3] = log({ durationSeconds: 300, avgPower: 140 });
+    logs[4] = log({ avgPower: 149 });
+    const rows = rideSummary(plan(), logs).rows;
+    expect(rows.map((r) => [r.title, r.done, r.mark, r.under])).toEqual([
+      ["Warm-up", "60 W", null, false],
+      ["Work · 1 of 2", "150 W", "↑", false],
+      ["Easy", "140 W", null, false],
+      ["Work · 2 of 2", "149 W", null, false],
+      ["Work", "118 W", null, false],
+    ]);
+    const parsed = parseWorkout({ v: 2, sport: "bike", name: "Cadence", steps: [{ type: "work", end: { type: "time", seconds: 900 }, target: { metric: "power", anchor: "absolute", low: 140, high: 149 }, target2: { metric: "hr", anchor: "absolute", low: 130, high: 145 }, cadence: { low: 85, high: 95 } }] });
+    if (!parsed.ok) throw new Error("bad tree");
+    const row = rideSummary(buildRidePlan(parsed.workout, [1], { ftp: 200 }, "indoor"), { 1: log({ avgPower: 145, avgHr: 160, avgCadence: 80 }) }).rows[0];
+    expect(row).toMatchObject({ done: "145 W", mark: null, extra: "HR 160 ↑ · Cadence 80 ↓" });
+  });
+
   it("ended early: only the ridden steps count; the rest say Skipped or Not ridden", () => {
     const logs = { 1: log({ avgPower: 124 }), 2: log({ status: "skipped", durationSeconds: 4 }), 3: log({ status: "partial", durationSeconds: 120, avgPower: 90 }) };
     const s = rideSummary(plan(), logs);

@@ -182,26 +182,37 @@ export function RunSummary({
                   <span className="text-right text-muted-foreground tabular-nums whitespace-nowrap">{r.plan ?? "–"}</span>
                   <span className={`min-w-20 text-right tabular-nums whitespace-nowrap ${r.quiet ? "text-muted-foreground" : "font-semibold"}`}>
                     {(() => {
-                      const mark = r.mark && (
-                        <span aria-label={r.mark === "↑" ? "over target" : "under target"} className="ml-0.5">
-                          {r.mark}
-                        </span>
-                      );
-                      // The arrow follows the value it judges: the belt or pace first, the heart rate after it.
-                      const cut = r.markOn === "speed" ? r.done.indexOf(" · ") : -1;
-                      return cut < 0 ? (
-                        <>
-                          {r.done}
-                          {mark}
-                        </>
-                      ) : (
+                      const arrow = (m: "↑" | "↓" | null) =>
+                        m && (
+                          <span aria-label={m === "↑" ? "over target" : "under target"} className="ml-0.5">
+                            {m}
+                          </span>
+                        );
+                      // Each arrow follows the value it judges: the belt or pace first, the heart rate after it.
+                      const hrAt = r.done.indexOf("HR ");
+                      if (hrAt < 0)
+                        return (
+                          <>
+                            {r.done}
+                            {arrow(r.mark)}
+                          </>
+                        );
+                      // "8.5 · HR 146": the belt, its arrow, then " · HR 146" and the heart rate's arrow.
+                      const cut = Math.max(0, hrAt - 3);
+                      return (
                         <>
                           {r.done.slice(0, cut)}
-                          {mark}
+                          {cut > 0 && arrow(r.mark)}
                           {r.done.slice(cut)}
+                          {arrow(r.hrMark)}
                         </>
                       );
                     })()}
+                    {r.extra && (
+                      <small className="block text-[11px] font-normal text-muted-foreground" data-testid="row-extra">
+                        {r.extra}
+                      </small>
+                    )}
                     {r.onTarget !== null && (
                       <small className="block text-[11px] font-normal text-muted-foreground" data-testid="row-on-target">
                         {r.onTarget}% on target

@@ -138,6 +138,7 @@ export async function rideReport(userId: string, by: { rideId?: number; workoutS
           sources: log.sources,
         },
         underTarget: summary.rows[i].under,
+        overTarget: summary.rows[i].mark === "↑",
         // Percent of the step's seconds inside its target (power indoors, heart rate outdoors), from the stream.
         timeOnTargetPct: summary.rows[i].onTarget,
       };

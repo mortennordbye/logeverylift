@@ -14,6 +14,7 @@ import { bikeStepRows, wattsText } from "@/lib/utils/bike-ride-view";
 import { doneRideNumbers, withStream, type DoneRideNumbers } from "@/lib/utils/ride-numbers";
 import type { DoneChart, RideDrift, StreamNumbers } from "@/lib/utils/ride-stream";
 import { rideClock } from "@/lib/utils/ride-screen";
+import { arrowOf, checkStep, type CheckRow, type StepCheck } from "@/lib/utils/session-check";
 import type { RidePlan, RidePlanStep } from "@/lib/utils/ride-timeline";
 import { DEFAULT_UNITS, METERS_PER_MILE, type Units } from "@/lib/utils/units";
 
@@ -244,7 +245,19 @@ export function badField(f: ResultField, text: string | undefined, units: Units 
 
 export type SummaryTile = { label: string; value: string; est?: boolean };
 /** onTarget: percent of the step's seconds inside its target, from a Garmin stream; null without one. */
-export type SummaryRow = { key: string; title: string; plan: string | null; done: string; under: boolean; onTarget: number | null };
+export type SummaryRow = {
+  key: string;
+  title: string;
+  plan: string | null;
+  done: string;
+  /** The session check's mark on the done value (docs/plans/session-check.md, decision 3): ↑ over, ↓ under; null when in or not judged. */
+  mark: "↑" | "↓" | null;
+  /** mark is ↓. */
+  under: boolean;
+  /** The step's other targets that are out: "HR 168 ↑ · Cadence 80 ↓"; null when none. */
+  extra: string | null;
+  onTarget: number | null;
+};
 
 export type RideSummary = {
   numbers: DoneRideNumbers;
@@ -280,20 +293,22 @@ function planText(s: RidePlanStep, row: { target: string | null }, mode: RideMod
   return row.target?.replace(/ · easy spin$/, "") ?? null;
 }
 
-/** Done: avg HR against a heart rate target outdoors, else avg W against the watts. ↓ when under the low end. */
-function doneText(s: RidePlanStep, log: StepLog | null, mode: RideMode): { done: string; under: boolean } {
-  if (!log) return { done: "Not ridden", under: false };
-  if (log.status === "skipped") return { done: "Skipped", under: false };
-  if (mode === "outdoor" && s.outdoor?.unit === "bpm" && log.avgHr !== null) {
-    const low = s.outdoor.low;
-    return { done: `${log.avgHr} bpm`, under: low !== null && log.avgHr < Math.round(low) };
-  }
-  if (log.avgPower !== null) {
-    const p = s.power;
-    const low = p ? (p.from !== null && p.to !== null ? Math.min(p.from, p.to) : p.from) : null;
-    return { done: `${log.avgPower} W`, under: low !== null && log.avgPower < low };
-  }
-  return { done: "–", under: false };
+/**
+ * Done: avg HR against a heart rate target outdoors, else avg W against the
+ * watts, with the mark of the session check (docs/plans/session-check.md,
+ * decision 3). `extra` lists the step's other targets that are out: "HR 168 ↑".
+ */
+function doneText(s: RidePlanStep, log: StepLog | null, mode: RideMode, check: StepCheck): Pick<SummaryRow, "done" | "under" | "mark" | "extra"> {
+  if (!log) return { done: "Not ridden", under: false, mark: null, extra: null };
+  if (log.status === "skipped") return { done: "Skipped", under: false, mark: null, extra: null };
+  const row = (m: CheckRow["metric"]) => check.rows.find((r) => r.metric === m) ?? null;
+  const hrLeads = mode === "outdoor" && s.outdoor?.unit === "bpm" && log.avgHr !== null;
+  const main = hrLeads ? "hr" : log.avgPower !== null ? "power" : null;
+  const mark = main ? arrowOf(row(main)?.mark ?? "none") : null;
+  const out = check.rows.filter((r) => r.metric !== main && arrowOf(r.mark));
+  const extra = out.length ? out.map((r) => `${r.metric === "hr" ? "HR" : r.label} ${r.value.replace(/ rpm$/, "")} ${arrowOf(r.mark)}`).join(" · ") : null;
+  const done = hrLeads ? `${log.avgHr} bpm` : log.avgPower !== null ? `${log.avgPower} W` : "–";
+  return { done, under: mark === "↓", mark, extra };
 }
 
 /** The summary; `stream` is the Garmin activity that filled the ride, when there is one (4.6). */
@@ -324,7 +339,7 @@ export function rideSummary(
   const rows = plan.steps.map((s, i) => {
     const log = logs[s.programSetId] ?? null;
     const onTarget = log && log.status !== "skipped" ? (stream?.numbers.onTarget[s.programSetId] ?? null) : null;
-    return { key: s.key, title: planRows[i].title, plan: planText(s, planRows[i], plan.mode), ...doneText(s, log, plan.mode), onTarget };
+    return { key: s.key, title: planRows[i].title, plan: planText(s, planRows[i], plan.mode), ...doneText(s, log, plan.mode, checkStep(plan, i, log)), onTarget };
   });
   const minutes = (m: number[]) => m.map((v, i) => ({ zone: i + 1, m: v })).filter((z) => z.m > 0);
 

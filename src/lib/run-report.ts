@@ -155,8 +155,8 @@ export async function runReport(userId: string, ride: typeof rides.$inferSelect)
           rpe: log.rpe,
           sources: log.sources,
         },
-        // The summary's judgement (4.2): above a cap or a range, below a range; null when it passes or is not judged.
-        judged: s.run?.block ? null : row?.key === s.key && row.mark ? mark[row.mark] : null,
+        // The summary's judgement (the session check's rule): the belt's pace on a treadmill, else the heart rate; above a cap or a range, below a range; null when it passes or is not judged.
+        judged: s.run?.block || row?.key !== s.key ? null : row.mark ? mark[row.mark] : row.hrMark ? mark[row.hrMark] : null,
         // Percent of the step's seconds inside its target, from the Garmin stream; null without one or without a target.
         timeOnTargetPct: stream?.numbers.onTarget[s.programSetId] ?? null,
       };
