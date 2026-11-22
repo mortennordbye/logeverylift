@@ -20,7 +20,7 @@ import { sampleDurations } from "@/lib/garmin/analytics/load";
 import { loadActivity, modeOfActivity, rideGarminView } from "@/lib/ride-garmin";
 import { runGarminView } from "@/lib/run-garmin";
 import { oneSession } from "@/lib/session-answers";
-import { thresholdValues } from "@/lib/session-compliance";
+import { thresholdValues, type SessionCompliance } from "@/lib/session-compliance";
 import type { StepLog } from "@/lib/utils/ride-results";
 import { sampleIndices, windowValues } from "@/lib/utils/ride-stream";
 import { buildRidePlan, type RidePlan } from "@/lib/utils/ride-timeline";
@@ -179,12 +179,13 @@ async function watchOnlyPart(userId: string, garminRowId: number, workout: Worko
 /**
  * The step page of a planned session: its logged workout's rides and runs,
  * else the Garmin activity it was matched to (a pick, a Garmin match, or the
- * activity a workout with no ride took), split as on the watch alone, for a
- * user with Garmin. Null when the session is not the user's; no parts when it
- * is not done or has nothing to show.
+ * activity a workout with no ride took), split as on the watch alone.
+ * Null when the session is not the user's; no parts when it is not done or
+ * has nothing to show. `known` is the session as the caller already read it
+ * for this user.
  */
-export async function plannedSessionCheck(userId: string, plannedSessionId: number): Promise<SessionCheckView | null> {
-  const s = await oneSession(userId, plannedSessionId);
+export async function plannedSessionCheck(userId: string, plannedSessionId: number, known?: SessionCompliance): Promise<SessionCheckView | null> {
+  const s = known?.id === plannedSessionId ? known : await oneSession(userId, plannedSessionId);
   if (!s) return null;
   const name = s.label ?? s.programName;
   const empty = { title: `${name ?? "Session"} · ${shortDay(s.date)}`, parts: [] };

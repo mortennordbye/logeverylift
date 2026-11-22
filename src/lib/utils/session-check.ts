@@ -120,6 +120,8 @@ export type StepCheck = {
   time: { value: string; plan: string; mark: Mark };
   /** Each target the step has, in the order Power, Heart rate, Cadence, Pace; none on a warm-up, recovery, rest or cool-down. */
   rows: CheckRow[];
+  /** The step's averages, target or not (pace in s/km), for the widget's "no target" rows; null when not done. */
+  measured: Record<CheckRow["metric"], number | null>;
 };
 
 const STEP_WORD: Record<WorkoutStep["type"], string> = { warmup: "Warm-up", work: "Work", recovery: "Easy", cooldown: "Cool-down", rest: "Rest" };
@@ -243,6 +245,7 @@ export function checkStep(plan: RidePlan, i: number, log: StepLog | null): StepC
       mark: s.seconds !== null && seconds !== null ? judge("time", seconds, { low: s.seconds, high: s.seconds }) : "none",
     },
     rows,
+    measured: { power: n(log?.avgPower), hr: n(log?.avgHr), cadence: n(log?.avgCadence), pace: run && ok ? paceOf(log, !outdoor) : null },
   };
 }
 

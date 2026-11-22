@@ -10,6 +10,7 @@ import { date } from "./date";
 import { enduranceToday } from "./endurance-today";
 import { friendsActivity } from "./friends-activity";
 import { garminReadiness } from "./garmin-readiness";
+import { lastSession } from "./last-session";
 import { raceCountdown } from "./race-countdown";
 import { recentPrs } from "./recent-prs";
 import { streak } from "./streak";
@@ -28,6 +29,7 @@ export const WIDGETS = {
   date,
   enduranceToday,
   week,
+  lastSession,
   weeklyGoal,
   raceCountdown,
   trainingLoad,
