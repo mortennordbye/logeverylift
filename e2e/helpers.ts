@@ -345,3 +345,23 @@ export async function openTimedExercise(page: Page): Promise<void> {
 export function backLink(page: Page): Locator {
   return page.getByTestId("back-link").filter({ visible: true }).last();
 }
+
+/**
+ * Stop the page clock where it is: from then on only `runFor` and the like
+ * move it. Playwright has no "pause now": `pauseAt` takes a time, and throws
+ * "Cannot fast-forward to the past" when the page clock has already passed it.
+ * On a slow machine more than the margin can pass between reading the page's
+ * time and the pause, so a miss reads the time again, with a wider margin. A
+ * miss has already stopped the clock, so the second try lands.
+ */
+export async function freezeClock(page: Page): Promise<void> {
+  for (let ahead = 50; ; ahead *= 2) {
+    const now = await page.evaluate(() => Date.now());
+    try {
+      await page.clock.pauseAt(now + ahead);
+      return;
+    } catch (e) {
+      if (!String(e).includes("Cannot fast-forward to the past") || ahead > 5_000) throw e;
+    }
+  }
+}

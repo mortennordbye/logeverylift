@@ -6,7 +6,7 @@ import { testDb } from "./fixtures/reset";
 import { insertStepProgram } from "./fixtures/step-program";
 import { ftpTestWorkout } from "../src/lib/utils/ftp-tests";
 import { expect, test } from "./fixtures/test";
-import { waitForLiveSession } from "./helpers";
+import { freezeClock, waitForLiveSession } from "./helpers";
 
 /**
  * Ride mode (docs/plans/bike-ride-logger.md, steps 3 and 4): a ride runs
@@ -80,11 +80,6 @@ test.beforeEach(async ({ page }) => {
 const startTap = new Map<string, number>();
 const shifted = new Map<string, number>();
 
-/** Stop the page clock: from now on only `advance` and `runFor` move it. */
-async function freeze(page: Page) {
-  const now = await page.evaluate(() => Date.now());
-  await page.clock.pauseAt(now + 50);
-}
 
 /**
  * `seconds` pass: the stored ride moves back by that much and the page clock
@@ -124,7 +119,7 @@ async function startRide(page: Page, s: { userId: string; programId: number; peI
   await page.getByRole("button", { name: "Start ride" }).click();
   await expect(page.getByTestId("ride-screen")).toBeVisible();
   await expect(page.getByTestId("ride-header")).toContainText(`Indoor · step 1 of ${opts.steps ?? 5}`);
-  await freeze(page);
+  await freezeClock(page);
 }
 
 const header = (page: Page) => page.getByTestId("ride-header");

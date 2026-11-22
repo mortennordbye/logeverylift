@@ -5,7 +5,7 @@ import { e2eUser } from "./fixtures/env";
 import { testDb } from "./fixtures/reset";
 import { insertStepProgram } from "./fixtures/step-program";
 import { expect, test } from "./fixtures/test";
-import { waitForLiveSession } from "./helpers";
+import { freezeClock, waitForLiveSession } from "./helpers";
 import { runTestWorkout } from "../src/lib/utils/run-test";
 import { paceText } from "../src/lib/utils/run-numbers";
 
@@ -122,11 +122,6 @@ test.beforeEach(async ({ page }) => {
 const startTap = new Map<string, number>();
 const shifted = new Map<string, number>();
 
-async function freeze(page: Page) {
-  const now = await page.evaluate(() => Date.now());
-  await page.clock.pauseAt(now + 50);
-}
-
 /** `seconds` pass: the stored rides move back by that much and the page clock runs it forward. */
 async function advance(page: Page, userId: string, seconds: number) {
   if (await page.evaluate(() => navigator.onLine)) {
@@ -149,8 +144,13 @@ async function advance(page: Page, userId: string, seconds: number) {
 
 const visible = (page: Page, id: string) => page.getByTestId(id).filter({ visible: true });
 
-/** Open the run exercise, wait for its workout, choose the mode and start the run. On a treadmill the 5 s count runs first. */
-async function startRun(page: Page, s: { userId: string; programId: number; peId: number }, mode: "Treadmill" | "Outdoor", opts: { open?: boolean } = {}) {
+/**
+ * Open the run exercise, wait for its workout, choose the mode and start the
+ * run. On a treadmill the 5 s count runs first: `realTime` waits it out on the
+ * real clock and leaves the page clock running, else the clock stops and
+ * `advance` moves past it.
+ */
+async function startRun(page: Page, s: { userId: string; programId: number; peId: number }, mode: "Treadmill" | "Outdoor", opts: { open?: boolean; realTime?: boolean } = {}) {
   if (opts.open !== false) await page.goto(`/programs/${s.programId}/workout/exercises/${s.peId}`);
   await expect(visible(page, "run-exercise")).toBeVisible();
   if ((await visible(page, "run-mode").textContent()) !== mode) {
@@ -161,17 +161,21 @@ async function startRun(page: Page, s: { userId: string; programId: number; peId
   await expect.poll(async () => (await testDb().select().from(workoutSessions).where(eq(workoutSessions.userId, s.userId))).length).toBeGreaterThan(0);
   await waitForLiveSession(page);
   await page.getByRole("button", { name: "Start run" }).click();
-  if (mode === "Treadmill") {
+  if (mode === "Treadmill" && opts.realTime) {
     const count = page.getByTestId("run-count");
     await expect(count).toBeVisible();
-    await freeze(page);
+    await expect(count).toHaveCount(0, { timeout: 10_000 });
+  } else if (mode === "Treadmill") {
+    const count = page.getByTestId("run-count");
+    await expect(count).toBeVisible();
+    await freezeClock(page);
     startTap.set(s.userId, Date.now() + 5000);
     shifted.set(s.userId, 0);
     // A second past the count: the phone's clock offset can be a few hundred ms behind the server's.
     await advance(page, s.userId, 6);
     await expect(count).toHaveCount(0);
   } else {
-    await freeze(page);
+    await freezeClock(page);
     startTap.set(s.userId, Date.now());
     shifted.set(s.userId, 0);
   }
@@ -278,7 +282,7 @@ test("1: a treadmill run counts in, saves belt taps with an Undo, resumes after 
   await expect(page.getByTestId("ride-step-title")).toHaveText("Steady");
 
   // The run ends: the steady step saves 2 min at 8.0 km/h, and the results table opens (R12), with no Start run.
-  await freeze(page);
+  await freezeClock(page);
   await advance(page, s.userId, 95);
   await page.clock.resume();
   await expect(visible(page, "run-results")).toBeVisible();
@@ -367,9 +371,12 @@ test("1b: a strides block cues the belt, counts its reps, and hold to skip skips
 test("2: offline belt taps replay and land in the steps they were tapped in", async ({ page, context }, testInfo) => {
   test.setTimeout(90_000);
   const s = await program(await userOf(testInfo.parallelIndex), shortRun);
-  await startRun(page, s, "Treadmill");
-  // Real time runs from here: the stored run is not moved while taps wait on the phone.
-  await page.clock.resume();
+  // On real time from the start: the stored run is never moved, so the page
+  // and the server count the run alike, and a queued tap's time means the
+  // same to both. (Moved by `advance` and then offline, the page never reads
+  // the moved run: its taps replay seconds off, and one past the server's
+  // now is placed at the server's now, maybe back in the warm-up.)
+  await startRun(page, s, "Treadmill", { realTime: true });
   await context.setOffline(true);
   await page.getByRole("button", { name: "Belt up 0.5 km/h" }).click();
   await expect.poll(() => page.evaluate(() => JSON.stringify(Object.values(JSON.parse(localStorage.getItem("rideEventQueue") ?? "{}")).flat().length))).toBe("1");
@@ -386,7 +393,8 @@ test("2: offline belt taps replay and land in the steps they were tapped in", as
   const [one, two] = await beltEvents(s.userId);
   // Each lands in its own step: the first in the warm-up, the second after it.
   expect(one.at.getTime() - ride.startedAt.getTime()).toBeLessThan(8_000);
-  expect(two.at.getTime() - ride.startedAt.getTime()).toBeGreaterThan(8_000);
+  // A step starts at its first millisecond: a tap there is in it.
+  expect(two.at.getTime() - ride.startedAt.getTime()).toBeGreaterThanOrEqual(8_000);
   const keys = (ride.plan as { steps: { key: string }[] }).steps.map((p) => p.key);
   expect([one.stepKey, two.stepKey]).toEqual([keys[0], keys[1]]);
   // The warm-up's meters count the offline tap: 8 s at 7.5 km/h is 17 m, at 8.0 km/h 18 m.
@@ -436,7 +444,7 @@ test("4: the ride of a brick that ended early hands over to its run, which shows
   await waitForLiveSession(page);
   await page.getByRole("button", { name: "Start ride" }).click();
   await expect(page.getByTestId("ride-screen")).toBeVisible();
-  await freeze(page);
+  await freezeClock(page);
   shifted.set(userId, 0);
   await advance(page, userId, 30);
   await page.getByRole("button", { name: "Pause" }).click();
