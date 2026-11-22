@@ -222,6 +222,9 @@ describe("get_ride on a run", () => {
     expect(ride.steps[0].planned).not.toHaveProperty("beltKmh");
     expect(ride.steps[0].planned).toHaveProperty("outdoor");
     expect(ride.steps[0].done).toMatchObject({ status: "partial", avgHr: 150, sources: { avgHr: "typed" } });
+    // Per-metric marks: outdoors the pace is never judged.
+    expect(Object.keys(ride.steps[0].marks)).toEqual(["pace", "hr", "cadence", "time"]);
+    expect(ride.steps[0].marks.pace).toBeNull();
     expect(ride.steps[0].done).not.toHaveProperty("beltKmh");
     // Outdoors GAP needs the stream; no distance, so no pace load.
     expect(ride.numbers).toMatchObject({ gapSPerKm: null, distanceMeters: null, stream: false });

@@ -6,7 +6,7 @@
  * another user's session.
  */
 import { db } from "@/db";
-import { athleteThresholds, garminActivities, garminActivityStreams, trainingCycleSlots, trainingCycles, plannedSessions } from "@/db/schema";
+import { athleteThresholds, garminActivities, garminActivityStreams, trainingCycleSlots, trainingCycles, plannedSessions, users } from "@/db/schema";
 import { getRide, startRide } from "@/lib/actions/rides";
 import { getActiveCycleForUser } from "@/lib/actions/training-cycles";
 import { logWorkoutSet } from "@/lib/actions/workout-sets";
@@ -259,5 +259,16 @@ describe("a run done on the watch alone", () => {
   it("another user reads nothing of it", async () => {
     const id = await plannedRun(true);
     expect(await plannedSessionCheck(other, id)).toBeNull();
+  });
+
+  it("a picked session after Garmin access is gone shows the plan, with no Garmin numbers or name", async () => {
+    const id = await plannedRun(true);
+    const [act] = await db.select({ id: garminActivities.id }).from(garminActivities).where(eq(garminActivities.userId, me));
+    await db.update(plannedSessions).set({ garminActivityId: act.id }).where(eq(plannedSessions.id, id));
+    await db.update(users).set({ role: "user" }).where(eq(users.id, me));
+    const part = (await plannedSessionCheck(me, id))!.parts[0];
+    expect(part.match).toEqual({ kind: "watch" });
+    expect(part.steps.map((s) => s.time.value)).toEqual(["–", "–", "–"]);
+    expect(part.steps[1].rows.every((r) => r.value === "–")).toBe(true);
   });
 });

@@ -136,10 +136,32 @@ function paceBand(t: ResolvedTarget | null): Band | null {
   return { low: a !== null && b !== null ? Math.min(a, b) : b, high: a !== null && b !== null ? Math.max(a, b) : a };
 }
 
-function paceBandText(b: Band): string {
+export function paceBandText(b: Band): string {
   const t = (s: number) => minSec(Math.round(s));
   if (b.low !== null && b.high !== null) return t(b.low) === t(b.high) ? t(b.low) : `${t(b.low)}-${t(b.high)}`;
-  return b.low !== null ? `${t(b.low)} or faster` : `${t(b.high!)} or slower`;
+  // low is the fast end: faster than it is over, so the band runs from it to slower.
+  return b.low !== null ? `${t(b.low)} or slower` : `${t(b.high!)} or faster`;
+}
+
+/** A belt the app sets from a pace rounds to 0.5 km/h (resolveBelt), so it can sit this far outside the pace range. */
+export const BELT_ROUNDING_KMH = 0.25;
+
+/**
+ * A treadmill step's band for judging: the pace range widened by the belt's
+ * rounding and to the belt the app froze, so the runner who ran the app's own
+ * belt is never marked out. The plan text keeps the written range.
+ */
+function treadmillBand(b: Band, frozenBeltTenths: number | null | undefined): Band {
+  const pace = (kmh: number) => 3600 / kmh;
+  const kmhOf = (s: number) => 3600 / s;
+  let low = b.low !== null ? pace(kmhOf(b.low) + BELT_ROUNDING_KMH) : null;
+  let high = b.high !== null && kmhOf(b.high) > BELT_ROUNDING_KMH ? pace(kmhOf(b.high) - BELT_ROUNDING_KMH) : b.high;
+  if (frozenBeltTenths) {
+    const f = pace(frozenBeltTenths / 10);
+    if (low !== null) low = Math.min(low, f);
+    if (high !== null) high = Math.max(high, f);
+  }
+  return { low, high };
 }
 
 /** A run step's pace in s/km: the belt on a treadmill, its distance over its time outdoors, else its speed. */
@@ -202,7 +224,7 @@ export function checkStep(plan: RidePlan, i: number, log: StepLog | null): StepC
       const t = [s.target, s.target2, outdoor ? s.outdoor : null].find((x) => x?.unit === "m/s" && !x.missing) ?? null;
       const band = paceBand(t);
       const pace = ok ? paceOf(log, !outdoor) : null;
-      if (band) add("pace", band, pace, pace === null ? "–" : `${minSec(Math.round(pace))} /km`, paceBandText(band), { outdoor });
+      if (band) add("pace", outdoor ? band : treadmillBand(band, s.run?.belt), pace, pace === null ? "–" : `${minSec(Math.round(pace))} /km`, paceBandText(band), { outdoor });
     }
   }
 
@@ -222,6 +244,20 @@ export function checkStep(plan: RidePlan, i: number, log: StepLog | null): StepC
     },
     rows,
   };
+}
+
+/**
+ * A step's marks by metric for get_ride: power (bike) or pace (run), heart
+ * rate, cadence and time; null where the step has no such target or it was
+ * not judged.
+ */
+export function stepMarks(c: StepCheck, sport: "bike" | "run") {
+  const of = (m: CheckRow["metric"]) => {
+    const mark = c.rows.find((r) => r.metric === m)?.mark ?? "none";
+    return mark === "none" ? null : mark;
+  };
+  const time = c.time.mark === "none" ? null : c.time.mark;
+  return sport === "run" ? { pace: of("pace"), hr: of("hr"), cadence: of("cadence"), time } : { power: of("power"), hr: of("hr"), cadence: of("cadence"), time };
 }
 
 /** Every step of a plan, judged. */

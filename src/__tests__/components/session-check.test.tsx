@@ -103,6 +103,11 @@ describe("the step page", () => {
     );
     expect(screen.getByTestId("check-match").textContent).toBe("Matched to Garmin · Oslo Running · steps split by the planned times");
   });
+
+  it("without Garmin access a watch-only session names no activity", () => {
+    render(<SessionCheckSteps view={{ title: "Run", parts: [{ key: "w", sport: "run", name: "Run", match: { kind: "watch" }, steps: [] }] }} back={{ href: "/planned/1", label: "Session" }} />);
+    expect(screen.getByTestId("check-match").textContent).toBe("Done on the watch");
+  });
 });
 
 describe("the summaries use the same rule (decision 3)", () => {

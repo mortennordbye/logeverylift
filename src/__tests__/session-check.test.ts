@@ -1,7 +1,7 @@
 import type { StepLog } from "@/lib/utils/ride-results";
 import { buildRidePlan } from "@/lib/utils/ride-timeline";
 import { buildRunPlan } from "@/lib/utils/run-plan";
-import { checkStep, checkSteps, judge, sessionVerdict, splitWatchOnly } from "@/lib/utils/session-check";
+import { checkStep, checkSteps, judge, paceBandText, sessionVerdict, splitWatchOnly } from "@/lib/utils/session-check";
 import { parseWorkout, type ThresholdValues, type Workout } from "@/lib/utils/workout-steps";
 import { describe, expect, it } from "vitest";
 
@@ -175,8 +175,28 @@ describe("checkStep: a run step", () => {
     // 98-102% of threshold speed: 5:32 to 5:46 /km.
     const at = (kmh: number) => checkStep(p, 0, log({ durationSeconds: 1200, avgSpeed: kmh / 3.6, avgCadence: 160 })).rows.find((r) => r.metric === "pace")!;
     expect(at(10.5)).toMatchObject({ value: "5:43 /km", plan: "5:32-5:46", mark: "in" });
-    expect(at(10.1).mark).toBe("under");
-    expect(at(11.2).mark).toBe("over");
+    expect(at(9.9).mark).toBe("under");
+    expect(at(11.5).mark).toBe("over");
+  });
+
+  it("on a treadmill the belt the app froze is never out, though it rounds to 0.5 km/h (review of PR #273)", () => {
+    // 7:09 to 7:24 /km: the frozen belt rounds to 8.0 km/h, which is 7:30 /km.
+    const band = tree({ v: 2, sport: "run", name: "Easy", steps: [{ type: "work", end: { type: "time", seconds: 1200 }, target: { metric: "pace", anchor: "absolute", low: 1000 / 444, high: 1000 / 429 } }] });
+    const p = buildRunPlan(band, [1], RUN_TH, "indoor");
+    expect(p.steps[0].run?.belt).toBe(80);
+    const at = (kmh: number) => checkStep(p, 0, log({ durationSeconds: 1200, avgSpeed: kmh / 3.6 })).rows.find((r) => r.metric === "pace")!;
+    expect(at(8.0)).toMatchObject({ value: "7:30 /km", plan: "7:09-7:24", mark: "in" });
+    expect(at(7.5).mark).toBe("under");
+    expect(at(9.0).mark).toBe("over");
+  });
+
+  it("a pace band open on one side reads in the judging direction", () => {
+    expect(paceBandText({ low: 330, high: null })).toBe("5:30 or slower");
+    expect(paceBandText({ low: null, high: 360 })).toBe("6:00 or faster");
+    expect(judge("pace", 400, { low: 330, high: null })).toBe("in");
+    expect(judge("pace", 300, { low: 330, high: null })).toBe("over");
+    expect(judge("pace", 300, { low: null, high: 360 })).toBe("in");
+    expect(judge("pace", 400, { low: null, high: 360 })).toBe("under");
   });
 
   it("outdoors the pace is shown, not judged, and the cadence is in spm", () => {

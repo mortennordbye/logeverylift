@@ -147,15 +147,15 @@ describe("the summary", () => {
     expect(s.rows[3]).toMatchObject({ mark: null, hrMark: null });
   });
 
-  it("judges a treadmill pace step by its belt's pace, with a 5 s/km margin (session check, decision 1)", () => {
+  it("judges a treadmill pace step by its belt's pace, widened by the belt's 0.25 km/h rounding, with a 5 s/km margin (session check)", () => {
     const tempo = tree({ v: 2, sport: "run", name: "Tempo", steps: [{ type: "work", end: { type: "time", seconds: 1200 }, target: { metric: "pace", anchor: "threshold_pace", low: 98, high: 102 } }] });
     const p = buildRunPlan(tempo, [1], OWNER, "indoor");
     // 98-102% of 10.62 km/h is 10.41 to 10.83 km/h.
     expect(runSummary(p, { 1: log(1200, 10.5) }, { beltEvents: true }).rows[0]).toMatchObject({ plan: "10.5 · Z4", done: "10.5", mark: null });
-    expect(runSummary(p, { 1: log(1200, 10.1) }, { beltEvents: true }).rows[0].mark).toBe("↓");
-    expect(runSummary(p, { 1: log(1200, 11.2) }, { beltEvents: true }).rows[0]).toMatchObject({ mark: "↑", hrMark: null });
-    // 10.3 km/h is 5:50 /km, 4 s past the slow end (5:46): inside the margin.
-    expect(runSummary(p, { 1: log(1200, 10.3) }, { beltEvents: true }).rows[0].mark).toBeNull();
+    expect(runSummary(p, { 1: log(1200, 9.9) }, { beltEvents: true }).rows[0].mark).toBe("↓");
+    expect(runSummary(p, { 1: log(1200, 11.5) }, { beltEvents: true }).rows[0]).toMatchObject({ mark: "↑", hrMark: null });
+    // 10.1 km/h is inside the belt rounding (0.25 km/h) and the 5 s/km margin.
+    expect(runSummary(p, { 1: log(1200, 10.1) }, { beltEvents: true }).rows[0].mark).toBeNull();
   });
 
   it("with no belt taps says the distance is the plan's; with no numbers at all it is plan only", () => {

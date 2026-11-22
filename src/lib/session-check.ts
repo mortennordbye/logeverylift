@@ -14,6 +14,7 @@
 import { db } from "@/db";
 import { garminActivities, programs, rideEvents, rides, workoutSessions } from "@/db/schema";
 import { rideStepLogs } from "@/lib/bike-exercise-view";
+import { garminAllowedFor } from "@/lib/garmin/access";
 import { sportOf } from "@/lib/garmin/analytics/sport";
 import { sampleDurations } from "@/lib/garmin/analytics/load";
 import { loadActivity, modeOfActivity, rideGarminView } from "@/lib/ride-garmin";
@@ -32,7 +33,11 @@ import type { Workout } from "@/lib/utils/workout-steps";
 import { and, asc, desc, eq } from "drizzle-orm";
 
 /** Where the step numbers come from: a Garmin activity (with how it was split into the steps), or the app alone. */
-export type CheckMatch = { kind: "garmin"; name: string; split: "laps" | "time" | null; watchOnly: boolean } | { kind: "app" };
+export type CheckMatch =
+  | { kind: "garmin"; name: string; split: "laps" | "time" | null; watchOnly: boolean }
+  | { kind: "app" }
+  /** Done on the watch, read without Garmin access: no name, no numbers. */
+  | { kind: "watch" };
 
 export type CheckPart = { key: string; sport: "bike" | "run"; name: string; match: CheckMatch; steps: StepCheck[] };
 
@@ -124,6 +129,13 @@ const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : n
  * activity, as a Garmin fill reads them.
  */
 async function watchOnlyPart(userId: string, garminRowId: number, workout: Workout): Promise<CheckPart | null> {
+  // Garmin parts only with Garmin access (decision 5): a pick stays done after access is gone, so show its plan alone.
+  if (!(await garminAllowedFor(userId))) {
+    const ids = flattenWorkout(workout).map((_, i) => i + 1);
+    const thresholds = await thresholdValues(userId);
+    const plan = workout.sport === "run" ? buildRunPlan(workout, ids, thresholds, "outdoor", { surface: "road" }) : buildRidePlan(workout, ids, thresholds, "outdoor");
+    return { key: `watch-${garminRowId}`, sport: workout.sport === "run" ? "run" : "bike", name: plan.name, match: { kind: "watch" }, steps: checkSteps(plan, {}) };
+  }
   const [row] = await db
     .select({ garminActivityId: garminActivities.garminActivityId, typeKey: garminActivities.activityType, data: garminActivities.data })
     .from(garminActivities)

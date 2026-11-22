@@ -8,6 +8,7 @@ import type { CheckMatch } from "@/lib/session-check";
  */
 export function checkMatchText(m: CheckMatch): string {
   if (m.kind === "app") return "Logged in the app";
+  if (m.kind === "watch") return "Done on the watch";
   const how =
     m.split === "laps" ? "steps split by Garmin laps" : m.split === "time" ? (m.watchOnly ? "steps split by the planned times" : "steps split by time") : m.watchOnly ? "no Garmin streams yet" : null;
   return ["Matched to Garmin", m.name, how].filter(Boolean).join(" · ");

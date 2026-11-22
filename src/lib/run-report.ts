@@ -26,6 +26,7 @@ import { runTestCheckText, runTestThresholds } from "@/lib/utils/run-test";
 import { rideTimeline, type RidePlan } from "@/lib/utils/ride-timeline";
 import { paceSeconds, paceText } from "@/lib/utils/run-numbers";
 import { runSummary, type RunStepLog } from "@/lib/utils/run-results";
+import { checkSteps, stepMarks } from "@/lib/utils/session-check";
 import { RUN_MODE_NAME, plannedRunNumbers, runOutdoorText, runRowOfStep, runStepTitle, runTargetText } from "@/lib/utils/run-view";
 import { and, asc, eq } from "drizzle-orm";
 
@@ -70,6 +71,7 @@ export async function runReport(userId: string, ride: typeof rides.$inferSelect)
   const [garmin, garminUser] = await Promise.all([runGarminView(userId, ride.id), garminAllowedFor(userId)]);
   const stream = garmin.stream;
   const summary = runSummary(plan, runLogs, { beltEvents, stream });
+  const checks = checkSteps(plan, runLogs);
   const n = summary.numbers;
   const planned = plannedRunNumbers(plan);
   const live = timeline.status === "running" || timeline.status === "paused";
@@ -157,6 +159,8 @@ export async function runReport(userId: string, ride: typeof rides.$inferSelect)
         },
         // The summary's judgement (the session check's rule): the belt's pace on a treadmill, else the heart rate; above a cap or a range, below a range; null when it passes or is not judged.
         judged: s.run?.block || row?.key !== s.key ? null : row.mark ? mark[row.mark] : row.hrMark ? mark[row.hrMark] : null,
+        // The session check per metric, so an assistant can tell heart rate over from pace over (in, over, under; null: no target or not judged; outdoors the pace is never judged).
+        marks: stepMarks(checks[i], "run"),
         // Percent of the step's seconds inside its target, from the Garmin stream; null without one or without a target.
         timeOnTargetPct: stream?.numbers.onTarget[s.programSetId] ?? null,
       };
