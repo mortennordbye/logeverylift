@@ -41,6 +41,8 @@ export type SessionMatch = {
   candidates: MatchActivity[];
   /** Pick (nothing matched) or Pick another (a watch match): the stored pick can change it. */
   canPick: boolean;
+  /** The step page will have steps: an ended ride or run, or (Garmin on) a matched activity of the sport to split. */
+  hasSteps: boolean;
 };
 
 /** The step page of a done session. One place, so the route can change in one line. */
@@ -102,7 +104,8 @@ export type MatchBlockView = {
 
 /**
  * The block as words. `garminOn`: the Garmin parts show only for a user with
- * Garmin (decision 5). "See every step" shows for a done bike or run session.
+ * Garmin (decision 5). "See every step" shows for a done bike or run session
+ * whose step page has steps (`hasSteps`).
  */
 export function matchBlockView(m: SessionMatch, garminOn: boolean, units?: Units): MatchBlockView {
   const program = m.program ? { href: `/programs/${m.program.id}`, text: m.program.cycleName ? `${m.program.cycleName} · ${m.program.name}` : m.program.name } : null;
@@ -126,7 +129,7 @@ export function matchBlockView(m: SessionMatch, garminOn: boolean, units?: Units
     logged: m.logged ? LOGGED_TEXT[m.logged] : null,
     garmin,
     fill,
-    stepsHref: m.state === "done" && (m.sport === "bike" || m.sport === "run") ? sessionCheckHref(m.plannedSessionId) : null,
+    stepsHref: m.state === "done" && m.hasSteps && (m.sport === "bike" || m.sport === "run") ? sessionCheckHref(m.plannedSessionId) : null,
     candidates: garminOn ? m.candidates.filter((c) => c.id !== m.garmin?.id).map((c) => ({ id: c.id, name: c.name, detail: activityText(c, units) })) : [],
   };
 }

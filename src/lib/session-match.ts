@@ -65,12 +65,17 @@ async function standingFill(userId: string, rideIds: number[]) {
 
 /**
  * The match of one of the user's planned sessions; null when it is not theirs
- * or not live. `known` is the session as the caller already read it for this user.
+ * or not live. What the caller already read for this user is passed on, so it
+ * is not read again: `known` (the session), `garminOn` and `today`.
  */
-export async function sessionMatch(userId: string, plannedSessionId: number, known?: SessionCompliance): Promise<SessionMatch | null> {
-  const s = known?.id === plannedSessionId ? known : await oneSession(userId, plannedSessionId);
+export async function sessionMatch(
+  userId: string,
+  plannedSessionId: number,
+  ctx: { known?: SessionCompliance; garminOn?: boolean; today?: string } = {},
+): Promise<SessionMatch | null> {
+  const s = ctx.known?.id === plannedSessionId ? ctx.known : await oneSession(userId, plannedSessionId);
   if (!s) return null;
-  const garminOn = await garminAllowedFor(userId);
+  const garminOn = ctx.garminOn ?? (await garminAllowedFor(userId));
 
   const [cycle] = await db
     .select({ name: trainingCycles.name })
@@ -82,7 +87,7 @@ export async function sessionMatch(userId: string, plannedSessionId: number, kno
   const rideRows =
     s.loggedSessionId != null
       ? await db
-          .select({ id: rides.id, sport: rides.sport })
+          .select({ id: rides.id, sport: rides.sport, status: rides.status })
           .from(rides)
           .where(and(eq(rides.userId, userId), eq(rides.sessionId, s.loggedSessionId)))
           .orderBy(asc(rides.id))
@@ -112,7 +117,7 @@ export async function sessionMatch(userId: string, plannedSessionId: number, kno
 
   // Pick: a session of today or earlier, not skipped, not logged in the app (its ride has its own Pick);
   // with nothing matched, or a watch match to change (the pick op stores a new one either way).
-  const today = toDateStr(await userToday(userId));
+  const today = ctx.today ?? toDateStr(await userToday(userId));
   const canPick = garminOn && s.sport != null && s.date <= today && s.status !== "skipped" && (logged == null || logged === "watch");
   let candidates: MatchActivity[] = [];
   if (garminOn && s.sport != null && s.date <= today && (garmin == null || canPick)) {
@@ -146,6 +151,20 @@ export async function sessionMatch(userId: string, plannedSessionId: number, kno
     candidates = ofSport.filter((r) => !taken.has(r.id)).map(toActivity);
   }
 
+  // As plannedSessionCheck (src/lib/session-check.ts) reads it: an ended ride or run of the workout,
+  // else (Garmin on) the matched activity of the session's sport, split into the program's steps of that sport.
+  let hasSteps = false;
+  if (s.state === "done" && (s.sport === "bike" || s.sport === "run")) {
+    hasSteps = rideRows.some((r) => r.status === "finished" || r.status === "ended_early");
+    if (!hasSteps && garminOn && s.garminActivityId != null && s.programWorkouts.some((p) => p.sport === s.sport)) {
+      const [a] = await db
+        .select({ type: garminActivities.activityType })
+        .from(garminActivities)
+        .where(and(eq(garminActivities.userId, userId), eq(garminActivities.id, s.garminActivityId)));
+      hasSteps = !!a && sportOf(a.type) === s.sport;
+    }
+  }
+
   return {
     plannedSessionId: s.id,
     date: s.date,
@@ -157,22 +176,30 @@ export async function sessionMatch(userId: string, plannedSessionId: number, kno
     garmin,
     candidates,
     canPick,
+    hasSteps,
   };
 }
 
 /**
- * The planned session a completed workout of the user counts for: its link,
- * else the session of its day the app matched it to. Null when none or when
+ * The match of the planned session a completed workout of the user counts
+ * for (its link, else the session of its day the app matched it to), read
+ * with one compliance read, and whether Garmin is on. Null when none or when
  * the workout is still open.
  */
-export async function plannedIdOfWorkout(userId: string, workoutSessionId: number): Promise<number | null> {
+export async function workoutSessionMatch(userId: string, workoutSessionId: number): Promise<{ match: SessionMatch; garminOn: boolean } | null> {
   const [w] = await db
     .select({ plannedSessionId: workoutSessions.plannedSessionId, date: workoutSessions.date, intendedDate: workoutSessions.intendedDate })
     .from(workoutSessions)
     .where(and(eq(workoutSessions.id, workoutSessionId), eq(workoutSessions.userId, userId), eq(workoutSessions.isCompleted, true)));
   if (!w) return null;
-  if (w.plannedSessionId != null) return w.plannedSessionId;
-  const day = w.intendedDate ?? w.date;
-  const all = await sessionCompliance(userId, day, day);
-  return all.find((x) => x.loggedSessionId === workoutSessionId)?.id ?? null;
+  let s: SessionCompliance | null;
+  if (w.plannedSessionId != null) s = await oneSession(userId, w.plannedSessionId);
+  else {
+    const day = w.intendedDate ?? w.date;
+    s = (await sessionCompliance(userId, day, day)).find((x) => x.loggedSessionId === workoutSessionId) ?? null;
+  }
+  if (!s) return null;
+  const garminOn = await garminAllowedFor(userId);
+  const match = await sessionMatch(userId, s.id, { known: s, garminOn });
+  return match ? { match, garminOn } : null;
 }

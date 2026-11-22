@@ -33,10 +33,10 @@ export default async function PlannedSessionPage({ params }: { params: Promise<{
   if (!Number.isInteger(id) || id <= 0) notFound();
   const v = await plannedSessionView(user.id, id);
   if (!v) notFound();
-  const [match, garminOn] = await Promise.all([sessionMatch(user.id, id, v.session), garminAllowedFor(user.id)]);
+  const [garminOn, today] = await Promise.all([garminAllowedFor(user.id), userToday(user.id).then(toDateStr)]);
+  const match = await sessionMatch(user.id, id, { known: v.session, garminOn, today });
   const { session, workout, units, estimate } = v;
   const done = session.state === "done";
-  const today = toDateStr(await userToday(user.id));
   const swim = workout.sport === "swim";
 
   return (

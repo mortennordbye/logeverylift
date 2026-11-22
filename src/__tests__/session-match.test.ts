@@ -24,6 +24,7 @@ const base: SessionMatch = {
   garmin: { ...act(1, { name: "Indoor Cycling" }), fill: "time" },
   candidates: [],
   canPick: false,
+  hasSteps: true,
 };
 
 describe("loggedOf", () => {
@@ -92,6 +93,13 @@ describe("matchBlockView", () => {
     expect(v.fill).toBeNull();
     expect(v.candidates).toEqual([]);
     expect(v.logged).toBe("In the app · ride mode");
+  });
+
+  it("no See every step when the step page would have no steps", () => {
+    // A "Yes" answer with no ride and no Garmin activity: the step page is empty.
+    const v = matchBlockView({ ...base, logged: "app_workout", garmin: null, hasSteps: false }, true);
+    expect(v.stepsHref).toBeNull();
+    expect(v.logged).toBe("In the app");
   });
 
   it("a session still to come shows the program only", () => {

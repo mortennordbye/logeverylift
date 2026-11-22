@@ -1,13 +1,13 @@
 import { db } from "@/db";
-import { garminActivities, plannedSessions, rideGarminFills, rides, trainingCycleSlots, trainingCycles, workoutSessions, workoutSets } from "@/db/schema";
+import { garminActivities, plannedSessions, rideGarminFills, rides, trainingCycleSlots, trainingCycles, users, workoutSessions, workoutSets } from "@/db/schema";
 import { updatePlannedSession } from "@/lib/actions/planned-sessions";
 import { pickSessionActivity } from "@/lib/actions/session-match";
 import { getActiveCycleForUser } from "@/lib/actions/training-cycles";
 import { sessionCompliance } from "@/lib/session-compliance";
-import { plannedIdOfWorkout, sessionMatch } from "@/lib/session-match";
+import { sessionMatch, workoutSessionMatch } from "@/lib/session-match";
 import { and, asc, eq, isNull } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createExercise, createProgram, createUser } from "./factories";
+import { createExercise, createProgram, createStepProgram, createUser } from "./factories";
 import { asUser } from "./setup";
 
 /**
@@ -21,6 +21,13 @@ import { asUser } from "./setup";
 vi.mock("@/lib/env", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/env")>();
   return { ...actual, env: new Proxy(actual.env, { get: (t, k) => (k === "GARMIN_KEY_ENCRYPTION_KEY" ? "k" : Reflect.get(t, k)) }) };
+});
+
+// Counts the compliance reads (the real function runs).
+const reads = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/session-compliance", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/session-compliance")>();
+  return { ...actual, sessionCompliance: (...a: Parameters<typeof actual.sessionCompliance>) => (reads(), actual.sessionCompliance(...a)) };
 });
 
 const TODAY = "2026-11-05";
@@ -45,8 +52,8 @@ afterEach(() => vi.useRealTimers());
 const runProgram = async (userId = me) => (await createProgram(userId, [{ exerciseId: runEx, sets: [{ durationSeconds: 2700, targetReps: null, weightKg: null }] }])).program.id;
 
 /** A cycle with a run on Tuesday and Wednesday; returns the dated sessions of those days. */
-async function runWeek(userId = me) {
-  const programId = await runProgram(userId);
+async function runWeek(userId = me, program?: number) {
+  const programId = program ?? (await runProgram(userId));
   const [c] = await db.insert(trainingCycles).values({ userId, name: "1 General", durationWeeks: 4, status: "active", startDate: "2026-11-02" }).returning();
   await db.insert(trainingCycleSlots).values([2, 3].map((dayOfWeek) => ({ trainingCycleId: c.id, daySlot: 1, dayOfWeek, programId })));
   asUser(userId, "admin");
@@ -198,15 +205,38 @@ describe("own rows only", () => {
     expect(row.garminActivityId).toBeNull();
   });
 
-  it("plannedIdOfWorkout reads only the user's completed workouts", async () => {
+  it("workoutSessionMatch reads only the user's completed workouts, with one compliance read", async () => {
     const { programId, tue, wed } = await runWeek();
     const linked = await workout(me, TUE, programId, tue.id);
     const byDay = await workout(me, WED, programId);
-    expect(await plannedIdOfWorkout(me, linked)).toBe(tue.id);
-    expect(await plannedIdOfWorkout(me, byDay)).toBe(wed.id);
-    expect(await plannedIdOfWorkout(other, linked)).toBeNull();
+    reads.mockClear();
+    expect((await workoutSessionMatch(me, linked))?.match.plannedSessionId).toBe(tue.id);
+    expect(reads).toHaveBeenCalledTimes(1);
+    reads.mockClear();
+    expect(await workoutSessionMatch(me, byDay)).toMatchObject({ match: { plannedSessionId: wed.id, matchedBy: "app" }, garminOn: true });
+    expect(reads).toHaveBeenCalledTimes(1);
+    expect(await workoutSessionMatch(other, linked)).toBeNull();
     await db.update(workoutSessions).set({ isCompleted: false }).where(eq(workoutSessions.id, byDay));
-    expect(await plannedIdOfWorkout(me, byDay)).toBeNull();
+    expect(await workoutSessionMatch(me, byDay)).toBeNull();
+  });
+});
+
+describe("See every step only when the step page has steps", () => {
+  it("a workout with no ride and no Garmin activity has none; one that took an activity, or an ended ride, has them", async () => {
+    // A run of steps: the step page splits a Garmin activity into them.
+    const steps = { v: 2, sport: "run", name: "Steady run", steps: [{ type: "work", end: { type: "time", seconds: 2700 }, target: { metric: "hr", anchor: "lthr", zone: 2 } }] };
+    const { programId, tue, wed } = await runWeek(me, (await createStepProgram(me, runEx, steps)).program.id);
+    await workout(me, TUE, programId, tue.id); // a "Yes" answer: no ride, no activity that day
+    expect(await sessionMatch(me, tue.id)).toMatchObject({ state: "done", logged: "app_workout", hasSteps: false });
+
+    await activity(me, WED, "running");
+    const wedWorkout = await workout(me, WED, programId, wed.id);
+    expect(await sessionMatch(me, wed.id)).toMatchObject({ logged: "app_workout", hasSteps: true });
+
+    await ride(me, wedWorkout, WED);
+    await db.update(users).set({ role: "user" }).where(eq(users.id, me));
+    // No Garmin now, but the ended run has its own steps.
+    expect(await sessionMatch(me, wed.id)).toMatchObject({ logged: "app_run", garmin: null, hasSteps: true });
   });
 });
 
