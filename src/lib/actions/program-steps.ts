@@ -11,7 +11,7 @@ import { exercises, programExercises, programs } from "@/db/schema";
 import { enduranceEnabledFor } from "@/lib/endurance";
 import { liveProgramExercises, livePrograms } from "@/lib/plan-live";
 import { planWrite, PlanNotFoundError } from "@/lib/plan-revisions";
-import { StepRowsError, replaceExerciseSteps } from "@/lib/program-steps-db";
+import { StepRowsError, assertNewWorkSteps, heldStepKeys, replaceExerciseSteps } from "@/lib/program-steps-db";
 import { requireSession } from "@/lib/utils/session";
 import { parseWorkout } from "@/lib/utils/workout-steps";
 import type { ActionResult } from "@/types/workout";
@@ -44,7 +44,10 @@ export async function saveExerciseSteps(data: unknown): Promise<ActionResult<{ p
 
     await planWrite({ userId: auth.user.id, writer: "user" }, async (w) => {
       await w.touch({ type: "program", id: slot.programId });
+      // The strict work step check, for the steps this save adds or changes (docs/plans/strict-targets.md, decision 3).
+      const held = await heldStepKeys(w.tx, parsed.data.programExerciseId);
       await replaceExerciseSteps(w.tx, parsed.data.programExerciseId, tree.workout);
+      await assertNewWorkSteps(w.tx, parsed.data.programExerciseId, held);
     });
     revalidatePath(`/programs/${slot.programId}/exercises/${parsed.data.programExerciseId}`);
     revalidatePath(`/programs/${slot.programId}/workout`, "layout");

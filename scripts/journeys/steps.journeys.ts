@@ -139,12 +139,24 @@ const set: JourneySet = {
           await shot(4, 2, "step-sheet", "A step's sheet: kind, end, target in your own numbers");
           await sheet().getByLabel("Target from").fill("100");
           await sheet().getByLabel("Target to").fill("104");
-          await shot(4, 3, "step-sheet-edited", "The target changed, with its pace", { small: false });
+          // A changed run work step also needs heart rate, the belt and cadence (docs/plans/strict-targets.md, decision 2).
+          await sheet().getByRole("button", { name: "Heart rate zone" }).click();
+          await sheet().getByLabel("Belt in km/h").fill("14");
+          await sheet().getByLabel("Cadence from").fill("176");
+          await sheet().getByLabel("Cadence to").fill("186");
+          await shot(4, 3, "step-sheet-edited", "The target changed, with its pace, heart rate, belt and cadence", { small: false });
           await sheet().getByRole("button", { name: "Done" }).click();
           await settle();
           await page.getByRole("button", { name: "Add repeat block" }).click();
           await settle();
-          await shot(4, 4, "block-added", "A second block added, not saved yet");
+          await shot(4, 4, "block-added", "A second block added, not saved yet, with what its work step lacks");
+          await page.getByTestId("step-block").nth(1).getByTestId("step-row").first().click();
+          await sheet().getByRole("button", { name: "HR zone", exact: true }).click();
+          await sheet().getByLabel("Belt in km/h").fill("10");
+          await sheet().getByLabel("Cadence from").fill("166");
+          await sheet().getByLabel("Cadence to").fill("176");
+          await sheet().getByRole("button", { name: "Done" }).click();
+          await settle();
           await page.getByRole("button", { name: "Save steps" }).click();
           await settle(1500);
           await shot(4, 5, "saved", "Saved");

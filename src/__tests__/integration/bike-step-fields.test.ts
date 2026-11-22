@@ -49,7 +49,9 @@ describe("edit_program_exercise", () => {
   it("stores a workout with ramp, free and outdoor targets, and get_program reads them back", async () => {
     const call = mcpTools(registerProgramTools, me);
     const { program } = await createStepProgram(me, bike, { ...ride, steps: [ride.steps[3]] });
-    const added = await call("edit_program_exercise", { operation: "add", programId: program.id, exerciseId: bike, workout: ride, reason: "Test", expectedVersion: 1 });
+    // The work step with the heart rate and cadence the strict check needs (docs/plans/strict-targets.md, decision 2).
+    const full = { ...ride, steps: ride.steps.map((s, i) => (i === 1 ? { ...s, target2: { metric: "hr", anchor: "lthr", zone: 3 }, cadence: { low: 85, high: 95 } } : s)) };
+    const added = await call("edit_program_exercise", { operation: "add", programId: program.id, exerciseId: bike, workout: full, reason: "Test", expectedVersion: 1 });
     expect(added.isError, added.raw).toBe(false);
     const got = await call("get_program", { programId: program.id });
     const sets = got.data.programExercises[1].programSets;

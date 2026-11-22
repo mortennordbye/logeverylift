@@ -39,7 +39,7 @@ import {
 } from "@/lib/utils/progression";
 import { reanchoredPeaks } from "@/lib/utils/periodization";
 import { REP_RANGE_MESSAGE, repRangeIsWellFormed } from "@/lib/validators/workout";
-import { StepRowsError, settleStepRows } from "@/lib/program-steps-db";
+import { StepRowsError, assertNewWorkSteps, heldStepKeys, settleStepRows } from "@/lib/program-steps-db";
 import { workoutToRows } from "@/lib/utils/program-steps";
 import { RIDE_TESTS, inclinePercentSchema, parseWorkout, programStepFieldsSchema, type Workout } from "@/lib/utils/workout-steps";
 import { ftpTestWorkout } from "@/lib/utils/ftp-tests";
@@ -474,6 +474,10 @@ export function registerProgramTools(server: McpServer, userId: string, clientId
         args = { ...args, sets: fromTree.sets };
         rideTest = { rideTest: fromTree.test };
       }
+      // Step input (a tree, or sets with stepKind) takes the strict work step
+      // check. Plain sets that the app turns into steps do not: that is the
+      // app's conversion, as for an old program (docs/plans/strict-targets.md, decision 3).
+      const stepInput = args.sets?.some((s) => s.stepKind != null) ?? false;
       try {
         if (args.operation === "add") {
           const { programId, exerciseId } = args;
@@ -554,6 +558,8 @@ export function registerProgramTools(server: McpServer, userId: string, clientId
                   .values(args.sets.map((s) => setValues(inserted.id, s)));
               }
               await settleStepRows(tx, inserted.id);
+              // Every step of a new slot is new input (docs/plans/strict-targets.md, decision 3).
+              if (stepInput) await assertNewWorkSteps(tx, inserted.id, new Set());
               return inserted;
             });
           });
@@ -639,6 +645,9 @@ export function registerProgramTools(server: McpServer, userId: string, clientId
             peUpdates.progressionConfigAt = new Date();
           }
 
+          // The steps held before the weekly sync below can rewrite their zones:
+          // the model read them that way (get_program does not sync).
+          const heldBeforeSync = stepInput ? await heldStepKeys(db, programExerciseId) : null;
           // Before the transaction: the share runs a due weekly sync, which
           // rewrites this slot's sets, and the replace below must read them after.
           const share =
@@ -663,6 +672,9 @@ export function registerProgramTools(server: McpServer, userId: string, clientId
                   await settleStepRows(tx, programExerciseId);
                   return;
                 }
+                // The steps held before this write: the strict check leaves
+                // them as they are, so an old program still takes a small edit.
+                const held = stepInput ? new Set([...(heldBeforeSync ?? []), ...(await heldStepKeys(tx, programExerciseId))]) : null;
                 // Matched by id, then by set number, and updated in place, so ids
                 // stay and logged rows keep their link (docs/plans/revisions.md,
                 // 2.3). The anchors and the role carry over from the matched set,
@@ -731,6 +743,7 @@ export function registerProgramTools(server: McpServer, userId: string, clientId
                     .where(inArray(programSets.id, match.deletes));
                 }
                 await settleStepRows(tx, programExerciseId);
+                if (held) await assertNewWorkSteps(tx, programExerciseId, held);
               });
               limits = limitSummary(check, unusedOverrides);
             }));

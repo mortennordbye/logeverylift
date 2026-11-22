@@ -1,6 +1,6 @@
 # Workout step syntax
 
-Version: 2026-11-20
+Version: 2026-11-22
 
 This document is served to connected AI assistants as an MCP resource
 (`logeverylift://docs/workout-steps`). It describes the steps of a structured endurance session
@@ -18,6 +18,32 @@ The check is always on. Steps that break a rule are not saved, and no override e
 is refused with every problem and its path, for example
 `steps[1].steps[0].target.low: must be at most high`; a set list with the set numbers. Fix each
 one and send the steps again.
+
+## Work steps name every target
+
+A new or changed bike or run work step must name its target for both places, inside and outside
+(the athlete picks the place at the start):
+
+- **Bike work step:** a power target (`metric` `power`), a heart rate target (`metric` `hr`) and
+  `cadence` in rpm. One of power and heart rate is `target`, the other `target2`.
+- **Run work step:** `belt` (km/h, the treadmill speed), a heart rate target (`target` or
+  `target2`) and `cadence` in steps per minute (spm). A pace target can be `target` with heart
+  rate as `target2`.
+
+A work step under 3 minutes needs no heart rate, because heart rate is too slow for it: a bike one
+needs power and `cadence`, a run one `belt` and `cadence`, and it can keep an effort target (`rpe`).
+Under 3 minutes is a time step under 180 s, or a distance step of 800 m or less. A lap step
+counts as long.
+
+Not checked: warm-up, cool-down, recovery and rest steps, ramps, free spins, every step of a test
+(`test` on the tree, `ftpTest`, `runTest`) and swims. A brick run needs no easy steps of its own:
+the app runs the first 10 min of a brick run on effort. A step the exercise already held with the
+same kind and targets is not checked again, so an old program still takes a small edit (a length,
+a note, a rest). A step that breaks the rule is refused with its set number, for example
+`Set 3 · A bike work step needs power, heart rate and cadence, missing heart rate and cadence`.
+The check reads step input (a `workout` tree, or `sets` with `stepKind`). Plain sets with no
+`stepKind` are not checked, because the app turns them into steps as it does for an old program;
+write new bike and run sessions as steps.
 
 ## Shape
 
@@ -43,7 +69,7 @@ A **step**:
 | `end` | yes | `{ "type": "time", "seconds": 5-43200 }`, `{ "type": "distance", "meters": 10-300000 }` or `{ "type": "lap" }` (the athlete presses lap) |
 | `target` | no | See Targets |
 | `target2` | no | A second target with another metric, which caps the first (for example power with a heart rate ceiling) |
-| `cadence` | no | Bike and run: `{ "low": rpm, "high": rpm }`, 20-200 |
+| `cadence` | work steps | Bike and run: `{ "low": n, "high": n }`, 20-200, in rpm on a bike and in steps per minute (spm) on a run. Required on bike and run work steps |
 | `sendOffSeconds` | no | Swim only: leave every N seconds (20-600). Only on a `work` step inside a repeat with no `rest` step, because the send-off includes the rest |
 | `stroke` | no | Swim only: `free`, `back`, `breast`, `fly`, `im`, `choice`, `kick`, `pull`, `drill` |
 | `equipment` | no | Swim only, a list: `pull_buoy`, `paddles`, `fins`, `kickboard`, `snorkel` |
@@ -52,7 +78,7 @@ A **step**:
 | `free` | bike only | `true`: a free spin with no target. No `target`, `target2` or `ramp` with it |
 | `outdoor` | bike and run | A target in the shape of Targets, used on an outdoor ride or run in place of `target`. See Bikes and Runs |
 | `incline` | run only | Treadmill incline in %, -3 to 30 with one decimal. It carries over to the next steps until a step has its own. See Runs |
-| `belt` | run only | Treadmill belt speed in km/h, 1 to 25 with one decimal: the speed the step starts at. It never carries over. See Runs |
+| `belt` | run only | Treadmill belt speed in km/h, 1 to 25 with one decimal: the speed the step starts at. It never carries over. Required on run work steps. See Runs |
 | `id` | no | Letters, digits, `-` or `_`, at most 24. Not stored: the app numbers the steps `s1`, `s2`, ... in order (a repeat takes one number, its steps the next ones). Step results use these keys, plus `#n` for round n of a repeat |
 
 A **repeat**: `{ "type": "repeat", "count": 2-50, "steps": [1-10 steps] }`. A repeat holds steps
@@ -76,7 +102,7 @@ can: a new threshold then updates every future session.
 | `pace` | `threshold_pace` | run | 50-130 (% of threshold **speed**: 90 is slower than threshold) |
 | `pace` | `css` | swim | 50-130 (% of CSS speed), or `offsetLow`/`offsetHigh` -20 to 60 (seconds per 100 m added to CSS pace; the lower number is the faster end) |
 | `pace` | `absolute` | all | speed in m/s, 0.3-12 |
-| `cadence` | `absolute` | bike, run | rpm, 20-200 |
+| `cadence` | `absolute` | bike, run | rpm on a bike, spm on a run, 20-200 |
 | `rpe` | `absolute` | all | 1-10 |
 
 `low` is at most `high`. All values are metric. Pace is speed: never send minutes per km.
@@ -126,13 +152,16 @@ recovery after the last round is not ridden.
     { "type": "repeat", "count": 2, "steps": [
       { "type": "work", "end": { "type": "time", "seconds": 900 },
         "target": { "metric": "power", "anchor": "ftp", "low": 75, "high": 80 },
+        "target2": { "metric": "hr", "anchor": "lthr", "low": 83, "high": 89 },
         "cadence": { "low": 85, "high": 95 },
         "outdoor": { "metric": "hr", "anchor": "lthr", "low": 83, "high": 89 },
         "note": "Talk in short sentences" },
       { "type": "recovery", "end": { "type": "time", "seconds": 300 },
         "target": { "metric": "power", "anchor": "ftp", "zone": 1 } } ] },
     { "type": "work", "end": { "type": "time", "seconds": 900 },
-      "target": { "metric": "power", "anchor": "ftp", "zone": 2 } },
+      "target": { "metric": "power", "anchor": "ftp", "zone": 2 },
+      "target2": { "metric": "hr", "anchor": "lthr", "zone": 2 },
+      "cadence": { "low": 85, "high": 95 } },
     { "type": "cooldown", "end": { "type": "lap" }, "free": true }
   ] }
 ```
@@ -147,6 +176,8 @@ Hill repeats outdoors: the climb is in the note, the target is power with an eff
     { "type": "repeat", "count": 5, "steps": [
       { "type": "work", "end": { "type": "time", "seconds": 240 },
         "target": { "metric": "power", "anchor": "ftp", "low": 105, "high": 115 },
+        "target2": { "metric": "hr", "anchor": "lthr", "zone": 5 },
+        "cadence": { "low": 70, "high": 80 },
         "outdoor": { "metric": "rpe", "anchor": "absolute", "low": 8, "high": 8 },
         "note": "Climb at 6-8%, seated" },
       { "type": "recovery", "end": { "type": "time", "seconds": 240 }, "free": true,
@@ -184,11 +215,11 @@ A run has two modes, Treadmill and Outdoor, chosen when the athlete starts it. B
 steps; the mode changes only the target shown and how a distance step ends. Run targets are heart
 rate (`lthr` zones are Friel's), `threshold_pace` (% of threshold speed) or effort. Never power.
 
-- **Belt:** on a treadmill each step starts at a belt speed. Without `belt` the app takes it from
-  the pace target, else for a heart rate step from the athlete's own treadmill belts in that zone,
-  else from the zone's pace; with no threshold pace the athlete sets the belt by feel. Write
-  `belt` only for a fixed speed, for example strides or a walk. The belt never carries over: give
-  the easy step after a fast one its own belt.
+- **Belt:** on a treadmill each step starts at a belt speed. A work step needs its `belt` (see
+  "Work steps name every target"). On other steps without `belt` the app takes it from the pace
+  target, else for a heart rate step from the athlete's own treadmill belts in that zone, else
+  from the zone's pace; with no threshold pace the athlete sets the belt by feel. The belt never
+  carries over: give the easy step after a fast one its own belt.
 - **Incline:** `incline` on a step holds until a later step has its own. A 1% incline is the
   usual treadmill setting; the app counts 0 to 1% as flat in its grade-adjusted pace.
 - **Outdoor:** add `outdoor` for your own outdoor target. Without one the app derives it: a heart
@@ -210,8 +241,8 @@ rate (`lthr` zones are Friel's), `threshold_pace` (% of threshold speed) or effo
 - **A running run is frozen:** a run keeps the plan it started with, as a ride does.
 
 A 75 minute base run on the treadmill: a warm-up and a steady run in heart rate zones 1 and 2 at
-1% (the app starts the belt from the zone), six 30 s strides at 13 km/h with 90 s easy at
-7 km/h, and a walk to cool down. Outdoors the zone steps run under a heart rate cap and the strides
+1% (the app starts the warm-up belt from the zone, the steady run is at 9.5 km/h), six 30 s
+strides at 13 km/h with 90 s easy at 7 km/h, and a walk to cool down. Outdoors the zone steps run under a heart rate cap and the strides
 by effort.
 
 ```json
@@ -219,11 +250,13 @@ by effort.
   "steps": [
     { "type": "warmup", "end": { "type": "time", "seconds": 600 },
       "target": { "metric": "hr", "anchor": "lthr", "zone": 1 }, "incline": 1 },
-    { "type": "work", "end": { "type": "time", "seconds": 3000 },
-      "target": { "metric": "hr", "anchor": "lthr", "zone": 2 } },
+    { "type": "work", "end": { "type": "time", "seconds": 3000 }, "belt": 9.5,
+      "target": { "metric": "hr", "anchor": "lthr", "zone": 2 },
+      "cadence": { "low": 166, "high": 176 } },
     { "type": "repeat", "count": 6, "steps": [
       { "type": "work", "end": { "type": "time", "seconds": 30 }, "belt": 13,
         "target": { "metric": "rpe", "anchor": "absolute", "low": 8, "high": 8 },
+        "cadence": { "low": 180, "high": 190 },
         "note": "Fast and relaxed" },
       { "type": "recovery", "end": { "type": "time", "seconds": 90 }, "belt": 7 } ] },
     { "type": "cooldown", "end": { "type": "time", "seconds": 180 }, "belt": 5.5 }
@@ -256,6 +289,7 @@ A bike interval session. With FTP 250 W, the work steps are 220-233 W.
     { "type": "repeat", "count": 3, "steps": [
       { "type": "work", "end": { "type": "time", "seconds": 600 },
         "target": { "metric": "power", "anchor": "ftp", "low": 88, "high": 93 },
+        "target2": { "metric": "hr", "anchor": "lthr", "zone": 3 },
         "cadence": { "low": 85, "high": 95 } },
       { "type": "recovery", "end": { "type": "time", "seconds": 300 },
         "target": { "metric": "power", "anchor": "ftp", "zone": 1 } }
@@ -297,17 +331,23 @@ parent. The two step trees:
 { "v": 1, "sport": "bike", "name": "2 h endurance, last 20 min race pace",
   "steps": [
     { "type": "work", "end": { "type": "time", "seconds": 6000 },
-      "target": { "metric": "power", "anchor": "ftp", "zone": 2 } },
+      "target": { "metric": "power", "anchor": "ftp", "zone": 2 },
+      "target2": { "metric": "hr", "anchor": "lthr", "zone": 2 },
+      "cadence": { "low": 85, "high": 95 } },
     { "type": "work", "end": { "type": "time", "seconds": 1200 },
-      "target": { "metric": "power", "anchor": "ftp", "low": 75, "high": 80 } }
+      "target": { "metric": "power", "anchor": "ftp", "low": 75, "high": 80 },
+      "target2": { "metric": "hr", "anchor": "lthr", "zone": 3 },
+      "cadence": { "low": 85, "high": 95 } }
   ] }
 ```
 
 ```json
 { "v": 1, "sport": "run", "name": "20 min off the bike",
   "steps": [
-    { "type": "work", "end": { "type": "time", "seconds": 1200 },
-      "target": { "metric": "pace", "anchor": "threshold_pace", "low": 85, "high": 90 } }
+    { "type": "work", "end": { "type": "time", "seconds": 1200 }, "belt": 13,
+      "target": { "metric": "pace", "anchor": "threshold_pace", "low": 85, "high": 90 },
+      "target2": { "metric": "hr", "anchor": "lthr", "zone": 3 },
+      "cadence": { "low": 176, "high": 186 } }
   ] }
 ```
 
@@ -319,7 +359,7 @@ In `sets[]`, a set with `stepKind` (`warmup`, `work`, `recovery`, `cooldown`, `r
 step. It ends on exactly one of `durationSeconds`, `distanceMeters` or `endsOnLap: true`. A
 target goes in `targets`, a list of one or two entries in the target shape above. Cadence is
 `cadenceLow` and `cadenceHigh`; a swim step takes `stroke`, `equipment` and `sendOffSeconds`;
-`note` is the step's cue. A bike step takes `ramp` (no `targets` with it), `free: true` and
+`note` is the step's cue. A bike or run work step needs both: see "Work steps name every target". A bike step takes `ramp` (no `targets` with it), `free: true` and
 `outdoorTarget` (the tree's `outdoor`). A run step takes `beltKmh` (the tree's `belt`),
 `inclinePercent` (the tree's `incline`) and `outdoorTarget`. A test is only in the tree: a set list leaves the
 exercise's test as it is, and `get_program` shows it as `rideTest` on the exercise. A repeat is one set per round: the sets of round 1, then round 2, and

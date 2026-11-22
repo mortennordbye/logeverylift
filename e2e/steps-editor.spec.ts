@@ -56,6 +56,13 @@ test("build 4 × 1 km in the app and save it as steps", async ({ page }, testInf
   await sheet.getByLabel("Distance in km").fill("1");
   await sheet.getByRole("button", { name: "Pace", exact: true }).click();
   await expect(sheet.getByTestId("step-target-preview")).toHaveText("4:00-4:13/km");
+  // A run work step also needs heart rate, the belt and cadence (docs/plans/strict-targets.md, decision 2).
+  await expect(sheet.getByRole("button", { name: "Done" })).toBeDisabled();
+  await expect(sheet.getByTestId("step-problem")).toHaveText("A run work step needs belt speed, heart rate and cadence");
+  await sheet.getByRole("button", { name: "Heart rate zone" }).click();
+  await sheet.getByLabel("Belt in km/h").fill("14");
+  await sheet.getByLabel("Cadence from").fill("176");
+  await sheet.getByLabel("Cadence to").fill("186");
   await sheet.getByRole("button", { name: "Done" }).click();
 
   await editor.getByRole("button", { name: "Save steps" }).click();

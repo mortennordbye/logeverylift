@@ -86,6 +86,8 @@ const TARGET_RANGE: Record<string, { min: number; max: number; unit: string }> =
   // By feel, for days with no meter or no thresholds (docs/plans/one-program-model.md, decision 6).
   "rpe:absolute": { min: 1, max: 10, unit: "RPE" },
 };
+/** Bike cadence is in revolutions per minute, run cadence in steps per minute (docs/plans/strict-targets.md, decision 4). */
+export const cadenceUnit = (sport: WorkoutSport): "rpm" | "spm" => (sport === "run" ? "spm" : "rpm");
 const CSS_OFFSET = { min: -20, max: 60 };
 const ZONES: Record<string, number> = { "power:ftp": 5, "hr:lthr": 5 };
 
@@ -256,7 +258,7 @@ function targetIssues(t: WorkoutTarget, sport: WorkoutSport): { path: string[]; 
   }
   if (t.low === undefined || t.high === undefined) return [...out, { path: [], message: "give both low and high" }];
   for (const f of ["low", "high"] as const) {
-    if (t[f]! < range.min || t[f]! > range.max) out.push({ path: [f], message: `must be ${range.min}-${range.max} ${range.unit}` });
+    if (t[f]! < range.min || t[f]! > range.max) out.push({ path: [f], message: `must be ${range.min}-${range.max} ${key === "cadence:absolute" ? cadenceUnit(sport) : range.unit}` });
   }
   if (t.low! > t.high!) out.push({ path: ["low"], message: "must be at most high" });
   return out;
@@ -302,7 +304,7 @@ function stepIssues(step: WorkoutStep, w: Workout, inRepeat: WorkoutRepeat | nul
     if (w.sport === "swim") out.push({ path: ["cadence"], message: "cadence is only for bike and run" });
     const r = TARGET_RANGE["cadence:absolute"];
     for (const f of ["low", "high"] as const) {
-      if (step.cadence[f] < r.min || step.cadence[f] > r.max) out.push({ path: ["cadence", f], message: `must be ${r.min}-${r.max} rpm` });
+      if (step.cadence[f] < r.min || step.cadence[f] > r.max) out.push({ path: ["cadence", f], message: `must be ${r.min}-${r.max} ${cadenceUnit(w.sport)}` });
     }
     if (step.cadence.low > step.cadence.high) out.push({ path: ["cadence", "low"], message: "must be at most high" });
   }
