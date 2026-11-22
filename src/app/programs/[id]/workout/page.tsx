@@ -18,6 +18,7 @@ import { formatPeriodizationSummary } from "@/lib/utils/periodization";
 import { programStepsView } from "@/lib/program-steps-view";
 import { requireSession } from "@/lib/utils/session";
 import { notFound, redirect } from "next/navigation";
+import { WorkoutSessionStart } from "./session-start";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -79,14 +80,17 @@ export default async function WorkoutSessionPage({ params }: Props) {
   }));
 
   return (
-    <WorkoutSessionClient
-      programId={programId}
-      programName={program.name}
-      exercises={exercises}
-      lastSession={lastSessionResult.success ? lastSessionResult.data : null}
-      insight={insight}
-      periodization={periodizationSummary}
-      guided={steps?.guided ?? null}
-    />
+    <>
+      <WorkoutSessionStart programId={programId} />
+      <WorkoutSessionClient
+        programId={programId}
+        programName={program.name}
+        exercises={exercises}
+        lastSession={lastSessionResult.success ? lastSessionResult.data : null}
+        insight={insight}
+        periodization={periodizationSummary}
+        guided={steps?.guided ?? null}
+      />
+    </>
   );
 }

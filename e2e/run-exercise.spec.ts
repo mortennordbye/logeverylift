@@ -56,7 +56,7 @@ async function setup(parallelIndex: number, endurance: boolean, thresholds = tru
 test("an endurance user's run exercise shows the run, changes mode and surface, starts the run and offers Resume", async ({ page }, testInfo) => {
   const { userId, programId, peId } = await setup(testInfo.parallelIndex, true);
   await page.goto(`/programs/${programId}/workout`);
-  // The workout layout opens the session in the background; Start run needs it.
+  // The workout page opens the session in the background; Start run needs it.
   const db = testDb();
   await expect.poll(async () => (await db.select().from(workoutSessions).where(eq(workoutSessions.userId, userId))).length).toBe(1);
   // The run ring opens the run exercise, as the bike ring does.

@@ -32,6 +32,7 @@ import { SessionMatchBlock } from "@/components/features/SessionMatchBlock";
 import { workoutSessionMatch } from "@/lib/session-match";
 import { matchBlockView } from "@/lib/utils/session-match";
 import type { Units } from "@/lib/utils/units";
+import { WorkoutSessionStart } from "../../session-start";
 
 /** The match block of the planned session a done ride or run counts for (docs/plans/session-check.md, decision 4); none without one. */
 async function matchOf(userId: string, workoutSessionId: number, units: Units) {
@@ -50,6 +51,10 @@ export default async function WorkoutExerciseSetsPage({ params, searchParams }: 
   const programId = Number(id);
   const peId = Number(programExerciseId);
   if (isNaN(programId) || isNaN(peId)) notFound();
+  // Every screen keeps the workout going, except one that only shows a
+  // finished ride or run: opening it must not start a new, empty workout.
+  const live = (screen: React.ReactNode) => <><WorkoutSessionStart programId={programId} />{screen}</>;
+  const done = (screen: React.ReactNode) => <><WorkoutSessionStart programId={programId} startNew={false} />{screen}</>;
 
   const { user } = await requireSession();
   // A PWA restored straight onto an exercise skips the workout page, so this
@@ -78,7 +83,7 @@ export default async function WorkoutExerciseSetsPage({ params, searchParams }: 
     const doneHref = onlyExercise ? "/" : `/programs/${programId}/workout`;
     const [found, { units, timeZone }] = await Promise.all([ride === "1" ? rideOfExercise(user.id, peId) : null, getUserSettings(user.id)]);
     if (found) {
-      return (
+      return live(
         <RideMode
           key={found.view.ride.id}
           exerciseId={pe.exercise.id}
@@ -96,7 +101,7 @@ export default async function WorkoutExerciseSetsPage({ params, searchParams }: 
     if (bike && hand === "1" && !bike.liveRide) {
       const byHand = await handResultsView(user.id, programId, pe.exercise.name, sets, mode === "outdoor" || mode === "indoor" ? mode : bike.defaultMode);
       if (byHand) {
-        return (
+        return live(
           <RideResults
             programId={programId}
             exerciseId={pe.exercise.id}
@@ -117,14 +122,14 @@ export default async function WorkoutExerciseSetsPage({ params, searchParams }: 
     // The ride of a brick hands over to its run; its results and summary wait until the run has started (docs/plans/run-logger.md, section 5 "Brick").
     const brickRun = after ? await brickRunOf(user.id, after.rideId) : null;
     if (after && brickRun && !brickRun.started) {
-      return <BrickRideDone programId={programId} exerciseName={pe.exercise.name} doneLine={after.doneLine} endedEarly={after.status === "ended_early"} runHref={brickRun.href} />;
+      return done(<BrickRideDone programId={programId} exerciseName={pe.exercise.name} doneLine={after.doneLine} endedEarly={after.status === "ended_early"} runHref={brickRun.href} />);
     }
     if (after) {
       // Later and Done leave for home or the workout; a workout the ride could not finish yet goes back to the summary's Save the ride.
       const saveTheRide = offersSaveTheRide(after, onlyExercise);
       const leave = saveTheRide ? `/programs/${programId}/workout/exercises/${peId}` : doneHref;
       if (results === "1") {
-        return (
+        return done(
           <RideResults
             programId={programId}
             exerciseId={pe.exercise.id}
@@ -139,7 +144,7 @@ export default async function WorkoutExerciseSetsPage({ params, searchParams }: 
           />
         );
       }
-      return (
+      return done(
         <RideSummary
           programId={programId}
           exerciseName={pe.exercise.name}
@@ -156,7 +161,7 @@ export default async function WorkoutExerciseSetsPage({ params, searchParams }: 
         />
       );
     }
-    if (bike) return <BikeExercise programId={programId} programExerciseId={peId} exerciseName={pe.exercise.name} data={bike} pushPublicKey={pushPublicKey()} />;
+    if (bike) return live(<BikeExercise programId={programId} programExerciseId={peId} exerciseName={pe.exercise.name} data={bike} pushPublicKey={pushPublicKey()} />);
   }
 
   // A run exercise of an endurance user is a run (docs/plans/run-logger.md,
@@ -168,7 +173,7 @@ export default async function WorkoutExerciseSetsPage({ params, searchParams }: 
     const onlyExercise = program.programExercises.length === 1;
     const found = ride === "1" ? await rideOfExercise(user.id, peId, "run") : null;
     if (found) {
-      return (
+      return live(
         <RunMode
           key={found.view.ride.id}
           exerciseId={pe.exercise.id}
@@ -191,7 +196,7 @@ export default async function WorkoutExerciseSetsPage({ params, searchParams }: 
       const setNumbers = Object.fromEntries(pe.programSets.map((s) => [s.id, s.setNumber]));
       if (results === "1") {
         const { steps, rows } = runResultRows(after.plan, after.logs);
-        return (
+        return done(
           <RunResults
             programId={programId}
             exerciseId={pe.exercise.id}
@@ -207,7 +212,7 @@ export default async function WorkoutExerciseSetsPage({ params, searchParams }: 
       }
       const summary = runSummary(after.plan, after.logs, { beltEvents: after.beltEvents, stream: after.garmin.stream });
       const { timeZone, units } = await getUserSettings(user.id);
-      return (
+      return done(
         <RunSummary
           programId={programId}
           exerciseName={pe.exercise.name}
@@ -228,13 +233,13 @@ export default async function WorkoutExerciseSetsPage({ params, searchParams }: 
     }
     if (run && !(hand === "1" && !run.liveRun)) {
       const brick = run.liveRun ? null : await brickRideView(user.id, programId);
-      return <RunExercise programId={programId} programExerciseId={peId} exerciseName={pe.exercise.name} data={run} pushPublicKey={pushPublicKey()} brick={brick} />;
+      return live(<RunExercise programId={programId} programExerciseId={peId} exerciseName={pe.exercise.name} data={run} pushPublicKey={pushPublicKey()} brick={brick} />);
     }
   }
 
   const suggestions = suggestionsResult.success ? suggestionsResult.data : {};
 
-  return (
+  return live(
     <WorkoutSetsClient
       programId={programId}
       programExerciseId={peId}
