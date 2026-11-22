@@ -195,12 +195,30 @@ describe("runPushSchedule", () => {
         },
       ],
     });
-    const pace = buildRunPlan(w, ids(w), OWNER, "outdoor");
+    // With an LTHR heart rate leads, as on the run screen (docs/plans/strict-targets.md); with none the pace leads.
+    const hr = buildRunPlan(w, ids(w), OWNER, "outdoor");
+    expect(schedule(hr, [], 1).some((r) => r.title.startsWith("HR 171-179 · Work · 1 of 4"))).toBe(true);
+    const pace = buildRunPlan(w, ids(w), { run_threshold_pace: OWNER.run_threshold_pace }, "outdoor");
     const paceRows = schedule(pace, [], 1);
     expect(paceRows.some((r) => /\d:\d\d-\d:\d\d \/km/.test(r.title))).toBe(true);
-    for (const plan of [treadmill, outdoor, pace]) {
+    for (const plan of [treadmill, outdoor, hr, pace]) {
       for (const s of [1, 3850]) for (const r of schedule(plan, [], s)) expect(`${r.title} ${r.body}`).not.toMatch(/(?<!\d):|:(?!\d)|—/);
     }
+  });
+
+  it("outdoors an alert names the same main target as the run screen", () => {
+    const w = tree({
+      v: 2,
+      sport: "run",
+      name: "Steady",
+      steps: [
+        { type: "warmup", end: { type: "time", seconds: 600 }, target: { metric: "hr", anchor: "lthr", zone: 1 } },
+        { type: "work", end: { type: "time", seconds: 1500 }, target: { metric: "pace", anchor: "absolute", low: 2.564, high: 2.632 }, target2: { metric: "hr", anchor: "absolute", low: 142, high: 155 } },
+      ],
+    });
+    const plan = buildRunPlan(w, ids(w), OWNER, "outdoor");
+    const step = schedule(plan, [], 1).find((r) => r.kind === "step" && r.stepIndex === 1)!;
+    expect(step.title).toBe("HR 142-155 · Work · 25 min");
   });
 
   it("the tap opens the run exercise in run mode", () => {

@@ -11,7 +11,7 @@ import type { RidePushKind } from "@/db/schema/push";
 import { bikeStepRows } from "@/lib/utils/bike-ride-view";
 import type { RidePlan, RidePlanStep, RideTimeline } from "@/lib/utils/ride-timeline";
 import { BRICK_EASY_S } from "@/lib/utils/run-screen";
-import { KEEP_BELT, runOutdoorText, runRowOfStep, runStepTitle, runTargetText } from "@/lib/utils/run-view";
+import { KEEP_BELT, runOutdoorShown, runRowOfStep, runStepTitle, runTargetText } from "@/lib/utils/run-view";
 import { DEFAULT_UNITS, type Units } from "@/lib/utils/units";
 
 export type RidePushPlan = { sendAt: number; kind: RidePushKind; title: string; body: string; stepIndex: number };
@@ -92,7 +92,7 @@ const metersText = (m: number) => (m < 1000 ? `${Math.round(m)} m` : `${+(m / 10
 /**
  * The target a run alert names first (docs/plans/run-logger.md, step 6): on a
  * treadmill the step's frozen belt (and its own incline), else its heart rate,
- * else "Belt by feel"; outdoors the target of 4.2. A brick run's first 10 min
+ * else "Belt by feel"; outdoors the main target the run screen shows (runOutdoorShown). A brick run's first 10 min
  * run on effort (4.2).
  */
 function runPushTarget(plan: RidePlan, s: RidePlanStep, brickEasy: boolean): string | null {
@@ -105,7 +105,7 @@ function runPushTarget(plan: RidePlan, s: RidePlanStep, brickEasy: boolean): str
     return `${(s.step.target?.metric === "hr" && runTargetText(s, th)) || "Belt by feel"}${incline}`;
   }
   if (brickEasy) return "Effort 4-5";
-  return runOutdoorText(s, th, plan.surface ?? "road").main;
+  return runOutdoorShown(s, th, plan.surface ?? "road").main;
 }
 
 /** How long a run step runs, for its alert: its time, else its distance, else "to lap". */
