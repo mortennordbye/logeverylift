@@ -22,7 +22,9 @@ import { parseWorkout } from "@/lib/utils/workout-steps";
 import { and, eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createExercise, createProgram, createSession, createStepProgram, createUser } from "./factories";
+import { mcpTools } from "./mcp-call";
 import { asUser } from "./setup";
+import { registerAthleteProfileTools } from "@/lib/mcp/tools/athlete-profile";
 
 const T0 = new Date("2026-11-20T17:00:00Z");
 const MIN = 60_000;
@@ -132,6 +134,12 @@ describe("the runner's own runs reach the next plan (4.2, 4.3)", () => {
     const history = await runPlanHistory(me, 180);
     expect(history.history.map((h) => Math.round(h.beltKmh * 10) / 10).sort()).toEqual([8.6, 9]);
     expect(history.easySpeed).toBeCloseTo(2.6, 3);
+    // The coach reads the same belts with their heart rate (docs/plans/strict-targets.md, decision 7).
+    const profile = await mcpTools((s, u) => registerAthleteProfileTools(s, u, undefined, { endurance: true }), me)("get_athlete_profile");
+    expect(profile.data.treadmillBelts).toEqual({
+      days: 42,
+      belts: [expect.objectContaining({ beltKmh: 8.6, avgHr: 155, minutes: 12 }), expect.objectContaining({ beltKmh: 9, avgHr: 155, minutes: 12 })],
+    });
 
     const next = await setup(steady);
     const v = ok(await startRide({ ...next, mode: "indoor", clientId: cid() }));

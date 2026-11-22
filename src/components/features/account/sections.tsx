@@ -44,6 +44,7 @@ import {
 } from "@/components/features/account/ProfileSteps";
 import { SUB_PAGES, type SubPage } from "@/components/features/account/pages";
 import { SyncNote } from "@/components/features/account/SyncNote";
+import type { ProposalView } from "@/components/features/account/CoachProposals";
 import type { ThresholdKind } from "@/db/schema/athlete-profile";
 import { ChangePassword } from "@/components/features/account/ChangePassword";
 import { addThresholdValue } from "@/lib/actions/athlete-profile";
@@ -90,6 +91,8 @@ export type AccountData = {
   thresholds: ThresholdView[];
   deletedThresholds: DeletedThresholdView[];
   suggestions: SuggestionView[];
+  /** Open coach proposals, on the Training numbers page. */
+  proposals: ProposalView[];
   units: Units;
   today: string;
   showActivityToFriends: boolean;
@@ -285,7 +288,7 @@ export const SECTIONS: Section[] = [
     id: "training-numbers",
     title: SUB_PAGES["training-numbers"],
     rows: [
-      ...(["max_hr", "ftp", "lthr_bike", "lthr_run", "run_threshold_pace", "swim_css"] as const).map(thresholdRow),
+      ...(["max_hr", "ftp", "lthr_bike", "lthr_run", "run_threshold_pace", "swim_css", "bike_cadence", "run_cadence"] as const).map(thresholdRow),
       {
         id: "deleted-thresholds",
         label: (d) => `Recently deleted (${d.deletedThresholds.length})`,
@@ -317,8 +320,8 @@ export const SECTIONS: Section[] = [
   },
 ];
 
-/** A button on the top Account page: it opens /more/account/<id>. */
-export type GroupButton = { id: SubPage; title: string; icon: LucideIcon };
+/** A button on the top Account page: it opens /more/account/<id>. `dot` names what waits there, when something does. */
+export type GroupButton = { id: SubPage; title: string; icon: LucideIcon; dot?: (d: AccountData) => string | null };
 
 export const GROUPS: { title: string; buttons: GroupButton[] }[] = [
   {
@@ -326,7 +329,12 @@ export const GROUPS: { title: string; buttons: GroupButton[] }[] = [
     buttons: [
       { id: "goals-and-training", title: SUB_PAGES["goals-and-training"], icon: Target },
       { id: "body-and-health", title: SUB_PAGES["body-and-health"], icon: HeartPulse },
-      { id: "training-numbers", title: SUB_PAGES["training-numbers"], icon: Gauge },
+      {
+        id: "training-numbers",
+        title: SUB_PAGES["training-numbers"],
+        icon: Gauge,
+        dot: (d) => (d.proposals.length ? "Coach proposal open" : null),
+      },
     ],
   },
   {

@@ -25,6 +25,7 @@ import type { PlanWriteContext } from "@/lib/plan-revisions";
 import { getUserSettings, userToday } from "@/lib/user-settings";
 import { toDateStr } from "@/lib/utils/cycle-position";
 import { garminAllowed } from "@/lib/garmin/access";
+import { acceptProposal, declineProposal, listOpenProposals } from "@/lib/threshold-proposals";
 import { requireSession } from "@/lib/utils/session";
 import { injuryFields, profileFields, thresholdFields } from "@/lib/validators/athlete-profile";
 import type { ActionResult } from "@/types/workout";
@@ -46,8 +47,12 @@ function invalid(error: z.ZodError): ActionResult<never> {
 
 const ctxFor = (userId: string): PlanWriteContext => ({ userId, writer: "user" });
 
+const COACH_ONLY = "A coach value comes only from accepting a coach proposal";
+
 function refresh() {
   revalidatePath("/more/account", "layout");
+  // The dot on the Account row.
+  revalidatePath("/more");
 }
 
 // ── Reads for the pages ──────────────────────────────────────────────────────
@@ -57,15 +62,16 @@ export async function getThresholdsData() {
   const userId = auth.user.id;
   try {
     const thresholds = await listThresholds(userId);
-    const [deleted, suggestions, settings, today] = await Promise.all([
+    const [deleted, suggestions, proposals, settings, today] = await Promise.all([
       listDeletedThresholds(userId),
       garminSuggestions(userId, thresholds),
+      listOpenProposals(userId),
       getUserSettings(userId),
       userToday(userId),
     ]);
     return {
       success: true as const,
-      data: { thresholds, deleted, suggestions, units: settings.units, today: toDateStr(today) },
+      data: { thresholds, deleted, suggestions, proposals, units: settings.units, today: toDateStr(today) },
     };
   } catch (e) {
     console.error("[athleteProfile] getThresholdsData failed", e);
@@ -102,6 +108,7 @@ export async function addThresholdValue(data: unknown): Promise<ActionResult<{ i
   const input = parsed.data;
   // A Garmin value is Premium only; typed and tested values are open to everyone.
   if (input.source === "garmin" && !garminAllowed(auth.user.role)) return { success: false, error: "Garmin values are for Premium accounts" };
+  if (input.source === "coach") return { success: false, error: COACH_ONLY };
   try {
     const { threshold } = await addThreshold(ctxFor(auth.user.id), input);
     refresh();
@@ -122,6 +129,7 @@ export async function updateThresholdValue(data: unknown): Promise<ActionResult<
   const parsed = updateThresholdSchema.safeParse(data);
   if (!parsed.success) return invalid(parsed.error);
   const { id: thresholdId, ...change } = parsed.data;
+  if (change.source === "coach") return { success: false, error: COACH_ONLY };
   try {
     await changeThreshold(ctxFor(auth.user.id), thresholdId, change);
     refresh();
@@ -157,6 +165,36 @@ export async function restoreThresholdValue(data: unknown): Promise<ActionResult
     return { success: true, data: undefined };
   } catch (e) {
     return known(e, "restoreThresholdValue");
+  }
+}
+
+// ── Coach proposals (docs/plans/strict-targets.md, decision 5) ──────────────
+
+/** Accept a coach proposal: its value becomes a threshold with source coach. */
+export async function acceptThresholdProposal(data: unknown): Promise<ActionResult<{ id: number; value: number }>> {
+  const auth = await requireSession();
+  const parsed = idSchema.safeParse(data);
+  if (!parsed.success) return invalid(parsed.error);
+  try {
+    const threshold = await acceptProposal(auth.user.id, parsed.data.id);
+    refresh();
+    return { success: true, data: { id: threshold.id, value: threshold.value } };
+  } catch (e) {
+    return known(e, "acceptThresholdProposal");
+  }
+}
+
+/** Decline a coach proposal: it closes and nothing else changes. */
+export async function declineThresholdProposal(data: unknown): Promise<ActionResult<undefined>> {
+  const auth = await requireSession();
+  const parsed = idSchema.safeParse(data);
+  if (!parsed.success) return invalid(parsed.error);
+  try {
+    await declineProposal(auth.user.id, parsed.data.id);
+    refresh();
+    return { success: true, data: undefined };
+  } catch (e) {
+    return known(e, "declineThresholdProposal");
   }
 }
 

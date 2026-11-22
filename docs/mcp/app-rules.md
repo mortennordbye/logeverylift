@@ -177,11 +177,18 @@ what it describes, that package updates this file and the server instructions in
   profile, thresholds in their own list, a race on the cycle; not here.
 - **Thresholds.** For every user: FTP (W), threshold heart rate for bike and run and max HR
   (bpm), threshold run pace and swim CSS (stored as m/s; tools also give and take seconds per km
-  or per 100 m). One row per value with its date and source (`manual`, `test`, `garmin`), so the
+  or per 100 m), and the typical bike cadence (rpm) and run cadence (steps per minute, both
+  feet). One row per value with its date and source (`manual`, `test`, `garmin`, `coach`), so the
   rows are the history; the latest date is current, and a value older than 8 weeks is stale.
   A field test (`run_30min`, `bike_30min`, `ftp_20min`, `ftp_ramp`, `css_400_200`, `swim_t1000`) sends its inputs, and the
   app computes the value. Garmin estimates show as suggestions for accounts with Garmin; they
   are stored only when taken. `get_athlete_profile`, `manage_thresholds`.
+- **Coach proposals.** A value the assistant estimates from the athlete's data is a proposal
+  (`propose_threshold`: kind, value, a one-line reason, and the evidence: dates, Garmin activity
+  ids and numbers). The user accepts or declines it in Account › Training numbers; a dot on the
+  Account row shows while one is open. Accept stores it as a threshold with source `coach`;
+  decline closes it. A new proposal for a kind replaces the open one. `manage_thresholds` is
+  only for a value the user states.
 - **Athlete profile** (endurance features only). Endurance experience, available days, hours
   per week, the longest day, the strength goal, injuries and limits (area, side, what to avoid,
   status active, managed or past), and whether the intake interview is done. The interview (the

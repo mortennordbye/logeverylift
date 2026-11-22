@@ -8,6 +8,7 @@ import {
   THRESHOLD_LABEL,
   THRESHOLD_MEASURE,
   formatThreshold,
+  isCount,
   isStale,
   paceUnitLabel,
   parseMinSec,
@@ -33,6 +34,7 @@ const SOURCE_TEXT: Record<ThresholdSource, string> = {
   manual: "Entered",
   test: "Field test",
   garmin: "Garmin estimate",
+  coach: "Coach proposal",
 };
 
 /** A test input in the user's units, as the metric number the test takes. */
@@ -64,7 +66,7 @@ export function ThresholdEditor({ kind, units, onSaved }: { kind: ThresholdKind;
   const [error, setError] = useState<string | null>(null);
 
   const measure = THRESHOLD_MEASURE[kind];
-  const unit = measure === "watts" ? "W" : measure === "bpm" ? "bpm" : `min:ss ${paceUnitLabel(measure, units)}`;
+  const unit = measure === "watts" ? "W" : isCount(measure) ? measure : `min:ss ${paceUnitLabel(measure, units)}`;
   const protocol: ProtocolSpec | null = mode === "enter" ? null : protocols[mode];
 
   let preview: { value: number } | { error: string } | null = null;
@@ -190,8 +192,13 @@ export function ThresholdEditor({ kind, units, onSaved }: { kind: ThresholdKind;
 /** Under a threshold row: who set the current value and when, and its age. Only Premium users see Garmin named. */
 export function thresholdSourceLine(current: ThresholdView, today: string, premium: boolean): string {
   const fromGarmin = current.source === "garmin";
-  const line = fromGarmin && !premium ? shortDay(current.measuredOn) : sourceLine({ by: fromGarmin ? "garmin" : "you", on: current.measuredOn });
-  return isStale(current.measuredOn, today) ? `${line} · Last tested ${weeksSince(current.measuredOn, today)} weeks ago. Retest after a recovery week.` : line;
+  const line =
+    current.source === "coach"
+      ? `From your coach · ${shortDay(current.measuredOn)}`
+      : fromGarmin && !premium
+        ? shortDay(current.measuredOn)
+        : sourceLine({ by: fromGarmin ? "garmin" : "you", on: current.measuredOn });
+  return isStale(current.measuredOn, today, current.kind) ? `${line} · Last tested ${weeksSince(current.measuredOn, today)} weeks ago. Retest after a recovery week.` : line;
 }
 
 /** The values entered for one kind, each with Delete. */

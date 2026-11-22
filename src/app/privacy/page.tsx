@@ -89,7 +89,11 @@ export default function PrivacyPage() {
         </li>
         <li>
           <strong>Thresholds:</strong> values you enter or get from a field test, such as your FTP, threshold heart
-          rate, maximum heart rate, threshold run pace and swim pace, each with its date, so you keep a history.
+          rate, maximum heart rate, threshold run pace, swim pace and the cadence you usually ride and run at, each with
+          its date, so you keep a history. An AI assistant you connected can propose a value with a short reason and
+          the data it used (dates, Garmin activities and numbers). It becomes a threshold only when you tap Accept in
+          Account → Training numbers. We keep each proposal, and whether you accepted or declined it, until you delete
+          your account.
         </li>
         <li>
           <strong>Athlete profile, if endurance features are on:</strong> the days and hours you can train, your
@@ -244,7 +248,7 @@ export default function PrivacyPage() {
         on, programs (with their structured steps), cycles and their dated sessions with planned versus done, step results, your bike rides from ride mode and runs from run mode, and training load, seasons and their races, coach memory, thresholds, the athlete profile with injuries and sick periods, fuel logs, fuel products, sweat tests and race plans, and workout history: sets, weights, heart rate zones, effort, how you felt, your readiness and the
         notes you write on workouts, sets and exercises. If Garmin is on for your account, they can also read data from it. With read and change
         access they can also change your profile, body weight, time zone, display units, programs and their steps, cycles, dated sessions, seasons and races, see and restore earlier
-        versions of your programs, cycles and seasons, write coach memory, thresholds, the athlete profile, injuries and sick periods, log fuel, sweat tests and fuel products, change race plans, create custom exercises, log a workout you did and its step results, mark a planned day
+        versions of your programs, cycles and seasons, write coach memory, thresholds, the athlete profile, injuries and sick periods, propose a threshold for you to accept or decline, log fuel, sweat tests and fuel products, change race plans, create custom exercises, log a workout you did and its step results, mark a planned day
         or session as done, and mark a planned session as missed. History shows such a workout as logged by your assistant. That provider&apos;s own privacy
         policy applies to what it does with the data. You can disconnect an assistant at any time in More → AI
         coach → Connection, and it loses access at once.

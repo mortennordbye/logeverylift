@@ -32,44 +32,72 @@ import { userToday } from "@/lib/user-settings";
 import { toDateStr } from "@/lib/utils/cycle-position";
 import { paceSeconds, paceText } from "@/lib/utils/run-numbers";
 import { strengthDefault, strengthTable } from "@/lib/utils/strength-goal";
-import { THRESHOLD_MEASURE, currentThresholds, isStale, minSec, protocolsFor, thresholdWarnings, weeksSince } from "@/lib/utils/thresholds";
-import { dateStr, dayOfWeek, testData } from "@/lib/validators/athlete-profile";
+import { PROPOSAL_REASON_MAX, listOpenProposals, proposeThreshold, type ProposalRow } from "@/lib/threshold-proposals";
+import { beltHeartRates } from "@/lib/utils/belt-heart-rates";
+import { THRESHOLD_MEASURE, currentThresholds, isCount, isStale, minSec, protocolsFor, thresholdWarnings, weeksSince } from "@/lib/utils/thresholds";
+import { dateStr, dayOfWeek, proposalEvidence, testData } from "@/lib/validators/athlete-profile";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
-/** A stored threshold as the model reads it: metric, plus the pace in seconds. */
+/** A value as the model reads it: metric with its unit, plus the pace in seconds. */
+function valueOut(kind: ThresholdKind, value: number) {
+  const m = THRESHOLD_MEASURE[kind];
+  return {
+    value: Math.round(value * 1000) / 1000,
+    unit: m === "watts" ? "W" : isCount(m) ? m : "m/s",
+    ...(m === "runPace" ? { paceSecondsPerKm: paceSeconds(1000 / value), pace: paceText(1000 / value) } : {}),
+    ...(m === "swimPace" ? { paceSecondsPer100m: Math.round(100 / value), pace: `${minSec(100 / value)} /100m` } : {}),
+  };
+}
+
+/** A stored threshold as the model reads it. */
 function thresholdOut(t: ThresholdRow, today: string) {
-  const m = THRESHOLD_MEASURE[t.kind];
   return {
     id: t.id,
     kind: t.kind,
-    value: Math.round(t.value * 1000) / 1000,
-    unit: m === "watts" ? "W" : m === "bpm" ? "bpm" : "m/s",
-    ...(m === "runPace" ? { paceSecondsPerKm: paceSeconds(1000 / t.value), pace: paceText(1000 / t.value) } : {}),
-    ...(m === "swimPace" ? { paceSecondsPer100m: Math.round(100 / t.value), pace: `${minSec(100 / t.value)} /100m` } : {}),
+    ...valueOut(t.kind, t.value),
     measuredOn: t.measuredOn,
     source: t.source,
     protocol: t.protocol,
     testData: t.testData,
     notes: t.notes,
     ageWeeks: weeksSince(t.measuredOn, today),
-    stale: isStale(t.measuredOn, today),
+    stale: isStale(t.measuredOn, today, t.kind),
     version: t.version,
   };
 }
 
+/** A proposal as the model reads it. */
+function proposalOut(p: ProposalRow) {
+  return { id: p.id, kind: p.kind, ...valueOut(p.kind, p.value), reason: p.reason, evidence: p.evidence, proposedAt: p.createdAt.toISOString() };
+}
+
+type ValueArgs = { watts?: number; bpm?: number; paceSecondsPerKm?: number; paceSecondsPer100m?: number; cadence?: number };
+
+/** The value fields of manage_thresholds and propose_threshold. */
+const valueArgs = {
+  watts: z.number().positive().max(2000).optional(),
+  bpm: z.number().positive().max(300).optional(),
+  paceSecondsPerKm: z.number().positive().max(3600).optional(),
+  paceSecondsPer100m: z.number().positive().max(3600).optional(),
+  cadence: z.number().positive().max(300).optional(),
+};
+
+const pick = (a: ValueArgs): ValueArgs => ({ watts: a.watts, bpm: a.bpm, paceSecondsPerKm: a.paceSecondsPerKm, paceSecondsPer100m: a.paceSecondsPer100m, cadence: a.cadence });
+
+const VALUE_FIELDS_TEXT =
+  "watts (ftp), bpm (lthr_bike, lthr_run, max_hr), paceSecondsPerKm (run_threshold_pace), paceSecondsPer100m (swim_css) or cadence (bike_cadence in rpm, run_cadence in steps per minute, both feet)";
+
 /** The typed value for a kind, from the one input field that fits it. */
-function valueFor(
-  kind: ThresholdKind,
-  a: { watts?: number; bpm?: number; paceSecondsPerKm?: number; paceSecondsPer100m?: number },
-): { value?: number } | { error: string } {
+function valueFor(kind: ThresholdKind, a: ValueArgs): { value?: number } | { error: string } {
   const m = THRESHOLD_MEASURE[kind];
   const given = Object.entries(a).filter(([, v]) => v !== undefined).map(([k]) => k);
-  const want = m === "watts" ? "watts" : m === "bpm" ? "bpm" : m === "runPace" ? "paceSecondsPerKm" : "paceSecondsPer100m";
+  const want = m === "watts" ? "watts" : m === "bpm" ? "bpm" : m === "rpm" || m === "spm" ? "cadence" : m === "runPace" ? "paceSecondsPerKm" : "paceSecondsPer100m";
   const wrong = given.filter((g) => g !== want);
   if (wrong.length) return { error: `${kind} takes ${want}, not ${wrong.join(", ")}` };
   if (m === "watts") return { value: a.watts };
   if (m === "bpm") return { value: a.bpm };
+  if (m === "rpm" || m === "spm") return { value: a.cadence };
   if (m === "runPace") return { value: a.paceSecondsPerKm ? 1000 / a.paceSecondsPerKm : undefined };
   return { value: a.paceSecondsPer100m ? 100 / a.paceSecondsPer100m : undefined };
 }
@@ -100,8 +128,9 @@ export function registerAthleteProfileTools(server: McpServer, userId: string, c
     "get_athlete_profile",
     {
       description: [
-        "The user's thresholds: the current value per kind (ftp W; lthr_bike, lthr_run, max_hr bpm; run_threshold_pace and swim_css in m/s, with the pace in seconds per km or per 100 m), its date, source (manual, test, garmin), age in weeks and a stale flag after 8 weeks. history true adds every stored value.",
-        "With endurance features on, also: the athlete profile (endurance level, available days 1 = Monday, hours per week, longest day, strength goal), the race, injuries (past ones with includePast), sick periods (the open one and the last 90 days, each with its version) with returnInfo and the return rule, the strength default for the active cycle's phase and the whole table, and the intake interview: whether it is complete, which steps have no answer, and the coach memory entries to offer for moving.",
+        "The user's thresholds: the current value per kind (ftp W; lthr_bike, lthr_run, max_hr bpm; run_threshold_pace and swim_css in m/s, with the pace in seconds per km or per 100 m; bike_cadence rpm and run_cadence spm, the cadence the athlete holds), its date, source (manual, test, garmin, coach: a proposal the user accepted), age in weeks and a stale flag after 8 weeks. history true adds every stored value.",
+        "openProposals: your proposals (propose_threshold) the user has not answered yet, with their reason and evidence.",
+        "With endurance features on, also: the athlete profile (endurance level, available days 1 = Monday, hours per week, longest day, strength goal), the race, injuries (past ones with includePast), sick periods (the open one and the last 90 days, each with its version) with returnInfo and the return rule, the strength default for the active cycle's phase and the whole table, and the intake interview: whether it is complete, which steps have no answer, and the coach memory entries to offer for moving. treadmillBelts: the belts the runner ran in run mode over the last 42 days, one row per belt speed (km/h) with the time-weighted average heart rate Garmin measured on them, the minutes and the step count; set treadmill belt speeds per zone (beltKmh) from these, not from the watch's indoor speed.",
         "Garmin estimates appear as suggestions only where Garmin is enabled; they are not stored until you or the user take one. Read this before planning, after get_coach_memory. Health data: use it for coaching only.",
       ].join(" "),
       inputSchema: { history: z.boolean().default(false), includePast: z.boolean().default(false) },
@@ -113,28 +142,33 @@ export function registerAthleteProfileTools(server: McpServer, userId: string, c
         const rows = await listThresholds(userId);
         const current = currentThresholds(rows);
         const thresholds = Object.fromEntries(THRESHOLD_KINDS.map((k) => [k, current[k] ? thresholdOut(current[k], today) : null]));
-        const suggestions = await garminSuggestions(userId, rows);
+        const [suggestions, proposals] = await Promise.all([garminSuggestions(userId, rows), listOpenProposals(userId)]);
         const warnings = thresholdWarnings(current);
         const base = {
           endurance,
           thresholds,
+          openProposals: proposals.map(proposalOut),
           ...(warnings.length ? { warnings } : {}),
           ...(history ? { history: rows.map((r) => thresholdOut(r, today)) } : {}),
           ...(suggestions.length ? { garminSuggestions: suggestions } : {}),
         };
         if (!endurance) return ok(base);
         const { illnessForProfile } = await import("@/lib/mcp/tools/workouts-compliance");
-        const [profile, injuries, race, memory, phase, illness] = await Promise.all([
+        const { runPlanHistory, RUN_HISTORY_DAYS } = await import("@/lib/run-history");
+        const [profile, injuries, race, memory, phase, illness, runs] = await Promise.all([
           getAthleteProfile(userId),
           listInjuries(userId, includePast),
           interviewRace(userId),
           memoryToOffer(userId),
           activeCyclePhase(userId),
           illnessForProfile(userId),
+          runPlanHistory(userId, current.lthr_run?.value),
         ]);
         const goal = profile?.strengthGoal ?? null;
         return ok({
           ...base,
+          // Decision 7 of docs/plans/strict-targets.md: belt speeds per zone come from these, not the watch's indoor speed.
+          treadmillBelts: { days: RUN_HISTORY_DAYS, belts: beltHeartRates(runs.history) },
           profile: profile
             ? {
                 enduranceLevel: profile.enduranceLevel,
@@ -186,8 +220,8 @@ export function registerAthleteProfileTools(server: McpServer, userId: string, c
     "manage_thresholds",
     {
       description: [
-        "Add, change or delete a threshold value. Each value is one row with its date, so the rows are the history; the latest date is the current value.",
-        "operation='add': kind and the value in the field for its kind: watts (ftp), bpm (lthr_bike, lthr_run, max_hr), paceSecondsPerKm (run_threshold_pace) or paceSecondsPer100m (swim_css); measuredOn (YYYY-MM-DD, default today); source manual, test or garmin (a Garmin suggestion the user accepted).",
+        "Add, change or delete a threshold value the user states or tested (\"set my FTP to 190\"). A value you estimate from their data is a proposal: send it with propose_threshold, never here. Each value is one row with its date, so the rows are the history; the latest date is the current value.",
+        `operation='add': kind and the value in the field for its kind: ${VALUE_FIELDS_TEXT}; measuredOn (YYYY-MM-DD, default today); source manual, test or garmin (a Garmin suggestion the user accepted).`,
         `For a field test, send source 'test', protocol and testData; the server computes the value and refuses a value that disagrees. Tests: ${PROTOCOL_TEXT.join("; ")}. Times in seconds, distance in metres.`,
         "operation='update': id and any field. operation='delete': id; the user can restore it.",
         `Every operation requires reason; update and delete require expectedVersion. ${REVISION_RULES}`,
@@ -197,10 +231,7 @@ export function registerAthleteProfileTools(server: McpServer, userId: string, c
         operation: z.enum(["add", "update", "delete"]),
         id: z.number().int().positive().optional(),
         kind: z.enum(THRESHOLD_KINDS).optional(),
-        watts: z.number().positive().max(2000).optional(),
-        bpm: z.number().positive().max(300).optional(),
-        paceSecondsPerKm: z.number().positive().max(3600).optional(),
-        paceSecondsPer100m: z.number().positive().max(3600).optional(),
+        ...valueArgs,
         measuredOn: dateStr.optional(),
         source: z.enum(["manual", "test", "garmin"]).optional(),
         protocol: z.enum(THRESHOLD_PROTOCOLS).nullable().optional(),
@@ -212,7 +243,7 @@ export function registerAthleteProfileTools(server: McpServer, userId: string, c
     },
     async (args) => {
       const ctx = assistantContext(userId, clientId, args.reason);
-      const values = { watts: args.watts, bpm: args.bpm, paceSecondsPerKm: args.paceSecondsPerKm, paceSecondsPer100m: args.paceSecondsPer100m };
+      const values = pick(args);
       try {
         if (args.operation === "add") {
           if (!args.kind || !args.source) return fail("kind and source are required to add a threshold");
@@ -249,6 +280,37 @@ export function registerAthleteProfileTools(server: McpServer, userId: string, c
           args.expectedVersion,
         );
         return ok({ updated: true, id: args.id, version, ...(await warningsFor(userId)) });
+      } catch (e) {
+        return (await planErrorResult(userId, e)) ?? failInternal("athlete_profile", e);
+      }
+    },
+  );
+
+  server.registerTool(
+    "propose_threshold",
+    {
+      description: [
+        "Propose a threshold you estimated from the athlete's data (Garmin activities, logged rides and runs). Nothing changes until the user accepts it in the app (Account › Training numbers); accept stores it as a threshold with source coach, decline closes it. Use this, not manage_thresholds, for every estimate.",
+        `kind, and the value in the field for its kind: ${VALUE_FIELDS_TEXT}.`,
+        `reason: one line the user reads on the card, up to ${PROPOSAL_REASON_MAX} characters, naming the data and the rule (for example "Best 20 min power 198 W on the ride of 12 Nov (Garmin) x 0.95").`,
+        "evidence: what the estimate rests on: dates (YYYY-MM-DD), activityIds (Garmin activity ids from list_garmin_activities) and numbers (name to value), and an optional note.",
+        "A new proposal for a kind replaces that kind's open one. get_athlete_profile lists the open ones (openProposals). Tell the user the proposal waits in Account › Training numbers.",
+      ].join(" "),
+      annotations: { openWorldHint: false },
+      inputSchema: {
+        kind: z.enum(THRESHOLD_KINDS),
+        ...valueArgs,
+        reason: z.string().trim().min(1).max(PROPOSAL_REASON_MAX),
+        evidence: proposalEvidence.optional(),
+      },
+    },
+    async (args) => {
+      const v = valueFor(args.kind, pick(args));
+      if ("error" in v) return fail(v.error);
+      if (v.value == null) return fail(`A value is required: ${args.kind} takes its value field`);
+      try {
+        const { proposal, replacedId } = await proposeThreshold(userId, { kind: args.kind, value: v.value, reason: args.reason, evidence: args.evidence ?? null });
+        return ok({ proposed: true, ...proposalOut(proposal), replacedProposalId: replacedId, answeredIn: "Account › Training numbers" });
       } catch (e) {
         return (await planErrorResult(userId, e)) ?? failInternal("athlete_profile", e);
       }

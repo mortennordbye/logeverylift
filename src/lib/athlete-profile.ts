@@ -45,6 +45,7 @@ import {
   restoreRevision,
   versionKey,
   type PlanWriteContext,
+  type Tx,
 } from "@/lib/plan-revisions";
 import { raceForCycle } from "@/lib/seasons";
 import { userToday } from "@/lib/user-settings";
@@ -408,8 +409,14 @@ export async function testThresholdSaved(userId: string, row: { kind: ThresholdK
  * Add one threshold row. With `once`, a live row of the same kind, source,
  * protocol, date and value is kept and nothing is added (`added` false): the
  * check runs under the threshold lock, so two saves at once add one row.
+ * `after` runs in the same transaction once the row is in; when it throws,
+ * nothing is added (an accepted coach proposal closes this way).
  */
-export async function addThreshold(ctx: PlanWriteContext, input: ThresholdInput, opts: { once?: boolean } = {}) {
+export async function addThreshold(
+  ctx: PlanWriteContext,
+  input: ThresholdInput,
+  opts: { once?: boolean; after?: (tx: Tx, row: ThresholdRow) => Promise<void> } = {},
+) {
   const value = resolveThresholdValue(input);
   if (input.source === "test" && !input.protocol) throw new PlanStateError("A field test needs its protocol");
   const measuredOn = input.measuredOn ?? toDateStr(await userToday(ctx.userId));
@@ -437,6 +444,7 @@ export async function addThreshold(ctx: PlanWriteContext, input: ThresholdInput,
       })
       .returning();
     w.create({ type: "threshold", id: row.id });
+    await opts.after?.(w.tx, row);
     return { ...row, added: true };
   });
   const { added, ...threshold } = result;

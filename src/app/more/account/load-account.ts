@@ -13,6 +13,7 @@ import { toDateStr } from "@/lib/utils/cycle-position";
 import { addDaysStr } from "@/lib/utils/seasons";
 import { CONSISTENCY_WEEKS, consistency, mondayOf } from "@/lib/utils/session-compliance";
 import { requireSession } from "@/lib/utils/session";
+import { localDateStr } from "@/lib/utils/user-date";
 import { DEFAULT_UNITS } from "@/lib/utils/units";
 import { eq, max } from "drizzle-orm";
 
@@ -113,6 +114,13 @@ export async function loadAccountData() {
         deletedOn: t.deletedAt!.toISOString().slice(0, 10),
       })),
       suggestions: (numbersData?.suggestions ?? []).map((s) => ({ kind: s.kind, value: s.value, basis: s.basis })),
+      proposals: (numbersData?.proposals ?? []).map((p) => ({
+        id: p.id,
+        kind: p.kind,
+        value: p.value,
+        reason: p.reason,
+        proposedOn: localDateStr(p.createdAt, user?.timeZone),
+      })),
       units,
       today,
       showActivityToFriends: user?.showActivityToFriends ?? true,
