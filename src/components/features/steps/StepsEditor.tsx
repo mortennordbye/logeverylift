@@ -16,7 +16,7 @@ import { RUN_TEST_MODES, RUN_TEST_NAME, RUN_TEST_TEXT, runTestWorkout } from "@/
 import { callAction } from "@/lib/utils/stale-bundle";
 import { workoutPlannedLoad } from "@/lib/utils/step-results";
 import type { Units } from "@/lib/utils/units";
-import { stepTargetKey, workStepGaps, workStepMissing, workStepRuleText, workoutStepKeys } from "@/lib/utils/work-step-gaps";
+import { isShortStep, stepTargetKey, workStepGaps, workStepMissing, workStepRuleText, workoutStepKeys } from "@/lib/utils/work-step-gaps";
 import {
   SWIM_EQUIPMENT,
   SWIM_STROKES,
@@ -184,7 +184,7 @@ export function StepsEditor({
   const check = useMemo(() => parseWorkout(workout), [workout]);
   const gap = useMemo(() => {
     const first = check.ok ? workStepGaps(check.workout, known)[0] : undefined;
-    return first ? `Step ${first.number} · ${workStepRuleText(sport)}` : null;
+    return first ? `Step ${first.number} · ${workStepRuleText(sport, first.short)}` : null;
   }, [check, known, sport]);
   const totals = useMemo(() => {
     if (!check.ok) return null;
@@ -694,7 +694,7 @@ function StepSheet({
 
       {(problem || missing.length > 0) && (
         <p role="alert" className="text-sm text-destructive" data-testid="step-problem">
-          {problem ?? workStepRuleText(sport)}
+          {problem ?? workStepRuleText(sport, isShortStep(s))}
         </p>
       )}
     </PlanSheetPanel>

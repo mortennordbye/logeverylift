@@ -11,6 +11,12 @@
  * the steps whose targets are new: a step whose kind and targets match a step
  * the exercise already held passes as it is (`stepTargetKey`).
  *
+ * A work step under 3 min needs no heart rate (decision 1: heart rate is too
+ * slow for it), only power or the belt, and cadence. Under 3 min is a time
+ * step under 180 s or a distance step of 800 m or less: the app's step time
+ * estimates need the athlete's thresholds and the place, so the check uses
+ * the distance alone.
+ *
  * Exempt: warm-up, cool-down, recovery and rest steps; ramps and free spins;
  * every step of a test (FTP ramp and 20 min, run 30 min: the workout's
  * `test`); swims. The easy start of a brick run is not written on the steps:
@@ -29,9 +35,24 @@ const NEED_WORD: Record<WorkStepNeed, string> = { power: "power", belt: "belt sp
 
 const listText = (words: string[]) => (words.length <= 1 ? words.join("") : `${words.slice(0, -1).join(", ")} and ${words.at(-1)}`);
 
-/** "A bike work step needs power, heart rate and cadence" (the step editor's words). */
-export function workStepRuleText(sport: WorkoutSport): string {
-  return `A ${sport} work step needs ${listText([sport === "run" ? "belt speed" : "power", "heart rate", "cadence"])}`;
+/** Under 3 min (180 s), the length where a work step needs no heart rate. */
+export const SHORT_WORK = { seconds: 180, meters: 800 } as const;
+
+/** A work step under 3 min: a time step under 180 s, or a distance step of 800 m or less. A lap step is not. */
+export function isShortStep(step: Pick<WorkoutStep, "end">): boolean {
+  if (step.end.type === "time") return step.end.seconds < SHORT_WORK.seconds;
+  if (step.end.type === "distance") return step.end.meters <= SHORT_WORK.meters;
+  return false;
+}
+
+/**
+ * "A bike work step needs power, heart rate and cadence" (the step editor's
+ * words), or for a step under 3 min "A bike work step under 3 min needs power
+ * and cadence".
+ */
+export function workStepRuleText(sport: WorkoutSport, short = false): string {
+  const main = sport === "run" ? "belt speed" : "power";
+  return short ? `A ${sport} work step under 3 min needs ${listText([main, "cadence"])}` : `A ${sport} work step needs ${listText([main, "heart rate", "cadence"])}`;
 }
 
 /** "heart rate and cadence" */
@@ -47,7 +68,7 @@ export function workStepMissing(step: WorkoutStep, sport: WorkoutSport, test?: W
   const out: WorkStepNeed[] = [];
   if (sport === "bike" && !metrics.includes("power")) out.push("power");
   if (sport === "run" && step.belt === undefined) out.push("belt");
-  if (!metrics.includes("hr")) out.push("hr");
+  if (!metrics.includes("hr") && !isShortStep(step)) out.push("hr");
   if (!step.cadence && !metrics.includes("cadence")) out.push("cadence");
   return out;
 }
@@ -85,6 +106,8 @@ export type WorkStepGap = {
   /** The step's place in the list, counting the steps of a repeat block once, from 1. */
   number: number;
   missing: WorkStepNeed[];
+  /** Under 3 min: no heart rate needed (`isShortStep`). */
+  short: boolean;
 };
 
 /**
@@ -98,7 +121,7 @@ export function workStepGaps(w: Workout, known: ReadonlySet<string> = new Set())
     number++;
     if (known.has(stepTargetKey(s))) return;
     const missing = workStepMissing(s, w.sport, w.test);
-    if (missing.length) out.push({ path, number, missing });
+    if (missing.length) out.push({ path, number, missing, short: isShortStep(s) });
   };
   w.steps.forEach((n, i) => {
     if (n.type === "repeat") n.steps.forEach((s, j) => see(s, `steps[${i}].steps[${j}]`));

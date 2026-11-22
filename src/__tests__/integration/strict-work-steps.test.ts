@@ -97,6 +97,8 @@ describe("edit_program_exercise refuses a new work step without its targets", ()
           { type: "work", end: time(600), ramp: { anchor: "ftp", from: 50, to: 75 } },
           { type: "work", end: time(600), target: HR, target2: POWER, cadence: { low: 85, high: 95 } },
           { type: "work", end: time(300), free: true },
+          // Under 3 min: no heart rate needed.
+          { type: "work", end: time(30), target: POWER, cadence: { low: 100, high: 110 } },
         ],
       },
       reason: "Test",

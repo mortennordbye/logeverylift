@@ -30,6 +30,11 @@ A new or changed bike or run work step must name its target for both places, ins
   `target2`) and `cadence` in steps per minute (spm). A pace target can be `target` with heart
   rate as `target2`.
 
+A work step under 3 minutes needs no heart rate, because heart rate is too slow for it: a bike one
+needs power and `cadence`, a run one `belt` and `cadence`, and it can keep an effort target (`rpe`).
+Under 3 minutes is a time step under 180 s, or a distance step of 800 m or less. A lap step
+counts as long.
+
 Not checked: warm-up, cool-down, recovery and rest steps, ramps, free spins, every step of a test
 (`test` on the tree, `ftpTest`, `runTest`) and swims. A brick run needs no easy steps of its own:
 the app runs the first 10 min of a brick run on effort. A step the exercise already held with the
@@ -251,7 +256,6 @@ by effort.
     { "type": "repeat", "count": 6, "steps": [
       { "type": "work", "end": { "type": "time", "seconds": 30 }, "belt": 13,
         "target": { "metric": "rpe", "anchor": "absolute", "low": 8, "high": 8 },
-        "target2": { "metric": "hr", "anchor": "lthr", "zone": 3 },
         "cadence": { "low": 180, "high": 190 },
         "note": "Fast and relaxed" },
       { "type": "recovery", "end": { "type": "time", "seconds": 90 }, "belt": 7 } ] },

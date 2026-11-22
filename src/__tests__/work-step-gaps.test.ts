@@ -1,6 +1,6 @@
 import { ftpTestWorkout } from "@/lib/utils/ftp-tests";
 import { runTestWorkout } from "@/lib/utils/run-test";
-import { stepTargetKey, workStepGaps, workStepMissing, workStepRuleText, workoutStepKeys } from "@/lib/utils/work-step-gaps";
+import { isShortStep, stepTargetKey, workStepGaps, workStepMissing, workStepRuleText, workoutStepKeys } from "@/lib/utils/work-step-gaps";
 import { parseWorkout, type Workout, type WorkoutStep } from "@/lib/utils/workout-steps";
 import { describe, expect, it } from "vitest";
 
@@ -44,6 +44,33 @@ describe("workStepMissing: a run work step", () => {
   });
 });
 
+describe("workStepMissing: a work step under 3 min", () => {
+  it("needs no heart rate on a bike, only power and cadence", () => {
+    expect(workStepMissing(work({ end: time(179), target: POWER, cadence: CADENCE }), "bike")).toEqual([]);
+    expect(workStepMissing(work({ end: time(179) }), "bike")).toEqual(["power", "cadence"]);
+    expect(workStepMissing(work({ end: time(180), target: POWER, cadence: CADENCE }), "bike")).toEqual(["hr"]);
+  });
+
+  it("needs no heart rate on a run, only the belt and cadence", () => {
+    const effort = { metric: "rpe", anchor: "absolute", low: 8, high: 8 } as const;
+    expect(workStepMissing(work({ end: time(30), target: effort, belt: 13, cadence: { low: 180, high: 190 } }), "run")).toEqual([]);
+    expect(workStepMissing(work({ end: time(30), target: effort }), "run")).toEqual(["belt", "cadence"]);
+  });
+
+  it("counts a distance step of 800 m or less as short, and a lap step as not", () => {
+    expect(isShortStep({ end: { type: "distance", meters: 800 } })).toBe(true);
+    expect(isShortStep({ end: { type: "distance", meters: 801 } })).toBe(false);
+    expect(isShortStep({ end: { type: "lap" } })).toBe(false);
+    expect(workStepMissing(work({ end: { type: "distance", meters: 400 }, belt: 15, cadence: CADENCE }), "run")).toEqual([]);
+    expect(workStepMissing(work({ end: { type: "distance", meters: 1000 }, belt: 15, cadence: CADENCE }), "run")).toEqual(["hr"]);
+  });
+
+  it("marks its gap as short", () => {
+    const w: Workout = { v: 2, sport: "bike", name: "Sprints", steps: [work({ end: time(30), target: POWER })] };
+    expect(workStepGaps(w)).toEqual([{ path: "steps[0]", number: 1, missing: ["cadence"], short: true }]);
+  });
+});
+
 describe("workStepMissing: exempt steps", () => {
   it.each(["warmup", "recovery", "cooldown", "rest"] as const)("a %s step needs nothing new", (type) => {
     expect(workStepMissing({ type, end: time(600), target: POWER }, "bike")).toEqual([]);
@@ -84,8 +111,8 @@ describe("workStepGaps", () => {
 
   it("lists each work step that lacks a target, with its path and place", () => {
     expect(workStepGaps(ride)).toEqual([
-      { path: "steps[1].steps[0]", number: 2, missing: ["hr", "cadence"] },
-      { path: "steps[3]", number: 5, missing: ["power", "cadence"] },
+      { path: "steps[1].steps[0]", number: 2, missing: ["hr", "cadence"], short: false },
+      { path: "steps[3]", number: 5, missing: ["power", "cadence"], short: false },
     ]);
   });
 
@@ -96,7 +123,7 @@ describe("workStepGaps", () => {
   it("checks a held step again when its kind or a target changed", () => {
     const known = workoutStepKeys(ride);
     const changed: Workout = { ...ride, steps: [...ride.steps.slice(0, 3), work({ target: { ...HR, zone: 4 } })] };
-    expect(workStepGaps(changed, known)).toEqual([{ path: "steps[3]", number: 5, missing: ["power", "cadence"] }]);
+    expect(workStepGaps(changed, known)).toEqual([{ path: "steps[3]", number: 5, missing: ["power", "cadence"], short: false }]);
     const kind: Workout = { ...ride, steps: [{ type: "work", end: time(600), target: { metric: "power", anchor: "ftp", zone: 1 } }] };
     expect(workStepGaps(kind, known)).toHaveLength(1);
   });
@@ -124,6 +151,8 @@ describe("workStepRuleText", () => {
   it("says what a work step needs per sport", () => {
     expect(workStepRuleText("bike")).toBe("A bike work step needs power, heart rate and cadence");
     expect(workStepRuleText("run")).toBe("A run work step needs belt speed, heart rate and cadence");
+    expect(workStepRuleText("bike", true)).toBe("A bike work step under 3 min needs power and cadence");
+    expect(workStepRuleText("run", true)).toBe("A run work step under 3 min needs belt speed and cadence");
   });
 });
 

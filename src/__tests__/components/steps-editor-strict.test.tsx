@@ -114,6 +114,20 @@ describe("StepsEditor · a new run work step", () => {
   });
 });
 
+describe("StepsEditor · a work step under 3 min", () => {
+  it("needs no heart rate, and says so", () => {
+    renderEditor({ v: 2, sport: "bike", name: "Sprints", steps: [{ type: "work", id: "s1", end: { type: "time", seconds: 30 } }] }, { unsaved: true });
+    expect(screen.getByTestId("steps-error").textContent).toBe("Step 1 · A bike work step under 3 min needs power and cadence");
+    fireEvent.click(screen.getByTestId("step-row"));
+    expect(within(sheet()).getByTestId("step-problem").textContent).toBe("A bike work step under 3 min needs power and cadence");
+    fireEvent.click(within(sheet()).getByRole("button", { name: "Power" }));
+    fireEvent.change(within(sheet()).getByLabelText("Cadence from"), { target: { value: "100" } });
+    fireEvent.change(within(sheet()).getByLabelText("Cadence to"), { target: { value: "110" } });
+    expect(within(sheet()).queryByTestId("step-problem")).toBeNull();
+    expect(done().disabled).toBe(false);
+  });
+});
+
 describe("StepsEditor · a step the exercise held already", () => {
   const old: Workout = {
     v: 2,

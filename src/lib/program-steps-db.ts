@@ -118,7 +118,7 @@ export async function assertNewWorkSteps(ex: Executor, programExerciseId: number
   throw new StepRowsError(
     gaps
       .slice(0, 5)
-      .map((g) => `Set ${setOf(g.path)} · ${workStepRuleText(slot.sport)}, missing ${needsText(g.missing)}`)
+      .map((g) => `Set ${setOf(g.path)} · ${workStepRuleText(slot.sport, g.short)}, missing ${needsText(g.missing)}`)
       .join(". "),
   );
 }
