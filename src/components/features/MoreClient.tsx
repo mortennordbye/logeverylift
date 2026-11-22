@@ -1,5 +1,6 @@
 "use client";
 
+import { OpenDot } from "@/components/features/account/CoachProposals";
 import { useToast } from "@/contexts/toast-context";
 import { authClient } from "@/lib/auth-client";
 import { DEMO_USER_EMAIL } from "@/lib/constants/demo";
@@ -131,6 +132,7 @@ const adminItem: MoreItem = {
 export function MoreClient({
   role,
   friendsBadge,
+  accountDot = false,
   friendCode,
   showGarmin,
   showAthlete = false,
@@ -139,6 +141,7 @@ export function MoreClient({
   showGarmin: boolean;
   showAthlete?: boolean;
   friendsBadge: number;
+  accountDot?: boolean;
   friendCode: string | null;
 }) {
   const isAdmin = role === "admin";
@@ -240,6 +243,8 @@ export function MoreClient({
                           {friendsBadge}
                         </span>
                       )}
+                      {/* A coach proposal waits in Account › Training numbers (docs/plans/strict-targets.md, decision 9). */}
+                      {"href" in item && item.href === "/more/account" && accountDot && <OpenDot label="Coach proposal open" />}
                       <ChevronRight className="w-4 h-4 text-muted-foreground flex-none" />
                     </>
                   );

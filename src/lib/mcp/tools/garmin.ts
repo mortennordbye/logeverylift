@@ -11,6 +11,7 @@ import { RACE_LABEL } from "@/lib/garmin/analytics/overview";
 import { projectionSentence } from "@/lib/garmin/analytics/projection";
 import { thresholdHistory, vo2Series } from "@/lib/garmin/analytics/trends";
 import { verdict } from "@/lib/garmin/charts/activity";
+import { lapCadence, summaryCadence } from "@/lib/garmin/cadence";
 import { addDays } from "@/lib/garmin/dates";
 import {
   garminToday,
@@ -112,7 +113,8 @@ export function registerGarminTools(server: McpServer, userId: string) {
   server.registerTool(
     "list_garmin_activities",
     {
-      description: "The athlete's recent Garmin activities, newest first: id, date, sport, name, duration, distance, training load and mean heart rate.",
+      description:
+        "The athlete's recent Garmin activities, newest first: id, date, sport, name, duration, distance, training load, mean heart rate and mean cadence (avgCadence: rpm on a ride, steps per minute on a run; null for other sports or without a sensor).",
       inputSchema: { limit: z.number().int().min(1).max(100).optional() },
       annotations: READ_ONLY,
     },
@@ -129,6 +131,7 @@ export function registerGarminTools(server: McpServer, userId: string) {
             distanceKm: x.distanceM ? r1(x.distanceM / 1000) : null,
             load: r1(x.load),
             avgHr: x.avgHr,
+            avgCadence: x.avgCadence,
           })),
         );
       } catch (e) {
@@ -140,7 +143,8 @@ export function registerGarminTools(server: McpServer, userId: string) {
   server.registerTool(
     "get_garmin_activity",
     {
-      description: "One Garmin activity in detail: a one-line verdict, load, intensity bands, decoupling, laps and best efforts. No GPS and no raw streams.",
+      description:
+        "One Garmin activity in detail: a one-line verdict, load, intensity bands, decoupling, laps (time, distance, avgHr, avgPower, avgCadence) and best efforts. avgCadence is rpm on a ride and steps per minute on a run (both feet), for the activity and per lap; null for other sports or without a sensor. No GPS and no raw streams.",
       inputSchema: { id: z.number().int().positive() },
       annotations: READ_ONLY,
     },
@@ -158,11 +162,19 @@ export function registerGarminTools(server: McpServer, userId: string) {
           durationMin: typeof d.summary.duration === "number" ? Math.round(d.summary.duration / 60) : null,
           distanceKm: typeof d.summary.distance === "number" ? r1(d.summary.distance / 1000) : null,
           avgHr: d.summary.averageHR ?? null,
+          avgCadence: summaryCadence(d.sport, d.summary),
           load: m ? { value: m.load, method: m.loadMethod } : null,
           intensitySeconds: m?.bands ?? null,
           decoupling: m?.decoupling ?? null,
           bestEfforts: m?.efforts ? { powerW: m.efforts.power, runSpeedMps: m.efforts.speed, vo2Estimate: m.efforts.vo2?.value ?? null } : null,
-          laps: d.laps.map((l, i) => ({ n: i + 1, timeS: l.totalTimerTime ?? null, distanceM: l.totalDistance ?? null, avgHr: l.avgHeartRate ?? null, avgPower: l.avgPower ?? null })),
+          laps: d.laps.map((l, i) => ({
+            n: i + 1,
+            timeS: l.totalTimerTime ?? null,
+            distanceM: l.totalDistance ?? null,
+            avgHr: l.avgHeartRate ?? null,
+            avgPower: l.avgPower ?? null,
+            avgCadence: lapCadence(d.sport, l),
+          })),
           fuel: d.fuel,
         });
       } catch (e) {

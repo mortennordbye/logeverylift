@@ -5,6 +5,7 @@ import { and, asc, desc, eq, gte, inArray, lt, lte, sql } from "drizzle-orm";
 import type { ActivityMetrics } from "./analytics/activity";
 import { sessionZoneMessage } from "./analytics/thresholds";
 import { lttbIndices, takeIndices } from "./charts/downsample";
+import { summaryCadence } from "./cadence";
 import { bodyBatteryDay, type BodyBatteryDay, type DailyMetrics } from "./analytics/daily";
 import { insightsFor, type Insight } from "./analytics/insights";
 import { sessionInsights } from "./analytics/session-insights";
@@ -374,6 +375,8 @@ export type ActivityListRow = {
   durationS: number | null;
   distanceM: number | null;
   avgHr: number | null;
+  /** rpm on a ride, steps per minute on a run (summaryCadence); null for other sports. */
+  avgCadence: number | null;
   load: number | null;
   loadMethod: string | null;
   hrPreview: (number | null)[];
@@ -428,15 +431,17 @@ export async function getActivitiesData(userId: string, limit = 120): Promise<Ac
     calendar,
     list: rows.map((r) => {
       const j = (r.data ?? {}) as Json;
+      const sport = (r.sport ?? sportOf(r.typeKey)) as Sport;
       return {
         id: r.id,
         name: typeof j.activityName === "string" ? j.activityName : r.typeKey.replaceAll("_", " "),
         typeKey: r.typeKey,
-        sport: (r.sport ?? sportOf(r.typeKey)) as Sport,
+        sport,
         start: r.start.getTime(),
         durationS: num(j.duration),
         distanceM: num(j.distance),
         avgHr: num(j.averageHR),
+        avgCadence: summaryCadence(sport, j),
         load: r.load,
         loadMethod: r.loadMethod,
         hrPreview: r.hrPreview ?? [],
@@ -759,6 +764,7 @@ export async function getOverviewData(userId: string, nowArg?: string): Promise<
       durationS: num(j.duration),
       distanceM: num(j.distance),
       avgHr: num(j.averageHR),
+      avgCadence: summaryCadence(lastRow.sport as Sport, j),
       load: lastRow.load,
       loadMethod: lastRow.loadMethod,
       hrPreview: m.hrPreview ?? [],

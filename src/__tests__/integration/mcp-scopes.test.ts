@@ -4,6 +4,7 @@ import {
   athleteInjuries,
   athleteProfiles,
   athleteThresholds,
+  thresholdProposals,
   coachMemory,
   exercises,
   planRevisions,
@@ -73,6 +74,7 @@ async function fingerprint(userId: string) {
   const athlete = await db.select({ id: athleteProfiles.id, v: athleteProfiles.version }).from(athleteProfiles).where(eq(athleteProfiles.userId, userId));
   const thresholds = await db.select({ id: athleteThresholds.id }).from(athleteThresholds).where(eq(athleteThresholds.userId, userId));
   const injuries = await db.select({ id: athleteInjuries.id }).from(athleteInjuries).where(eq(athleteInjuries.userId, userId));
+  const proposals = await db.select({ id: thresholdProposals.id }).from(thresholdProposals).where(eq(thresholdProposals.userId, userId));
   const seasonRows = await db.select({ id: seasons.id, name: seasons.name, version: seasons.version }).from(seasons).where(eq(seasons.userId, userId));
   const races = await db.select({ id: seasonRaces.id }).from(seasonRaces).where(eq(seasonRaces.userId, userId));
   const planned = await db
@@ -80,7 +82,7 @@ async function fingerprint(userId: string) {
     .from(plannedSessions)
     .where(eq(plannedSessions.userId, userId))
     .orderBy(asc(plannedSessions.id));
-  return JSON.stringify({ planned, user, progs, slots: slots.length, cycles, cycleSlots: cycleSlots.length, weights: weights.length, sessions: sessions.length, custom: custom.length, memory: memory.length, athlete, thresholds: thresholds.length, injuries: injuries.length, seasonRows, races: races.length });
+  return JSON.stringify({ planned, user, progs, slots: slots.length, cycles, cycleSlots: cycleSlots.length, weights: weights.length, sessions: sessions.length, custom: custom.length, memory: memory.length, athlete, thresholds: thresholds.length, injuries: injuries.length, proposals: proposals.length, seasonRows, races: races.length });
 }
 
 let me: string;
@@ -134,6 +136,7 @@ const writeCalls = (): [string, Record<string, unknown>][] => [
   ["confirm_session", { date: toDateStr(new Date()), programId }],
   ["manage_coach_memory", { operation: "add", kind: "preference", text: "Long rides on Saturday", reason: "Test" }],
   ["manage_thresholds", { operation: "add", kind: "ftp", watts: 250, source: "manual", reason: "Test" }],
+  ["propose_threshold", { kind: "bike_cadence", cadence: 88, reason: "Median cadence in Z2 over 8 rides" }],
   ["manage_athlete_profile", { strengthGoal: "stronger", reason: "Test" }],
   ["manage_injuries", { operation: "add", area: "knee", description: "Sore", status: "active", reason: "Test" }],
   ["manage_season", { operation: "create", name: "2027", startDate: "2027-01-04", endDate: "2027-09-30", reason: "Test" }],

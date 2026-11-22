@@ -150,3 +150,20 @@ describe("warnings", () => {
     expect(thresholdWarnings({ lthr_run: row("lthr_run", 186) })).toEqual([]);
   });
 });
+
+describe("cadence kinds (docs/plans/strict-targets.md, decision 6)", () => {
+  it("bike cadence is typed and shown in rpm, run cadence in spm", () => {
+    expect(parseThresholdInput("bike_cadence", "88")).toBe(88);
+    expect(parseThresholdInput("run_cadence", "172")).toBe(172);
+    expect(parseThresholdInput("run_cadence", "4:30")).toBeNull();
+    expect(formatThreshold("bike_cadence", 87.6)).toBe("88 rpm");
+    expect(formatThreshold("run_cadence", 172)).toBe("172 spm");
+  });
+
+  it("refuses a cadence out of range", () => {
+    expect(thresholdRangeError("bike_cadence", 88)).toBeNull();
+    expect(thresholdRangeError("bike_cadence", 30)).toBe("Bike cadence must be between 40 rpm and 140 rpm");
+    expect(thresholdRangeError("run_cadence", 86)).toBe("Run cadence must be between 120 spm and 230 spm");
+    expect(thresholdRangeError("run_cadence", 172)).toBeNull();
+  });
+});

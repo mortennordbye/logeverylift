@@ -8,6 +8,8 @@
  * - athlete_thresholds: one row per value, so the rows are the history.
  *   Stored metric: watts, bpm, and m/s for paces (pace ranges invert).
  * - athlete_injuries: injuries and limits, with their history.
+ * - threshold_proposals: values the connected coach proposes, until the user
+ *   accepts or declines them.
  *
  * Every write goes through the revision layer (object types athlete,
  * threshold, injury), so each row carries a version and a soft delete like
@@ -15,6 +17,7 @@
  * AI; only the user and their own connected assistant read it.
  */
 
+import { sql } from "drizzle-orm";
 import { date, index, integer, jsonb, pgTable, real, serial, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { users } from "./users";
 
@@ -24,10 +27,12 @@ export type EnduranceLevel = (typeof ENDURANCE_LEVELS)[number];
 export const STRENGTH_GOALS = ["keep_muscle", "stronger", "minimal"] as const;
 export type StrengthGoal = (typeof STRENGTH_GOALS)[number];
 
-export const THRESHOLD_KINDS = ["ftp", "lthr_bike", "lthr_run", "run_threshold_pace", "swim_css", "max_hr"] as const;
+// bike_cadence (rpm) and run_cadence (steps per minute): the cadence the athlete holds, which the coach sets step cadence from.
+export const THRESHOLD_KINDS = ["ftp", "lthr_bike", "lthr_run", "run_threshold_pace", "swim_css", "max_hr", "bike_cadence", "run_cadence"] as const;
 export type ThresholdKind = (typeof THRESHOLD_KINDS)[number];
 
-export const THRESHOLD_SOURCES = ["manual", "test", "garmin"] as const;
+// coach: a value the user accepted from a coach proposal (threshold_proposals).
+export const THRESHOLD_SOURCES = ["manual", "test", "garmin", "coach"] as const;
 export type ThresholdSource = (typeof THRESHOLD_SOURCES)[number];
 
 export const THRESHOLD_PROTOCOLS = ["run_30min", "bike_30min", "ftp_20min", "ftp_ramp", "css_400_200", "swim_t1000"] as const;
@@ -131,4 +136,40 @@ export const athleteInjuries = pgTable(
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
   (t) => [index("idx_athlete_injuries_user").on(t.userId, t.status)],
+);
+
+export const PROPOSAL_STATUSES = ["open", "accepted", "declined"] as const;
+export type ProposalStatus = (typeof PROPOSAL_STATUSES)[number];
+
+/**
+ * A threshold the connected coach proposes (docs/plans/strict-targets.md,
+ * decisions 5 and 9). Nothing changes until the user accepts: accept writes a
+ * threshold with source coach, decline closes it. One open proposal per kind;
+ * a new one for the same kind replaces it. Not in the revision layer: the
+ * threshold an accept writes is.
+ */
+export const thresholdProposals = pgTable(
+  "threshold_proposals",
+  {
+    id: serial("id").primaryKey(),
+    userId: text("user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    kind: text("kind", { enum: THRESHOLD_KINDS }).notNull(),
+    // Stored metric, as athlete_thresholds.value.
+    value: real("value").notNull(),
+    // One line the user reads on the card.
+    reason: text("reason").notNull(),
+    // What the estimate rests on: dates, activity ids and numbers.
+    evidence: jsonb("evidence"),
+    status: text("status", { enum: PROPOSAL_STATUSES }).notNull().default("open"),
+    // The threshold an accept wrote.
+    thresholdId: integer("threshold_id").references(() => athleteThresholds.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    decidedAt: timestamp("decided_at"),
+  },
+  (t) => [
+    uniqueIndex("uniq_threshold_proposal_open").on(t.userId, t.kind).where(sql`${t.status} = 'open'`),
+    index("idx_threshold_proposals_user").on(t.userId, t.status),
+  ],
 );

@@ -21,10 +21,12 @@ export const THRESHOLD_LABEL: Record<ThresholdKind, string> = {
   run_threshold_pace: "Threshold run pace",
   swim_css: "Swim CSS",
   max_hr: "Max HR",
+  bike_cadence: "Bike cadence",
+  run_cadence: "Run cadence",
 };
 
-/** How a kind is typed and shown: watts, bpm, run pace or swim pace. */
-export type ThresholdMeasure = "watts" | "bpm" | "runPace" | "swimPace";
+/** How a kind is typed and shown: watts, bpm, run pace, swim pace, or cadence in rpm (bike) or steps per minute (run). */
+export type ThresholdMeasure = "watts" | "bpm" | "runPace" | "swimPace" | "rpm" | "spm";
 
 export const THRESHOLD_MEASURE: Record<ThresholdKind, ThresholdMeasure> = {
   ftp: "watts",
@@ -33,7 +35,14 @@ export const THRESHOLD_MEASURE: Record<ThresholdKind, ThresholdMeasure> = {
   max_hr: "bpm",
   run_threshold_pace: "runPace",
   swim_css: "swimPace",
+  bike_cadence: "rpm",
+  run_cadence: "spm",
 };
+
+/** Measures typed and shown as a whole number with a unit word: bpm, rpm, spm. */
+export function isCount(measure: ThresholdMeasure): measure is "bpm" | "rpm" | "spm" {
+  return measure === "bpm" || measure === "rpm" || measure === "spm";
+}
 
 /** Allowed stored values per kind (metric). Outside is refused. */
 export const THRESHOLD_RANGE: Record<ThresholdKind, { min: number; max: number }> = {
@@ -45,6 +54,8 @@ export const THRESHOLD_RANGE: Record<ThresholdKind, { min: number; max: number }
   run_threshold_pace: { min: 1000 / 720, max: 1000 / 120 },
   // 4:00 to 0:50 per 100 m.
   swim_css: { min: 100 / 240, max: 100 / 50 },
+  bike_cadence: { min: 40, max: 140 },
+  run_cadence: { min: 120, max: 230 },
 };
 
 /** Live threshold rows a user may keep per kind. */
@@ -104,21 +115,21 @@ export function parseMinSec(text: string): number | null {
   return null;
 }
 
-/** A stored value as text in the user's units: "265 W", "168 bpm", "4:30 /km", "1:45 /100m". */
+/** A stored value as text in the user's units: "265 W", "168 bpm", "88 rpm", "4:30 /km", "1:45 /100m". */
 export function formatThreshold(kind: ThresholdKind, value: number, units: Units = DEFAULT_UNITS): string {
   const measure = THRESHOLD_MEASURE[kind];
   if (measure === "watts") return `${Math.round(value)} W`;
-  if (measure === "bpm") return `${Math.round(value)} bpm`;
+  if (isCount(measure)) return `${Math.round(value)} ${measure}`;
   return `${minSec(speedToPace(value, paceUnitMeters(measure, units)))} ${paceUnitLabel(measure, units)}`;
 }
 
 /**
- * A typed value in the user's units as the stored value: a number for watts
- * and bpm, a min:ss pace for the two paces. Null when it cannot be read.
+ * A typed value in the user's units as the stored value: a number for watts,
+ * bpm and cadence, a min:ss pace for the two paces. Null when it cannot be read.
  */
 export function parseThresholdInput(kind: ThresholdKind, text: string, units: Units = DEFAULT_UNITS): number | null {
   const measure = THRESHOLD_MEASURE[kind];
-  if (measure === "watts" || measure === "bpm") {
+  if (measure === "watts" || isCount(measure)) {
     const n = Number(text.trim());
     return text.trim() !== "" && Number.isFinite(n) && n > 0 ? n : null;
   }

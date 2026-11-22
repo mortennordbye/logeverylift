@@ -3,7 +3,9 @@
 import { authClient } from "@/lib/auth-client";
 import { exportMyData } from "@/lib/actions/account";
 import { GROUPS, SECTIONS, type AccountData, type Row } from "@/components/features/account/sections";
+import { OpenDot, ProposalCard } from "@/components/features/account/CoachProposals";
 import { BottomSheet } from "@/components/ui/BottomSheet";
+import { currentThresholds } from "@/lib/utils/thresholds";
 import { forgetStepAlerts } from "@/lib/push-client";
 import { clearLocalUserData, unsyncedChangeCount } from "@/lib/utils/local-data";
 import { callAction } from "@/lib/utils/stale-bundle";
@@ -219,6 +221,14 @@ export function AccountClient({ data, page }: AccountClientProps) {
           </Link>
         )}
 
+        {page === "training-numbers" && data.proposals.length > 0 && (
+          <div className="shrink-0 flex flex-col gap-3">
+            {data.proposals.map((p) => (
+              <ProposalCard key={p.id} proposal={p} current={currentThresholds(data.thresholds)[p.kind]?.value ?? null} units={data.units} />
+            ))}
+          </div>
+        )}
+
         {/* The top page shows only the Garmin switch; a sub-page shows its own section. */}
         {SECTIONS.filter((section) => section.id === (page ?? "garmin")).map((section) => {
           const rows = section.rows.filter(visible);
@@ -245,13 +255,17 @@ export function AccountClient({ data, page }: AccountClientProps) {
             <div key={group.title}>
               <SectionLabel>{group.title}</SectionLabel>
               <div className="rounded-2xl bg-card overflow-hidden divide-y divide-border/50">
-                {group.buttons.map((b) => (
-                  <Link key={b.id} href={`/more/account/${b.id}`} className="flex items-center gap-3 px-4 min-h-[52px] py-3 active:opacity-60" data-testid={`account-group-${b.id}`}>
-                    <b.icon className="w-5 h-5 text-muted-foreground shrink-0" />
-                    <span className="flex-1 text-sm font-medium">{b.title}</span>
-                    <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
-                  </Link>
-                ))}
+                {group.buttons.map((b) => {
+                  const dot = b.dot?.(data);
+                  return (
+                    <Link key={b.id} href={`/more/account/${b.id}`} className="flex items-center gap-3 px-4 min-h-[52px] py-3 active:opacity-60" data-testid={`account-group-${b.id}`}>
+                      <b.icon className="w-5 h-5 text-muted-foreground shrink-0" />
+                      <span className="flex-1 text-sm font-medium">{b.title}</span>
+                      {dot && <OpenDot label={dot} />}
+                      <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+                    </Link>
+                  );
+                })}
               </div>
             </div>
           ))}

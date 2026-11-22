@@ -132,10 +132,11 @@ describe("MCP tool registration", () => {
   });
 
   it("registers the athlete tools: thresholds always, profile and injuries only with the endurance switch", () => {
-    expect(hints((s, u) => registerAthleteProfileTools(s, u))).toEqual({ get_athlete_profile: true, manage_thresholds: false });
+    expect(hints((s, u) => registerAthleteProfileTools(s, u))).toEqual({ get_athlete_profile: true, manage_thresholds: false, propose_threshold: false });
     expect(hints((s, u) => registerAthleteProfileTools(s, u, undefined, { endurance: true }))).toEqual({
       get_athlete_profile: true,
       manage_thresholds: false,
+      propose_threshold: false,
       manage_athlete_profile: false,
       manage_injuries: false,
     });

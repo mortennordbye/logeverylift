@@ -10,6 +10,7 @@ import {
   illnessPeriods,
   athleteProfiles,
   athleteThresholds,
+  thresholdProposals,
   coachMemory,
   exerciseNotes,
   exercisePrs,
@@ -173,6 +174,8 @@ export async function collectUserData(userId: string) {
     // The athlete profile (docs/plans/athlete-profile.md, 4).
     athlete_profiles: await db.select().from(athleteProfiles).where(eq(athleteProfiles.userId, userId)),
     athlete_thresholds: await db.select().from(athleteThresholds).where(eq(athleteThresholds.userId, userId)),
+    // Coach proposals, open and answered (docs/plans/strict-targets.md, decision 5).
+    threshold_proposals: await db.select().from(thresholdProposals).where(eq(thresholdProposals.userId, userId)),
     athlete_injuries: await db.select().from(athleteInjuries).where(eq(athleteInjuries.userId, userId)),
     // plan-read: includes deleted (the export holds all of the user's data)
     // plan-read: includes deleted (the export holds all of the user's data)

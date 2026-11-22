@@ -12,6 +12,7 @@ import {
   bodyMeasurements,
   athleteProfiles,
   athleteThresholds,
+  thresholdProposals,
   coachMemory,
   customWeightUsage,
   dismissedMakeups,
@@ -113,6 +114,8 @@ export async function resetE2EUser(email: string): Promise<void> {
     await tx.delete(planRevisions).where(eq(planRevisions.userId, userId));
     await tx.delete(coachMemory).where(eq(coachMemory.userId, userId));
     await tx.delete(athleteProfiles).where(eq(athleteProfiles.userId, userId));
+    // Before the thresholds: an accepted proposal points at its threshold.
+    await tx.delete(thresholdProposals).where(eq(thresholdProposals.userId, userId));
     await tx.delete(athleteThresholds).where(eq(athleteThresholds.userId, userId));
     await tx.delete(athleteInjuries).where(eq(athleteInjuries.userId, userId));
     await tx.delete(illnessPeriods).where(eq(illnessPeriods.userId, userId));

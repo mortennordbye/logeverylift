@@ -50,6 +50,19 @@ export const thresholdFields = {
   notes: z.string().trim().max(500).nullable().optional(),
 };
 
+/** What a coach proposal rests on: the dates and Garmin activity ids it read and the numbers it used. */
+export const proposalEvidence = z
+  .object({
+    dates: z.array(dateStr).max(60).optional(),
+    activityIds: z.array(z.number().int().positive()).max(60).optional(),
+    numbers: z
+      .record(z.string().trim().min(1).max(60), z.number().finite())
+      .refine((o) => Object.keys(o).length <= 20, "At most 20 numbers")
+      .optional(),
+    note: z.string().trim().max(500).optional(),
+  })
+  .strict();
+
 export const injuryFields = {
   area: z.enum(INJURY_AREAS),
   side: z.enum(INJURY_SIDES).nullable().optional(),
