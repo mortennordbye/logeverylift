@@ -271,4 +271,18 @@ describe("a run done on the watch alone", () => {
     expect(part.steps.map((s) => s.time.value)).toEqual(["–", "–", "–"]);
     expect(part.steps[1].rows.every((r) => r.value === "–")).toBe(true);
   });
+
+  it("a workout logged with no ride uses the Garmin activity it took, split like a watch-only run", async () => {
+    const id = await plannedRun(true);
+    // A "Yes" answer or MCP log_session: a linked workout with no ride.
+    await createSession(me, null, { date: TODAY, isCompleted: true, plannedSessionId: id });
+    const view = await plannedSessionCheck(me, id);
+    expect(view?.parts).toHaveLength(1);
+    expect(view!.parts[0].match).toEqual({ kind: "garmin", name: "Oslo Running", split: "laps", watchOnly: true });
+    expect(view!.parts[0].steps.map((s) => s.time.value)).toEqual(["10:20", "19:40", "5:00"]);
+
+    // Without Garmin there is nothing to split.
+    await db.update(users).set({ role: "user" }).where(eq(users.id, me));
+    expect((await plannedSessionCheck(me, id))!.parts).toEqual([]);
+  });
 });

@@ -29,17 +29,15 @@ import { requireSession } from "@/lib/utils/session";
 import { rideTestOf } from "@/lib/utils/workout-steps";
 import { notFound } from "next/navigation";
 import { SessionMatchBlock } from "@/components/features/SessionMatchBlock";
-import { garminAllowedFor } from "@/lib/garmin/access";
-import { plannedIdOfWorkout, sessionMatch } from "@/lib/session-match";
+import { workoutSessionMatch } from "@/lib/session-match";
 import { matchBlockView } from "@/lib/utils/session-match";
 import type { Units } from "@/lib/utils/units";
 
 /** The match block of the planned session a done ride or run counts for (docs/plans/session-check.md, decision 4); none without one. */
 async function matchOf(userId: string, workoutSessionId: number, units: Units) {
-  const plannedId = await plannedIdOfWorkout(userId, workoutSessionId);
-  if (plannedId == null) return null;
-  const [m, garminOn] = await Promise.all([sessionMatch(userId, plannedId), garminAllowedFor(userId)]);
-  return m ? <SessionMatchBlock plannedSessionId={plannedId} view={matchBlockView(m, garminOn, units)} /> : null;
+  const found = await workoutSessionMatch(userId, workoutSessionId);
+  if (!found) return null;
+  return <SessionMatchBlock plannedSessionId={found.match.plannedSessionId} view={matchBlockView(found.match, found.garminOn, units)} />;
 }
 
 type Props = {
