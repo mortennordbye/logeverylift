@@ -194,7 +194,8 @@ export async function plannedSessionCheck(userId: string, plannedSessionId: numb
     if (logged?.parts.length) return logged;
     // A workout with no ride ("Yes", MCP log_session, an app match): the Garmin activity of its day it took, split as on the watch.
   }
-  if (s.garminActivityId === null || (s.sport !== "bike" && s.sport !== "run") || !(await garminAllowedFor(userId))) return empty;
+  // watchOnlyPart holds the Garmin gate: without access it shows the plan with no Garmin numbers.
+  if (s.garminActivityId === null || (s.sport !== "bike" && s.sport !== "run")) return empty;
   const pw = s.programWorkouts.find((p) => p.sport === s.sport);
   if (!pw) return empty;
   const part = await watchOnlyPart(userId, s.garminActivityId, pw.workout);
