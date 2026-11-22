@@ -2,6 +2,10 @@ import { userToday } from "@/lib/user-settings";
 import { toDateStr } from "@/lib/utils/cycle-position";
 import { DayOnlyButton } from "@/components/features/steps/DayOnlyButton";
 import { SavedRunLink } from "@/components/features/guided/SavedRunLink";
+import { SessionMatchBlock } from "@/components/features/SessionMatchBlock";
+import { garminAllowedFor } from "@/lib/garmin/access";
+import { sessionMatch } from "@/lib/session-match";
+import { matchBlockView } from "@/lib/utils/session-match";
 import { STEP_WORD } from "@/components/features/guided/types";
 import { enduranceEnabledFor } from "@/lib/endurance";
 import { distanceLabel, plannedSessionView } from "@/lib/planned-view";
@@ -29,9 +33,10 @@ export default async function PlannedSessionPage({ params }: { params: Promise<{
   if (!Number.isInteger(id) || id <= 0) notFound();
   const v = await plannedSessionView(user.id, id);
   if (!v) notFound();
+  const [garminOn, today] = await Promise.all([garminAllowedFor(user.id), userToday(user.id).then(toDateStr)]);
+  const match = await sessionMatch(user.id, id, { known: v.session, garminOn, today });
   const { session, workout, units, estimate } = v;
   const done = session.state === "done";
-  const today = toDateStr(await userToday(user.id));
   const swim = workout.sport === "swim";
 
   return (
@@ -61,6 +66,12 @@ export default async function PlannedSessionPage({ params }: { params: Promise<{
           </p>
         )}
       </div>
+
+      {match && (
+        <div className="px-4 pb-3">
+          <SessionMatchBlock plannedSessionId={id} view={matchBlockView(match, garminOn, units)} />
+        </div>
+      )}
 
       <ol className="px-4 flex flex-col gap-1" data-testid="planned-steps">
         {v.rows.map((r) => (

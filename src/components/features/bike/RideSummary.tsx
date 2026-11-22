@@ -41,7 +41,10 @@ export function RideSummary({
   timeZone = null,
   ftpTest = null,
   rideAgain = null,
+  match = null,
 }: {
+  /** The planned session's match block (docs/plans/session-check.md, decision 4). */
+  match?: React.ReactNode;
   programId: number;
   exerciseName: string;
   doneLine: string;
@@ -204,6 +207,7 @@ export function RideSummary({
           </ol>
         </div>
 
+        {match}
         {rideId !== undefined && garmin && <GarminFill rideId={rideId} garmin={garmin} timeZone={timeZone} noun="rides" />}
         {error && (
           <p role="alert" className="text-sm text-destructive">

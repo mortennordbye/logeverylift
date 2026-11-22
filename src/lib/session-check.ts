@@ -178,9 +178,10 @@ async function watchOnlyPart(userId: string, garminRowId: number, workout: Worko
 
 /**
  * The step page of a planned session: its logged workout's rides and runs,
- * else the Garmin activity it was matched to on the watch alone (a pick or a
- * Garmin match). Null when the session is not the user's; no parts when it is
- * not done or has nothing to show.
+ * else the Garmin activity it was matched to (a pick, a Garmin match, or the
+ * activity a workout with no ride took), split as on the watch alone, for a
+ * user with Garmin. Null when the session is not the user's; no parts when it
+ * is not done or has nothing to show.
  */
 export async function plannedSessionCheck(userId: string, plannedSessionId: number): Promise<SessionCheckView | null> {
   const s = await oneSession(userId, plannedSessionId);
@@ -188,7 +189,12 @@ export async function plannedSessionCheck(userId: string, plannedSessionId: numb
   const name = s.label ?? s.programName;
   const empty = { title: `${name ?? "Session"} · ${shortDay(s.date)}`, parts: [] };
   if (s.state !== "done") return empty;
-  if (s.loggedSessionId !== null) return (await workoutSessionCheck(userId, s.loggedSessionId, name)) ?? empty;
+  if (s.loggedSessionId !== null) {
+    const logged = await workoutSessionCheck(userId, s.loggedSessionId, name);
+    if (logged?.parts.length) return logged;
+    // A workout with no ride ("Yes", MCP log_session, an app match): the Garmin activity of its day it took, split as on the watch.
+  }
+  // watchOnlyPart holds the Garmin gate: without access it shows the plan with no Garmin numbers.
   if (s.garminActivityId === null || (s.sport !== "bike" && s.sport !== "run")) return empty;
   const pw = s.programWorkouts.find((p) => p.sport === s.sport);
   if (!pw) return empty;

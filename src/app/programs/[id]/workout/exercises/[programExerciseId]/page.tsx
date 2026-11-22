@@ -28,6 +28,17 @@ import { getUserSettings } from "@/lib/user-settings";
 import { requireSession } from "@/lib/utils/session";
 import { rideTestOf } from "@/lib/utils/workout-steps";
 import { notFound } from "next/navigation";
+import { SessionMatchBlock } from "@/components/features/SessionMatchBlock";
+import { workoutSessionMatch } from "@/lib/session-match";
+import { matchBlockView } from "@/lib/utils/session-match";
+import type { Units } from "@/lib/utils/units";
+
+/** The match block of the planned session a done ride or run counts for (docs/plans/session-check.md, decision 4); none without one. */
+async function matchOf(userId: string, workoutSessionId: number, units: Units) {
+  const found = await workoutSessionMatch(userId, workoutSessionId);
+  if (!found) return null;
+  return <SessionMatchBlock plannedSessionId={found.match.plannedSessionId} view={matchBlockView(found.match, found.garminOn, units)} />;
+}
 
 type Props = {
   params: Promise<{ id: string; programExerciseId: string }>;
@@ -141,6 +152,7 @@ export default async function WorkoutExerciseSetsPage({ params, searchParams }: 
           doneHref={doneHref}
           saveTheRide={saveTheRide}
           rideAgain={after.status === "ended_early" && !saveTheRide ? { sessionId: after.sessionId, programExerciseId: peId, mode: after.plan.mode } : null}
+          match={await matchOf(user.id, after.sessionId, units)}
         />
       );
     }
@@ -194,7 +206,7 @@ export default async function WorkoutExerciseSetsPage({ params, searchParams }: 
         );
       }
       const summary = runSummary(after.plan, after.logs, { beltEvents: after.beltEvents, stream: after.garmin.stream });
-      const { timeZone } = await getUserSettings(user.id);
+      const { timeZone, units } = await getUserSettings(user.id);
       return (
         <RunSummary
           programId={programId}
@@ -210,6 +222,7 @@ export default async function WorkoutExerciseSetsPage({ params, searchParams }: 
           doneHref={doneHref}
           saveTheRun={saveTheRun}
           runAgain={after.status === "ended_early" && !saveTheRun ? { sessionId: after.sessionId, programExerciseId: peId, mode: after.plan.mode, surface: after.surface } : null}
+          match={await matchOf(user.id, after.sessionId, units)}
         />
       );
     }
