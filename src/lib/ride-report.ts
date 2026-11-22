@@ -23,6 +23,7 @@ import { ftpTestThreshold } from "@/lib/utils/ftp-tests";
 import { localDateStr } from "@/lib/utils/user-date";
 import { bikeStepRows, plannedRideNumbers } from "@/lib/utils/bike-ride-view";
 import { rideSummary } from "@/lib/utils/ride-results";
+import { checkSteps, stepMarks } from "@/lib/utils/session-check";
 import type { RidePlan } from "@/lib/utils/ride-timeline";
 import { and, asc, desc, eq } from "drizzle-orm";
 
@@ -70,6 +71,7 @@ export async function rideReport(userId: string, by: { rideId?: number; workoutS
     ride: { sessionId: ride.sessionId, heartbeatAt: ride.heartbeatAt?.getTime() ?? null },
   });
   const summary = rideSummary(plan, logs, units, garmin.stream);
+  const checks = checkSteps(plan, logs);
   const stream = garmin.stream;
   const planned = plannedRideNumbers(plan);
   const rows = bikeStepRows(plan, units);
@@ -138,6 +140,9 @@ export async function rideReport(userId: string, by: { rideId?: number; workoutS
           sources: log.sources,
         },
         underTarget: summary.rows[i].under,
+        overTarget: summary.rows[i].mark === "↑",
+        // The session check per metric (in, over, under; null: no target or not judged).
+        marks: stepMarks(checks[i], "bike"),
         // Percent of the step's seconds inside its target (power indoors, heart rate outdoors), from the stream.
         timeOnTargetPct: summary.rows[i].onTarget,
       };

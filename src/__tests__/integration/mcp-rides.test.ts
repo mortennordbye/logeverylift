@@ -302,6 +302,10 @@ describe("get_ride", () => {
     expect(ride.steps[0].planned).toMatchObject({ seconds: 900, ramp: { anchor: "ftp", from: 55, to: 75 }, watts: { from: 99, to: 135 } });
     expect(ride.steps[1].planned.note).toBe("Climb at 4%");
     expect(ride.steps[1].done).toMatchObject({ status: "done", seconds: 900, avgPower: 141, rpe: 6, sources: { durationSeconds: "clock", avgPower: "typed" } });
+    // Per-metric marks of the session check: a warm-up shows time only; null is no target or not judged.
+    expect(ride.steps[0].marks).toEqual({ power: null, hr: null, cadence: null, time: "in" });
+    expect(ride.steps[1].marks).toEqual({ power: "in", hr: null, cadence: null, time: "in" });
+    expect(ride.steps[3]).toMatchObject({ marks: { power: "under" }, underTarget: true, overTarget: false });
     expect(ride.numbers).toMatchObject({
       seconds: 3900,
       avgPower: 126,

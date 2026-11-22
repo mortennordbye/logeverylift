@@ -16,14 +16,13 @@ import type { RidePlan, RidePlanStep } from "@/lib/utils/ride-timeline";
 import { doneRunNumbers, paceSeconds, paceText, type DoneRunNumbers } from "@/lib/utils/run-numbers";
 import type { DoneChart } from "@/lib/utils/ride-stream";
 import type { RunStreamNumbers, StepBounds } from "@/lib/utils/run-stream";
-import { runOutdoorText, runRowOfStep, runStepTitle, runStepZone, runTargetText } from "@/lib/utils/run-view";
+import { runOutdoorText, runRowOfStep, runStepTitle, runStepZone } from "@/lib/utils/run-view";
 import { minSec } from "@/lib/utils/thresholds";
+import { arrowOf, checkStep, hrBand, runHrText, type CheckRow } from "@/lib/utils/session-check";
 import { mainTarget, resolveTarget } from "@/lib/utils/workout-steps";
 
-/** A heart rate on a step shorter than this is not judged (4.2). */
-export const HR_JUDGED_FROM_S = 480;
-/** A belt within this of a pace range passes: a belt from a pace rounds to 0.5 km/h (4.2). */
-export const BELT_TOLERANCE_KMH = 0.25;
+/** Time on target reads a heart rate target only on a step this long (4.9); the marks follow the session check (src/lib/utils/session-check.ts). */
+export const HR_ON_TARGET_FROM_S = 480;
 
 const kmhOf = (ms: number) => Math.round(ms * 36) / 10;
 const ran = (log: StepLog | null): log is StepLog => !!log && (log.durationSeconds ?? 0) > 0;
@@ -165,15 +164,20 @@ export function totalKmText(steps: ResultStep[]): string {
 // ── Summary ─────────────────────────────────────────────────────────────────
 
 export type RunTile = { label: string; value: string; est?: boolean; sub?: string };
-/** mark: ↑ over a cap or above a range, ↓ under a range (4.2); null when it passes or is not judged. */
+/**
+ * mark: the session check's mark on the belt or pace, the first value of done
+ * (docs/plans/session-check.md, decision 3); hrMark on the heart rate. ↑ over a
+ * cap or above a range, ↓ under a range; null when in or not judged.
+ */
 export type RunSummaryRow = {
   key: string;
   title: string;
   plan: string | null;
   done: string;
   mark: "↑" | "↓" | null;
-  /** What the arrow judges: the belt or pace (the first value of done) or the heart rate. */
-  markOn: "speed" | "hr" | null;
+  hrMark: "↑" | "↓" | null;
+  /** A cadence that is out: "Cadence 150 ↓"; null otherwise. */
+  extra: string | null;
   quiet: boolean;
   onTarget: number | null;
 };
@@ -201,34 +205,13 @@ export type RunSummary = {
   noLoadReason: "numbers" | "effort" | "short" | null;
 };
 
-/** "HR under 162" → a cap, 161 the highest that passes; "HR 153-161" → a range. Read from the words the plan column shows, so the arrow judges what the runner sees. */
-function hrBand(text: string | null): { low: number | null; high: number | null; cap: boolean } | null {
-  if (!text) return null;
-  let m = /^HR under (\d+)$/.exec(text);
-  if (m) return { low: null, high: Number(m[1]) - 1, cap: true };
-  m = /^HR (\d+)-(\d+)$/.exec(text);
-  if (m) return { low: Number(m[1]), high: Number(m[2]), cap: false };
-  m = /^HR (\d+) or more$/.exec(text);
-  if (m) return { low: Number(m[1]), high: null, cap: false };
-  m = /^HR (\d+)$/.exec(text);
-  return m ? { low: Number(m[1]), high: Number(m[1]), cap: false } : null;
-}
-
-/** The heart rate words of a step as its mode shows them: the written target on a treadmill, the target of 4.2 outdoors. */
-function hrTextOf(s: RidePlanStep, plan: RidePlan): string | null {
-  const th = plan.thresholds;
-  if (plan.mode === "indoor") return mainTarget(s.step)?.metric === "hr" ? runTargetText(s, th) : null;
-  const o = runOutdoorText(s, th, plan.surface ?? "road");
-  return [o.main, o.second].find((t) => t?.startsWith("HR ")) ?? null;
-}
-
 /** "HR 162" for a cap (the footnote says a cap passes under it), "HR 153-161" for a range. */
 const shortHr = (t: string) => t.replace(/^HR under /, "HR ");
 
 /** The plan column: belt and heart rate on a treadmill ("8.2 · HR 162"), the outdoor target outdoors ("5:35-5:59", "HR 162"). */
 function planText(s: RidePlanStep, plan: RidePlan): string | null {
   const th = plan.thresholds;
-  const hr = hrTextOf(s, plan);
+  const hr = runHrText(s, plan);
   if (plan.mode === "indoor") {
     const zone = runStepZone(s.step, th);
     const belt = s.run?.belt != null ? (s.run.belt / 10).toFixed(1) : s.run?.carry ? "Same" : "Feel";
@@ -252,38 +235,16 @@ function doneText(log: StepLog | null, mode: RideMode): string {
 }
 
 /**
- * The arrow of a step (4.2): a heart rate target judges the average heart
- * rate (a cap passes at or under it, a step under 8 min is not judged); a
- * pace target on a treadmill judges the belt, within 0.25 km/h of the range.
- * Outdoors the pace is judged with a Garmin stream (step 7).
+ * The marks of a step by the session check's rule (docs/plans/session-check.md,
+ * decision 1): the belt's pace on a treadmill (outdoors the pace is shown, not
+ * judged), the heart rate (not on a step under 3 min) and the cadence.
  */
-function markOf(s: RidePlanStep, log: StepLog | null, plan: RidePlan): Pick<RunSummaryRow, "mark" | "markOn"> {
-  const none = { mark: null, markOn: null };
-  if (!done(log)) return none;
-  // Outdoors a pace that is the step's main target judges Garmin's pace of the step (step 7); its heart rate line is information.
-  const pace = plan.mode !== "indoor" && log.sources?.avgSpeed === "garmin" && log.avgSpeed !== null ? paceBounds(s, plan) : null;
-  if (pace) {
-    if (pace.low !== null && log.avgSpeed! < pace.low) return { mark: "↓", markOn: "speed" };
-    if (pace.high !== null && log.avgSpeed! > pace.high) return { mark: "↑", markOn: "speed" };
-    return none;
-  }
-  const band = hrBand(hrTextOf(s, plan));
-  if (band) {
-    const seconds = s.seconds ?? log.durationSeconds ?? 0;
-    if (log.avgHr === null || seconds < HR_JUDGED_FROM_S) return none;
-    if (band.high !== null && log.avgHr > band.high) return { mark: "↑", markOn: "hr" };
-    if (!band.cap && band.low !== null && log.avgHr < band.low) return { mark: "↓", markOn: "hr" };
-    return none;
-  }
-  const t = mainTarget(s.step);
-  const belt = beltOfLog(log);
-  if (plan.mode !== "indoor" || t?.metric !== "pace" || belt === null) return none;
-  const r = resolveTarget(t, "run", plan.thresholds);
-  if (r.low === null || r.high === null) return none;
-  const [slow, fast] = [Math.min(r.low, r.high) * 3.6, Math.max(r.low, r.high) * 3.6];
-  if (belt < slow - BELT_TOLERANCE_KMH) return { mark: "↓", markOn: "speed" };
-  if (belt > fast + BELT_TOLERANCE_KMH) return { mark: "↑", markOn: "speed" };
-  return none;
+function marksOf(plan: RidePlan, i: number, log: StepLog | null): Pick<RunSummaryRow, "mark" | "hrMark" | "extra"> {
+  if (!done(log)) return { mark: null, hrMark: null, extra: null };
+  const rows = checkStep(plan, i, log).rows;
+  const of = (m: CheckRow["metric"]) => arrowOf(rows.find((r) => r.metric === m)?.mark ?? "none");
+  const cadence = rows.find((r) => r.metric === "cadence" && arrowOf(r.mark));
+  return { mark: of("pace"), hrMark: of("hr"), extra: cadence ? `Cadence ${cadence.value.replace(/ spm$/, "")} ${arrowOf(cadence.mark)}` : null };
 }
 
 /**
@@ -298,10 +259,10 @@ export function runStepBounds(plan: RidePlan): Record<number, StepBounds | null>
     out[s.programSetId] = null;
     if (s.run?.block) continue;
     // The main target only: outdoors a pace with heart rate as information is judged on its pace.
-    const main = plan.mode === "indoor" ? hrTextOf(s, plan) : runOutdoorText(s, plan.thresholds, plan.surface ?? "road").main;
+    const main = plan.mode === "indoor" ? runHrText(s, plan) : runOutdoorText(s, plan.thresholds, plan.surface ?? "road").main;
     const band = hrBand(main);
     if (band) {
-      if ((s.seconds ?? s.estSeconds) >= HR_JUDGED_FROM_S) out[s.programSetId] = { series: "hr", low: band.low, high: band.high };
+      if ((s.seconds ?? s.estSeconds) >= HR_ON_TARGET_FROM_S) out[s.programSetId] = { series: "hr", low: band.low, high: band.high };
       continue;
     }
     out[s.programSetId] = plan.mode === "indoor" ? null : paceBounds(s, plan);
@@ -386,7 +347,8 @@ export function runSummary(plan: RidePlan, logs: Record<number, RunStepLog>, opt
         plan: `${work.length} × ${work[0]?.seconds ?? work[0]?.estSeconds ?? 0} s`,
         done: any ? `${ranReps} of ${work.length}` : "Not run",
         mark: null,
-        markOn: null,
+        hrMark: null,
+        extra: null,
         quiet: !any || ranReps === 0,
         onTarget: null,
       });
@@ -395,9 +357,9 @@ export function runSummary(plan: RidePlan, logs: Record<number, RunStepLog>, opt
     const log = logs[s.programSetId] ?? null;
     const text = doneText(log, plan.mode);
     const quiet = text === "Skipped" || text === "Not run";
-    rows.push({ key: s.key, title: steps[i].title, plan: planText(s, plan), done: text, ...markOf(s, log, plan), quiet, onTarget: quiet ? null : (stream?.onTarget[s.programSetId] ?? null) });
+    rows.push({ key: s.key, title: steps[i].title, plan: planText(s, plan), done: text, ...marksOf(plan, i, log), quiet, onTarget: quiet ? null : (stream?.onTarget[s.programSetId] ?? null) });
   });
-  const caps = plan.steps.some((s) => hrBand(hrTextOf(s, plan))?.cap);
+  const caps = plan.steps.some((s) => hrBand(runHrText(s, plan))?.cap);
   const footnote = `${treadmill ? "km/h" : "Pace /km"} · HR.${caps ? " Under an easy cap is a pass." : ""}`;
 
   const hasNumber = (l: StepLog) => [l.avgHr, l.maxHr, l.avgCadence, l.climbM].some((v) => v !== null) || (l.distanceMeters !== null && l.sources?.distanceMeters !== "belt");

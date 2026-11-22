@@ -9,6 +9,7 @@ import { HONEST_REPS_FROM } from "@/lib/utils/pr-provenance";
 import { callAction } from "@/lib/utils/stale-bundle";
 import type { SessionDetail, WorkoutSet } from "@/types/workout";
 import { ChevronRight, Dumbbell, Trash2 } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { BackLink, useReturnTo } from "@/components/ui/BackLink";
@@ -36,7 +37,8 @@ function formatDuration(ms: number): string {
 const INPUT_CLASS =
   "w-full rounded-xl bg-muted px-3 py-3 text-base outline-none focus:ring-2 focus:ring-primary";
 
-export function SessionDetailClient({ detail }: { detail: SessionDetail }) {
+/** `checkHref`: the step page of the workout's rides and runs (docs/plans/session-check.md, decision 7), when it has one. */
+export function SessionDetailClient({ detail, checkHref }: { detail: SessionDetail; checkHref?: string | null }) {
   const units = useUnits();
   const router = useRouter();
   const returnTo = useReturnTo();
@@ -205,6 +207,17 @@ export function SessionDetailClient({ detail }: { detail: SessionDetail }) {
           <p className="mt-3 text-sm text-muted-foreground">
             {detail.reactions.map((r) => `${r.emoji} ${r.fromName}`).join(" · ")}
           </p>
+        )}
+
+        {checkHref && !editing && (
+          <Link
+            href={checkHref}
+            className="mt-4 flex items-center justify-between rounded-2xl bg-card px-4 min-h-12 text-sm font-semibold text-primary active:opacity-70"
+            data-testid="session-check-link"
+          >
+            See every step
+            <ChevronRight className="h-4 w-4" aria-hidden />
+          </Link>
         )}
 
         {/* Exercises */}

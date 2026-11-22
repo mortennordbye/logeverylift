@@ -206,6 +206,8 @@ written target applies. Heart rate is 5 to 10 bpm higher off the bike; this is n
 the step is more than 10% of its time over the cap. A range shows ↓ or ↑ when the step's value is
 outside it. A heart rate on a step under 8 min is not judged.
 
+Since 2026-11-22 the judging rule is the one in [session-check.md](session-check.md), decision 1: heart rate is judged from 3 min, a 2 bpm margin, a treadmill belt by 5 s per km, outdoor pace shown and not judged.
+
 ### 4.3 Run life
 
 The bike rules of `bike-ride-logger.md` 4.3 apply, with these changes:

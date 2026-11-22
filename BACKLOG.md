@@ -10,6 +10,12 @@ When you finish an item, delete it. When you add an item, write enough that some
 
 ## New features — additive
 
+### Step page for a bike or run logged by hand, with no ride
+- **What:** The session check's step page (docs/plans/session-check.md, decision 7) reads the rides and runs of a workout. A bike or run exercise logged with "Log by hand" (no ride mode) has step rows in `workout_sets` but no `rides` row, so its step page shows no steps and History shows no "See every step" link. Build its plan from the program's step rows as `handResultsView` does, read the rows of that session, and judge them with `checkSteps`.
+- **Why deferred:** Work item 1 covered the app's rides and runs and the watch-only split; the hand-logged path needs the plan rebuilt from the program, which can have changed since the workout.
+- **Unblocked by:** The owner saying the hand-logged path should show steps, and which plan it judges against (today's program, or nothing when it changed).
+- **Touchpoints:** `src/lib/session-check.ts` (`workoutSessionCheck`, `hasSessionCheck`), `src/lib/bike-exercise-view.ts` (`handResultsView`).
+
 ### Turn on ride step alerts in prod (VAPID keys)
 - **What:** Ride and run step alerts (web push, docs/plans/bike-ride-logger.md 4.7, docs/plans/run-logger.md step 6) are built but off in prod, because no VAPID keys are set. Make a key pair (`npx web-push generate-vapid-keys`), store `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` and `VAPID_SUBJECT` (a `mailto:` address) in Bitwarden Secrets Manager (the `secrets` skill), add the three to the logeverylift ExternalSecret in the homelab repo (`k8s/talos/apps/logeverylift`), and check that the pod env has them and the log says `[ridePush] alerts send every 5s`. Then do the owner check of the brief's section 8: a ride with the phone locked, a push at each step and one minute before. And the run check: an outdoor run with the phone locked, an alert at each step and one at the start and end of a strides block.
 - **Why deferred:** The owner chose not to wire the keys in this build (bike D7, run R7).
