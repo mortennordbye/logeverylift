@@ -1021,7 +1021,8 @@ Where the build differs from it or from section 4, and why:
   14 days and takes the done bike and run sessions of the newest day that has any, in the
   day's order; each card reads `plannedSessionCheck` and `sessionMatch` with that session
   passed in. The rows are each metric of the sport over the work steps (`sessionVerdict`),
-  shaped in `src/lib/utils/last-session.ts`; the Garmin activity shows only where
+  shaped in `src/lib/utils/last-session.ts`. The time row is the whole session, done
+  against planned, as the plan page shows "2:16 · plan 2:15". The Garmin activity shows only where
   `sessionMatch` gives one (`garminAllowedFor`), else "Logged in the app". A saved layout
   from before gets it hidden, as every new widget.
 - Sizes from section 4 that the design does not show (Weekly volume M and L, Body weight L,
