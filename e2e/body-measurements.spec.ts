@@ -189,6 +189,7 @@ test("a step fits the screen with the keypad open and starts from the right valu
   await expect(page.getByTestId("measure-guide")).toBeVisible();
   await page.getByRole("button", { name: "Close" }).click();
   await expect(neck).toBeFocused();
+  await expect(page.getByTestId("measure-guide")).toBeHidden();
 
   // With the keypad closed the figures keep their full size: half the card each.
   const full = (await figure.boundingBox())!;
@@ -199,6 +200,13 @@ test("a step fits the screen with the keypad open and starts from the right valu
   await setKeypad(300);
   await expect.poll(() => bottomOf(next)).toBeLessThanOrEqual(544);
   expect(await bottomOf(neck)).toBeLessThanOrEqual(544);
+  // An iPhone keypad with its bar above it: about 380 px. The title stays in view,
+  // beside figures big enough to read, and Next stays above the keypad.
+  await setKeypad(380);
+  await expect.poll(() => bottomOf(next)).toBeLessThanOrEqual(464);
+  const heading = page.getByRole("heading", { name: "Neck", exact: true });
+  expect((await heading.boundingBox())!.y).toBeGreaterThanOrEqual(0);
+  expect((await figure.boundingBox())!.height).toBeGreaterThanOrEqual(110);
   await setKeypad(0);
   await expect.poll(async () => (await figure.boundingBox())!.height).toBeCloseTo(full.height, 0);
 

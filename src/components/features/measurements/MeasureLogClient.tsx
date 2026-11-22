@@ -35,6 +35,8 @@ function subtitle(part: BodyPart, side: BodySide): string {
 }
 
 /** The first sentence of where to measure, for the one line on a step. */
+/** The figures' height beside the text while the keypad is open. */
+const COMPACT_FIGURE_PX = 140;
 const shortWhere = (where: string) => where.split(/(?<=\.)\s/)[0];
 
 /** A typed value, or null when it is not a number from 1 to 300. */
@@ -64,6 +66,7 @@ export function MeasureLogClient({ rows, today }: { rows: MeasurementRow[]; toda
   const figures = useRef<HTMLDivElement>(null);
   const actions = useRef<HTMLDivElement>(null);
   const keypad = useKeyboardHeight(true);
+  const compact = keypad > 0;
   const [figureCap, setFigureCap] = useState<number | undefined>(undefined);
   const [, remeasure] = useReducer((n: number) => n + 1, 0);
 
@@ -217,17 +220,25 @@ export function MeasureLogClient({ rows, today }: { rows: MeasurementRow[]; toda
           next();
         }}
       >
-        <div>
-          <h1 className="text-xl font-semibold">{title}</h1>
-          <p className="text-xs text-muted-foreground">{subtitle(part, step.side)}</p>
-        </div>
-        <div ref={figures} className="rounded-xl bg-card px-3 pt-3 pb-1 shrink-0">
-          <PartViews tape={tape} rule={part.rule} name={part.name} className="w-full h-auto" maxHeight={figureCap} />
-          {/* Two lines high on every step, so the field stays in one place. */}
-          <p className="text-sm mt-2 h-10 line-clamp-2">{shortWhere(part.where)}</p>
-          <button type="button" onMouseDown={keepFocus} onClick={() => setGuideOpen(true)} className="min-h-[44px] text-sm text-primary font-medium">
-            How to measure ›
-          </button>
+        {!compact && (
+          <div>
+            <h1 className="text-xl font-semibold">{title}</h1>
+            <p className="text-xs text-muted-foreground">{subtitle(part, step.side)}</p>
+          </div>
+        )}
+        {/* With the keypad open the figures sit beside the text, so the title stays in view. */}
+        <div ref={figures} className={compact ? "rounded-xl bg-card p-3 shrink-0 flex items-center gap-3" : "rounded-xl bg-card px-3 pt-3 pb-1 shrink-0"}>
+          <div className={compact ? "w-[45%] shrink-0" : undefined}>
+            <PartViews tape={tape} rule={part.rule} name={part.name} className="w-full h-auto" maxHeight={compact ? Math.min(figureCap ?? COMPACT_FIGURE_PX, COMPACT_FIGURE_PX) : figureCap} />
+          </div>
+          <div className={compact ? "flex-1 min-w-0" : undefined}>
+            {compact && <h1 className="text-lg font-semibold leading-tight">{title}</h1>}
+            {/* Two lines high on every step, so the field stays in one place. */}
+            <p className={compact ? "text-sm mt-1 line-clamp-3" : "text-sm mt-2 h-10 line-clamp-2"}>{shortWhere(part.where)}</p>
+            <button type="button" onMouseDown={keepFocus} onClick={() => setGuideOpen(true)} className="min-h-[44px] text-sm text-primary font-medium">
+              How to measure ›
+            </button>
+          </div>
         </div>
         <div className="flex items-baseline justify-center gap-2 pt-1">
           <input
