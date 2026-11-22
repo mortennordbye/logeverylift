@@ -69,7 +69,7 @@ test("an endurance user's bike exercise shows the ride, switches mode, starts th
   await expect(page.getByTestId("ride-step-target")).toHaveText(["99 to 135 W", "135-146 W", "under 97 W", "135-146 W", "101-135 W"]);
   await expect(page.getByTestId("ride-step").nth(1)).toContainText("Work · 1 of 2");
   await expect(page.getByTestId("ride-step").nth(1)).toContainText("Talk in short sentences");
-  await expect(page.getByTestId("ride-step").nth(1)).toContainText("Z2-3 · 85-95 rpm");
+  await expect(page.getByTestId("ride-step").nth(1)).toContainText("Z2-3 · HR 139-152 · 85-95 rpm");
 
   await expect(page.getByRole("link", { name: "Log by hand" })).toHaveAttribute("href", new RegExp(`/programs/${programId}/workout/exercises/${peId}\\?hand=1&mode=(indoor|outdoor)$`));
 

@@ -12,7 +12,7 @@ import type { RideStepResult, RidePlan, RideTimeline } from "@/lib/utils/ride-ti
 import { rideClock } from "@/lib/utils/ride-screen";
 import { paceText } from "@/lib/utils/run-numbers";
 import { hrTargetZone } from "@/lib/utils/run-plan";
-import { KEEP_BELT, RUN_MODE_NAME, runOutdoorText, runRowOfStep, runStepTitle, runTargetText, runZoneCapText, runZoneRangeText } from "@/lib/utils/run-view";
+import { KEEP_BELT, RUN_MODE_NAME, runCadenceText, runHrText, runOutdoorShown, runRowOfStep, runStepTitle, runStepZone, runZoneCapText, runZoneRangeText } from "@/lib/utils/run-view";
 import { mainTarget } from "@/lib/utils/workout-steps";
 import { minSec } from "@/lib/utils/thresholds";
 
@@ -40,7 +40,7 @@ export type RunScreen = {
   treadmill: { belt: number | null; planBelt: number | null; incline: number | null } | null;
   /** The big target outdoors (pace, heart rate cap or effort); null on a treadmill or with no target. */
   target: { value: string; unit: string | null } | null;
-  /** The second line: heart rate and pace on a treadmill, the other target outdoors. */
+  /** The second line: heart rate, cadence, incline and the belt's pace on a treadmill; outdoors the zone, the planned pace and the cadence. */
   second: { label: string; value: string }[];
   /** "1 km · about 4:50" outdoors, "0.62 km left" on a treadmill distance step; null on a time step. */
   distanceLine: string | null;
@@ -105,10 +105,14 @@ export function runScreen(plan: RidePlan, t: RideTimeline, opts: { brick?: boole
 
   let target: RunScreen["target"] = null;
   const second: RunScreen["second"] = [];
+  const cadence = runCadenceText(s.step);
   if (treadmill) {
-    const hr = s.step.target?.metric === "hr" ? runTargetText(s, th) : null;
+    // The belt card above is the big target, in km/h; below it the heart rate, cadence and incline the step asks for.
+    const hr = runHrText(s, th);
     if (brickEasy) second.push({ label: "Effort", value: "4-5" }, { label: "Short quick steps", value: "" });
     if (hr) second.push({ label: "HR", value: hr.replace(/^HR /, "") });
+    if (cadence) second.push({ label: "Cadence", value: cadence });
+    if (s.step.incline !== undefined) second.push({ label: "Incline", value: `${s.step.incline}%` });
     const pace = cur.beltKmh ? beltPace(cur.beltKmh) : null;
     if (pace) second.push({ label: "Pace", value: pace });
   } else if (brickEasy) {
@@ -117,9 +121,13 @@ export function runScreen(plan: RidePlan, t: RideTimeline, opts: { brick?: boole
     const cap = runZoneCapText(2, th);
     if (cap.startsWith("HR ")) second.push({ label: "HR", value: cap.slice(3) });
   } else {
-    const o = runOutdoorText(s, th, surface);
+    // Heart rate leads; the planned pace and the cadence show below it, never a live pace: the app has no GPS.
+    const o = runOutdoorShown(s, th, surface);
     target = o.main ? big(o.main) : null;
-    if (o.second) second.push(o.second.startsWith("HR ") ? { label: "HR", value: o.second.slice(3) } : { label: "", value: o.second });
+    const zone = runStepZone(s.step, th);
+    if (zone !== null && o.main?.startsWith("HR ")) second.push({ label: `Z${zone}`, value: "" });
+    if (o.second) second.push({ label: "Planned pace", value: o.second });
+    if (cadence) second.push({ label: "Cadence", value: cadence });
   }
 
   let distanceLine: string | null = null;
@@ -139,7 +147,7 @@ export function runScreen(plan: RidePlan, t: RideTimeline, opts: { brick?: boole
       const work = plan.steps.find((p) => p.run?.block === afterBlock && p.step.type === "work") ?? after;
       nextTitle = `Strides ${work.round?.of ?? 1} × ${work.seconds ?? work.estSeconds} s`;
     } else nextTitle = `${afterBlock && after.step.type === "work" && after.round ? `Stride ${after.round.index}` : runStepTitle(after, th)} · ${len(after)}`;
-    const nextTarget = treadmill ? (after.run?.belt != null ? `${kmh(after.run.belt / 10)} km/h` : after.run?.carry ? KEEP_BELT : null) : runOutdoorText(after, th, surface).main;
+    const nextTarget = treadmill ? (after.run?.belt != null ? `${kmh(after.run.belt / 10)} km/h` : after.run?.carry ? KEEP_BELT : null) : runOutdoorShown(after, th, surface).main;
     next = { title: nextTitle, target: nextTarget };
   }
 

@@ -83,14 +83,15 @@ describe("plannedRideNumbers, the mockup ride", () => {
 });
 
 describe("bikeStepRows", () => {
-  it("indoors: watts from the FTP, zone, cadence, round and note", () => {
+  it("indoors: watts from the FTP, zone, heart rate, cadence, round and note", () => {
     const rows = bikeStepRows(buildRidePlan(mockupRide(), setIds, thresholds, "indoor"));
+    // The heart rate is the zone's, as the outdoor target gives it (docs/plans/strict-targets.md, decision 1).
     expect(rows.map((r) => [r.title, r.detail, r.target, r.time])).toEqual([
-      ["Warm-up", "Ramp · 85-95 rpm", "99 to 135 W", "15 min"],
-      ["Work · 1 of 2", "Z2-3 · 85-95 rpm", "135-146 W", "15 min"],
+      ["Warm-up", "Ramp · HR under 139 · 85-95 rpm", "99 to 135 W", "15 min"],
+      ["Work · 1 of 2", "Z2-3 · HR 139-152 · 85-95 rpm", "135-146 W", "15 min"],
       ["Easy", "Z1", "under 97 W", "5 min"],
-      ["Work · 2 of 2", "Z2-3 · 85-95 rpm", "135-146 W", "15 min"],
-      ["Work", "Z2", "101-135 W", "15 min"],
+      ["Work · 2 of 2", "Z2-3 · HR 139-152 · 85-95 rpm", "135-146 W", "15 min"],
+      ["Work", "Z2 · HR 139-152", "101-135 W", "15 min"],
     ]);
     expect(rows[1].note).toBe("Talk in short sentences");
     expect(rows.map((r) => r.easy)).toEqual([false, false, true, false, false]);
@@ -105,6 +106,19 @@ describe("bikeStepRows", () => {
       ["Z2-3 · 135-146 W with a power meter", "HR 139-152"],
       ["Z2 · 101-135 W with a power meter", "HR 139-152"],
     ]);
+  });
+  it("a heart rate second target: indoors next to the cadence, outdoors it leads (docs/plans/strict-targets.md)", () => {
+    const p = parseWorkout({
+      v: 2,
+      sport: "bike",
+      name: "Long ride",
+      steps: [{ type: "work", end: { type: "time", seconds: 8100 }, target: { metric: "power", anchor: "absolute", low: 110, high: 130 }, target2: { metric: "hr", anchor: "absolute", low: 146, high: 160 }, cadence: { low: 85, high: 95 } }],
+    });
+    if (!p.ok) throw new Error(JSON.stringify(p.errors));
+    const [inside] = bikeStepRows(buildRidePlan(p.workout, [1], thresholds, "indoor"));
+    expect([inside.detail, inside.target]).toEqual(["Z2 · HR 146-160 · 85-95 rpm", "110-130 W"]);
+    const [outside] = bikeStepRows(buildRidePlan(p.workout, [1], thresholds, "outdoor"));
+    expect([outside.detail, outside.target]).toEqual(["Z2 · 110-130 W with a power meter", "HR 146-160"]);
   });
   it("without an FTP: targets in % FTP", () => {
     const rows = bikeStepRows(buildRidePlan(mockupRide(), setIds, {}, "indoor"));

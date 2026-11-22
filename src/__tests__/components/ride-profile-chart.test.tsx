@@ -12,4 +12,11 @@ describe("RideProfileChart time axis", () => {
     const label = [...container.querySelectorAll("text")].find((t) => t.textContent === "5 min")!;
     expect(label.getAttribute("text-anchor")).toBe("end");
   });
+
+  it("drops the last minute tick when its label would touch the end label: 135 min has no 120", () => {
+    expect(timeTicks(135 * 60).map((t) => t.label)).toEqual(["0", "30", "60", "90", "135 min"]);
+    // A tick with room before the end label stays.
+    expect(timeTicks(90 * 60).map((t) => t.label)).toEqual(["0", "15", "30", "45", "60", "75", "90 min"]);
+    expect(timeTicks(150 * 60).map((t) => t.label)).toEqual(["0", "30", "60", "90", "120", "150 min"]);
+  });
 });

@@ -36,7 +36,7 @@ describe("runStepRows on a treadmill", () => {
   it("shows the mockup rows: belts, the heart rate cap with its start speed, the strides block as one row and the walk", () => {
     const rows = runStepRows(plan(BASE_RUN, OWNER, "indoor"));
     expect(rows.map((r) => [r.title, r.detail, r.time, r.chip])).toEqual([
-      ["Warm-up", "Belt 7.5 km/h · incline 1%", "10:00", "Z1"],
+      ["Warm-up", "Belt 7.5 km/h · HR under 153 · incline 1%", "10:00", "Z1"],
       ["Steady", "HR under 162 · start 8.2 km/h", "50:00", "Z2"],
       ["Strides 6 ×", "30 s · 13.0 km/h · 1:30 easy between", "12:00", "Fast"],
       ["Cool-down", "Walk 5.5 km/h", "3:00", "Z1"],
@@ -46,7 +46,7 @@ describe("runStepRows on a treadmill", () => {
 
   it("with no threshold pace: a heart rate step has no start speed, a written belt and the walk stay", () => {
     const rows = runStepRows(plan(BASE_RUN, { lthr_run: 180 }, "indoor"));
-    expect(rows.map((r) => r.detail)).toEqual(["Belt 7.5 km/h · incline 1%", "HR under 162 · set the belt by feel", "30 s · 13.0 km/h · 1:30 easy between", "Walk 5.5 km/h"]);
+    expect(rows.map((r) => r.detail)).toEqual(["Belt 7.5 km/h · HR under 153 · incline 1%", "HR under 162 · set the belt by feel", "30 s · 13.0 km/h · 1:30 easy between", "Walk 5.5 km/h"]);
   });
 
   it("with no LTHR: heart rate targets show as effort (4.2)", () => {
@@ -71,6 +71,22 @@ describe("runStepRows on a treadmill", () => {
       ["Easy", "2:00", null],
     ]);
     expect(rows[0].detail).toBe("Belt 10.5 km/h");
+  });
+});
+
+describe("all targets in the step list (docs/plans/strict-targets.md, decision 1)", () => {
+  const w = {
+    v: 2,
+    sport: "run",
+    name: "Steady",
+    steps: [{ type: "work", end: { type: "time", seconds: 1500 }, target: { metric: "pace", anchor: "absolute", low: 2.564, high: 2.632 }, target2: { metric: "hr", anchor: "absolute", low: 142, high: 155 }, cadence: { low: 168, high: 176 }, belt: 9.5, incline: 1 }],
+  };
+  it("on a treadmill: the belt, then the heart rate, the cadence in spm and the incline", () => {
+    expect(runStepRows(plan(w, OWNER, "indoor"))[0].detail).toBe("Belt 9.5 km/h · HR 142-155 · 168-176 spm · incline 1%");
+  });
+  it("outdoors: the heart rate leads, then the planned pace and the cadence; on Trail no pace", () => {
+    expect(runStepRows(plan(w, OWNER, "outdoor"))[0].detail).toBe("HR 142-155 · 6:19-6:30 /km · 168-176 spm");
+    expect(runStepRows(plan(w, OWNER, "outdoor", "trail"), "trail")[0].detail).toBe("HR 142-155 · 168-176 spm");
   });
 });
 
@@ -120,7 +136,8 @@ describe("outdoor targets (4.2)", () => {
       const p = plan(w, OWNER, "outdoor", surface);
       const rows = runStepRows(p, surface);
       // 75-80% of threshold speed is 129% of its pace time at the midpoint: Z1 (over 129%).
-      expect(rows.map((r) => r.detail)).toEqual(["HR under 153", "HR under 171"]);
+      // On Road the written pace shows after the cap as the planned pace, not a target (docs/plans/strict-targets.md).
+      expect(rows.map((r) => r.detail)).toEqual(surface === "road" ? ["HR under 153 · 7:03-7:32 /km", "HR under 171 · 6:08-6:25 /km"] : ["HR under 153", "HR under 171"]);
       expect(runChart(p).bars.map((b) => b.label).join(" ")).not.toContain("/km");
     }
     // With no LTHR: on Trail or snow an effort, on Road the pace as written.
@@ -132,7 +149,8 @@ describe("outdoor targets (4.2)", () => {
     const w = { v: 2, sport: "run", name: "Km", steps: [{ type: "work", end: { type: "distance", meters: 1000 }, target: { metric: "pace", anchor: "threshold_pace", low: 98, high: 102 } }] };
     const [row] = runStepRows(plan(w, OWNER, "outdoor"));
     expect(row.time).toBe("1 km");
-    expect(row.detail).toBe("5:32-5:45 /km · HR 171-179 · about 5:39");
+    // Heart rate leads, the planned pace after it (docs/plans/strict-targets.md).
+    expect(row.detail).toBe("HR 171-179 · 5:32-5:45 /km · about 5:39");
   });
 });
 

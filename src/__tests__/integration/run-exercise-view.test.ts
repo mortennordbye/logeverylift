@@ -126,7 +126,7 @@ describe("runExerciseView", () => {
     const view = (await runExerciseView(me, programExerciseId, "Run", sets))!;
     expect(view).toMatchObject({ defaultMode: "indoor", lthr: 180, liveRun: false, otherLive: null, paceSteps: false });
     expect(view.thresholdPace).toBeCloseTo(1000 / 339, 5);
-    expect(view.treadmill.rows.map((r) => r.detail)).toEqual(["Belt 7.5 km/h · incline 1%", "HR under 162 · start 8.2 km/h", "30 s · 13.0 km/h · 1:30 easy between", "Walk 5.5 km/h"]);
+    expect(view.treadmill.rows.map((r) => r.detail)).toEqual(["Belt 7.5 km/h · HR under 153 · incline 1%", "HR under 162 · start 8.2 km/h", "30 s · 13.0 km/h · 1:30 easy between", "Walk 5.5 km/h"]);
     expect(view.road.rows[0].detail).toBe("HR under 153");
 
     const session = await createSession(me, programId);

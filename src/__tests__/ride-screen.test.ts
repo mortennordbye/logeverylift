@@ -55,8 +55,8 @@ describe("rideScreen", () => {
     expect(s.clock).toBe("11:42");
     expect(s.target).toEqual({ value: "135-146", unit: "W" });
     expect(s.second).toEqual([
-      { label: "Cadence", value: "85-95" },
       { label: "HR", value: "139-152" },
+      { label: "Cadence", value: "85-95 rpm" },
     ]);
     expect(s.next).toEqual({ title: "Easy · 5 min", target: "under 97 W" });
     expect(s.lastMinute).toBe(false);
@@ -95,11 +95,14 @@ describe("rideScreen", () => {
     expect([s.remaining, s.clock, s.lap, s.canExtend]).toEqual([null, "0:30", true, false]);
   });
 
-  it("outdoors: heart rate as the big number, the power meter as the second line, Lap on every step", () => {
+  it("outdoors: heart rate as the big number, the zone and the power meter as the second line, no cadence, Lap on every step", () => {
     const s = rideScreen(outdoor, rideTimeline(outdoor, [ev("start", 0)], at(1000)))!;
     expect(s.header).toBe("Outdoor · step 2 of 6");
     expect(s.target).toEqual({ value: "139-152", unit: "bpm" });
-    expect(s.second).toEqual([{ label: "Power meter", value: "135-146 W" }]);
+    expect(s.second).toEqual([
+      { label: "Z2-3", value: "" },
+      { label: "Power meter", value: "135-146 W" },
+    ]);
     expect(s.next).toEqual({ title: "Easy · 5 min", target: "Effort 2" });
     expect(s.lap).toBe(true);
   });
@@ -109,6 +112,49 @@ describe("rideScreen", () => {
     expect(s.title).toBe("Easy");
     expect(s.target).toEqual({ value: "Effort 2", unit: null });
     expect(s.second).toContainEqual({ label: "Easy spin", value: "" });
+  });
+
+  describe("a step with a heart rate second target (docs/plans/strict-targets.md, decision 1)", () => {
+    const hrRide = parseWorkout({
+      v: 2,
+      sport: "bike",
+      name: "Long ride",
+      steps: [
+        { type: "work", end: { type: "time", seconds: 8100 }, target: { metric: "power", anchor: "absolute", low: 110, high: 130 }, target2: { metric: "hr", anchor: "absolute", low: 146, high: 160 }, cadence: { low: 85, high: 95 } },
+        { type: "work", end: { type: "time", seconds: 120 }, target: { metric: "power", anchor: "ftp", low: 110, high: 120 }, target2: { metric: "hr", anchor: "absolute", low: 165, high: 175 } },
+      ],
+    });
+    if (!hrRide.ok) throw new Error(JSON.stringify(hrRide.errors));
+    const screen = (mode: "indoor" | "outdoor", th: Record<string, number>, sec: number) => {
+      const plan = buildRidePlan(hrRide.workout, [21, 22], th, mode);
+      return rideScreen(plan, rideTimeline(plan, [ev("start", 0)], at(sec)))!;
+    };
+
+    it("indoors: big power, then the step's heart rate and the cadence in rpm", () => {
+      const s = screen("indoor", thresholds, 60);
+      expect(s.target).toEqual({ value: "110-130", unit: "W" });
+      expect(s.second).toEqual([
+        { label: "HR", value: "146-160" },
+        { label: "Cadence", value: "85-95 rpm" },
+      ]);
+    });
+
+    it("outdoors: the step's heart rate is the big number over the zone's, the zone and watts below, no cadence", () => {
+      const s = screen("outdoor", thresholds, 60);
+      expect(s.target).toEqual({ value: "146-160", unit: "bpm" });
+      expect(s.second).toEqual([
+        { label: "Z2", value: "" },
+        { label: "Power meter", value: "110-130 W" },
+      ]);
+    });
+
+    it("outdoors with no bike LTHR: the step's heart rate takes the place of the effort", () => {
+      expect(screen("outdoor", { ftp: 180 }, 60).target).toEqual({ value: "146-160", unit: "bpm" });
+    });
+
+    it("outdoors on work under 3 min: the effort stays, as heart rate is too slow for it", () => {
+      expect(screen("outdoor", thresholds, 8100 + 30).target).toEqual({ value: "Effort 8", unit: null });
+    });
   });
 
   it("is null before the start and after the end", () => {

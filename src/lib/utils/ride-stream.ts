@@ -14,7 +14,7 @@
 
 import { climbMeters } from "@/lib/garmin/analytics/decoupling";
 import { normalizedPower, powerLoad, sampleDurations } from "@/lib/garmin/analytics/load";
-import { CHART } from "@/lib/utils/bike-ride-view";
+import { CHART, timeTicks } from "@/lib/utils/bike-ride-view";
 import { bikeHrZone, powerZone } from "@/lib/utils/bike-outdoor";
 import type { RideMode } from "@/db/schema/rides";
 import type { RidePlanStep } from "@/lib/utils/ride-timeline";
@@ -460,11 +460,7 @@ export function rideDoneChart(streams: RideStreams, steps: PlanStepLike[], split
     const stepW = maxW > 450 ? 100 : 50;
     for (let wt = stepW; wt < (ftp ? ftp * 0.9 : maxW * 0.9); wt += stepW) yTicks.push({ y: yW(wt), label: `${wt}` });
   }
-  const minutes = total / 60;
-  const every = minutes <= 90 ? 15 : minutes <= 180 ? 30 : 60;
-  const xTicks: DoneChart["xTicks"] = [];
-  for (let m = 0; m <= minutes - every / 2; m += every) xTicks.push({ x: +(left + ((m * 60) / total) * span).toFixed(1), label: `${m}` });
-  xTicks.push({ x: right, label: `${Math.round(minutes)} min` });
+  const xTicks = timeTicks(total);
 
   return {
     bands,
