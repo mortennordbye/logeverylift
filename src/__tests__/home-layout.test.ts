@@ -27,7 +27,7 @@ afterEach(() => vi.restoreAllMocks());
 describe("resolveLayout (U1)", () => {
   it("null gives the default per audience", () => {
     expect(visible(resolveLayout(null, LIFTER))).toEqual(["title", "today", "week"]);
-    expect(visible(resolveLayout(null, ENDURANCE))).toEqual(["title", "today", "enduranceToday", "week"]);
+    expect(visible(resolveLayout(null, ENDURANCE))).toEqual(["title", "today", "enduranceToday", "week", "lastSession"]);
     expect(resolveLayout(null, LIFTER)).toEqual(defaultLayout(LIFTER));
   });
 
@@ -198,8 +198,8 @@ describe("the default home per user type (U2)", () => {
     expect(parts(LIFTER, { afterTraining: ["missed"] })).toEqual(["home-title", "today", "missed", "week"]);
   });
 
-  it("endurance: title, today, endurance today, did you do it, week", () => {
-    expect(parts(ENDURANCE, { afterTraining: ["didYouDoIt"] })).toEqual(["home-title", "today", "enduranceToday", "didYouDoIt", "week"]);
+  it("endurance: title, today, endurance today, did you do it, week, last session", () => {
+    expect(parts(ENDURANCE, { afterTraining: ["didYouDoIt"] })).toEqual(["home-title", "today", "enduranceToday", "didYouDoIt", "week", "lastSession"]);
   });
 
   it("the slots hold the notices in the old page's order", () => {

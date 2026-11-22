@@ -19,6 +19,7 @@ const loads = vi.hoisted(() => ({
   trainingLoad: vi.fn(),
   weeklySets: vi.fn(),
   raceCountdown: vi.fn(),
+  lastSession: vi.fn(),
 }));
 vi.mock("@/components/features/home/widgets/recent-prs/load", () => ({ loadRecentPrs: loads.recentPrs }));
 vi.mock("@/components/features/home/widgets/friends-activity/load", () => ({ loadFriendsActivity: loads.friendsActivity }));
@@ -28,6 +29,7 @@ vi.mock("@/components/features/home/widgets/body-weight/load", () => ({ loadBody
 vi.mock("@/components/features/home/widgets/training-load/load", () => ({ loadTrainingLoad: loads.trainingLoad }));
 vi.mock("@/components/features/home/widgets/weekly-sets/load", () => ({ loadWeeklySets: loads.weeklySets }));
 vi.mock("@/components/features/home/widgets/race-countdown/load", () => ({ loadRaceCountdown: loads.raceCountdown }));
+vi.mock("@/components/features/home/widgets/last-session/load", () => ({ loadLastSession: loads.lastSession }));
 vi.mock("@/components/ui/theme-provider", () => ({ useTheme: () => ({ weeklyGoal: 4 }) }));
 vi.mock("@/components/features/SkipAutoDayButton", () => ({ SkipAutoDayButton: () => null }));
 vi.mock("@/components/features/guided/SavedRunLink", () => ({ SavedRunLink: () => null }));
@@ -43,6 +45,7 @@ const SAMPLE_TEXT: Record<keyof typeof RENDERERS, RegExp> = {
   date: /Friday, 13 November/,
   enduranceToday: /Tempo run/,
   week: /^13$/,
+  lastSession: /Long ride · Sun 22 Nov/,
   weeklyGoal: /^of 4$/,
   recentPrs: /Bench Press/,
   friendsActivity: /Ola N/,
