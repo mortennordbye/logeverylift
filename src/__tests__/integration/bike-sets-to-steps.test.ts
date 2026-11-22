@@ -214,7 +214,8 @@ describe("migrateBikeSetsToSteps", () => {
     const { saveExerciseSteps } = await import("@/lib/actions/program-steps");
     const res = await saveExerciseSteps({
       programExerciseId: pe,
-      workout: { v: 2, sport: "bike", name: "Ride", steps: [{ type: "work", end: { type: "time", seconds: 600 } }, { type: "work", end: { type: "time", seconds: 600 } }] },
+      // Full work steps: the strict check (docs/plans/strict-targets.md, decision 2).
+      workout: { v: 2, sport: "bike", name: "Ride", steps: [{ type: "work", end: { type: "time", seconds: 600 }, target: { metric: "power", anchor: "ftp", zone: 2 }, target2: { metric: "hr", anchor: "lthr", zone: 2 }, cadence: { low: 85, high: 95 } }, { type: "work", end: { type: "time", seconds: 600 }, target: { metric: "power", anchor: "ftp", zone: 2 }, target2: { metric: "hr", anchor: "lthr", zone: 2 }, cadence: { low: 85, high: 95 } }] },
     });
     expect(res.success, !res.success ? res.error : "").toBe(true);
     expect((await liveSets(pe)).map((r) => r.restTimeSeconds)).toEqual([0, 0]);

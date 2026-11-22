@@ -16,6 +16,7 @@ import { RUN_TEST_MODES, RUN_TEST_NAME, RUN_TEST_TEXT, runTestWorkout } from "@/
 import { callAction } from "@/lib/utils/stale-bundle";
 import { workoutPlannedLoad } from "@/lib/utils/step-results";
 import type { Units } from "@/lib/utils/units";
+import { stepTargetKey, workStepGaps, workStepMissing, workStepRuleText, workoutStepKeys } from "@/lib/utils/work-step-gaps";
 import {
   SWIM_EQUIPMENT,
   SWIM_STROKES,
@@ -169,6 +170,9 @@ export function StepsEditor({
   const [testSheet, setTestSheet] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The steps the server holds: the strict work step check leaves them as they
+  // are (docs/plans/strict-targets.md, decision 3). A new exercise holds none.
+  const [known, setKnown] = useState<ReadonlySet<string>>(() => (unsaved && !converted ? new Set() : workoutStepKeys(initial)));
   const sport = workout.sport;
 
   const change = (w: Workout) => {
@@ -178,6 +182,10 @@ export function StepsEditor({
   };
 
   const check = useMemo(() => parseWorkout(workout), [workout]);
+  const gap = useMemo(() => {
+    const first = check.ok ? workStepGaps(check.workout, known)[0] : undefined;
+    return first ? `Step ${first.number} · ${workStepRuleText(sport)}` : null;
+  }, [check, known, sport]);
   const totals = useMemo(() => {
     if (!check.ok) return null;
     const est = estimateWorkout(check.workout, thresholds);
@@ -194,6 +202,10 @@ export function StepsEditor({
       setError(check.errors.slice(0, 2).map((e) => e.message).join(". "));
       return;
     }
+    if (gap) {
+      setError(gap);
+      return;
+    }
     setSaving(true);
     const r = await callAction(saveExerciseSteps({ programExerciseId, workout: check.workout }));
     setSaving(false);
@@ -202,6 +214,7 @@ export function StepsEditor({
       return;
     }
     setDirty(false);
+    setKnown(workoutStepKeys(check.workout));
     router.refresh();
   }
 
@@ -320,9 +333,9 @@ export function StepsEditor({
       </div>
 
       <div className="mt-auto px-4 pt-4 pb-6 flex flex-col gap-2">
-        {(error || !check.ok) && (
+        {(error || !check.ok || gap) && (
           <p role="alert" className="text-sm text-destructive" data-testid="steps-error">
-            {error ?? (!check.ok ? check.errors[0].message : null)}
+            {error ?? (!check.ok ? check.errors[0].message : gap)}
           </p>
         )}
         <button
@@ -382,6 +395,8 @@ export function StepsEditor({
             units={units}
             thresholds={thresholds}
             inBlock={inBlock}
+            test={workout.test}
+            known={known}
             onDone={(s) => {
               change(withStep(workout, editing, s));
               setEditing(null);
@@ -490,6 +505,8 @@ function StepSheet({
   units,
   thresholds,
   inBlock,
+  test,
+  known,
   onDone,
   onDelete,
 }: {
@@ -498,6 +515,9 @@ function StepSheet({
   units: Units;
   thresholds: ThresholdValues;
   inBlock: boolean;
+  test: Workout["test"];
+  /** The steps the server holds, which keep their targets as they are. */
+  known: ReadonlySet<string>;
   onDone: (s: WorkoutStep) => void;
   onDelete: () => void;
 }) {
@@ -513,6 +533,11 @@ function StepSheet({
   const target = resolveStepTarget(s, sport, thresholds, units);
   const one = parseWorkout({ v: 2, sport, name: "Step", steps: inBlock ? [{ type: "repeat", count: 2, steps: [s] }] : [s] });
   const problem = one.ok ? null : plainProblem(one.errors[0]);
+  // A bike or run work step names a target for inside and outside (docs/plans/strict-targets.md, decision 2).
+  const missing = workStepMissing(s, sport, test);
+  const blocked = missing.length > 0 && !known.has(stepTargetKey(s));
+  // Heart rate as the second target, when the main one is not heart rate (and a second one is not another metric).
+  const hrField = sport !== "swim" && s.target && s.target.metric !== "hr" && (s.target2 === undefined || s.target2.metric === "hr") && (s.type === "work" || s.target2 !== undefined);
 
   return (
     <PlanSheetPanel
@@ -521,7 +546,7 @@ function StepSheet({
       testId="step-sheet"
       footer={
         <>
-          <button type="button" onClick={() => onDone(s)} disabled={!!problem} className="min-h-12 rounded-2xl bg-primary px-4 py-3 text-base font-semibold text-primary-foreground active:opacity-80 disabled:opacity-40">
+          <button type="button" onClick={() => onDone(s)} disabled={!!problem || blocked} className="min-h-12 rounded-2xl bg-primary px-4 py-3 text-base font-semibold text-primary-foreground active:opacity-80 disabled:opacity-40">
             Done
           </button>
           <button type="button" onClick={onDelete} className="min-h-11 text-[15px] font-medium text-destructive active:opacity-70">
@@ -578,7 +603,7 @@ function StepSheet({
         <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Target</h3>
         <div className="flex flex-wrap gap-2">
           {CHOICES[sport].map((c) => (
-            <button key={c.id} type="button" aria-pressed={choice === c.id} onClick={() => set({ target: defaultTarget(c.id), ramp: undefined, free: undefined, ...(c.id === "none" && { target2: undefined }) })} className={chip(choice === c.id)}>
+            <button key={c.id} type="button" aria-pressed={choice === c.id} onClick={() => set({ target: defaultTarget(c.id), ramp: undefined, free: undefined, ...((c.id === "none" || (c.id === "hrZone" && s.target2?.metric === "hr")) && { target2: undefined }) })} className={chip(choice === c.id)}>
               {c.label}
             </button>
           ))}
@@ -590,6 +615,28 @@ function StepSheet({
           </p>
         )}
       </section>
+
+      {hrField && (
+        <section className="flex flex-col gap-2" data-testid="step-hr">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Heart rate</h3>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" aria-pressed={!s.target2} aria-label="No heart rate" onClick={() => set({ target2: undefined })} className={chip(!s.target2)}>
+              None
+            </button>
+            <button type="button" aria-pressed={!!s.target2} aria-label="Heart rate zone" onClick={() => set({ target2: s.target2 ?? defaultTarget("hrZone") })} className={chip(!!s.target2)}>
+              HR zone
+            </button>
+          </div>
+          {s.target2 && <TargetFields target={s.target2} onChange={(t) => set({ target2: t })} />}
+        </section>
+      )}
+
+      {sport === "run" && (
+        <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+          Belt in km/h
+          <input aria-label="Belt in km/h" inputMode="decimal" className={input} defaultValue={s.belt ?? ""} onChange={(ev) => set({ belt: ev.target.value.trim() ? Number(ev.target.value.replace(",", ".")) || 0 : undefined })} />
+        </label>
+      )}
 
       {sport !== "swim" && (
         <section className="flex flex-col gap-2">
@@ -645,9 +692,9 @@ function StepSheet({
         <input aria-label="Note" maxLength={140} className={input} value={s.note ?? ""} onChange={(ev) => set({ note: ev.target.value.trim() ? ev.target.value : undefined })} />
       </label>
 
-      {problem && (
-        <p role="alert" className="text-sm text-destructive">
-          {problem}
+      {(problem || missing.length > 0) && (
+        <p role="alert" className="text-sm text-destructive" data-testid="step-problem">
+          {problem ?? workStepRuleText(sport)}
         </p>
       )}
     </PlanSheetPanel>
@@ -660,6 +707,7 @@ function plainProblem(e: { path: string; message: string }): string {
   if (e.path.endsWith("end.seconds")) return "The time must be at least 5 seconds";
   if (/must be at most (high|offsetHigh)/.test(e.message)) return "The target's From must be at most its To";
   if (e.path.includes("cadence")) return "Give the cadence as a range from low to high";
+  if (e.path.endsWith("belt")) return "The belt speed must be 1 to 25 km/h with at most one decimal";
   if (e.path.includes("sendOffSeconds")) return e.message.startsWith("Too") ? "The send-off must be 20 to 600 seconds" : `The send-off is ${e.message}`;
   if (e.path.includes("target") && /^must be /.test(e.message)) return `The target ${e.message}`;
   if (/^Too (small|big)/.test(e.message)) return "A number is out of range";

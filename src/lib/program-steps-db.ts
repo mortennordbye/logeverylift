@@ -9,8 +9,9 @@
 
 import { db } from "@/db";
 import { exercises, programExercises, programSets, programs, users, workoutSessions, workoutSets } from "@/db/schema";
-import { EMPTY_STEP_FIELDS, checkStepRows, plainSetsToStepRows, stepOfRow, stepProblemText, workoutToRows, type PlannedStepSnapshot, type StepRow } from "@/lib/utils/program-steps";
+import { EMPTY_STEP_FIELDS, buildWorkout, checkStepRows, plainSetsToStepRows, plainSetsToWorkout, stepOfRow, stepProblemText, workoutToRows, type PlannedStepSnapshot, type StepRow } from "@/lib/utils/program-steps";
 import type { Tx } from "@/lib/plan-revisions";
+import { needsText, stepTargetKey, workStepGaps, workStepRuleText } from "@/lib/utils/work-step-gaps";
 import { WORKOUT_LIMITS, type Workout, type WorkoutSport } from "@/lib/utils/workout-steps";
 import { and, asc, eq, gte, inArray, isNotNull, isNull } from "drizzle-orm";
 
@@ -57,6 +58,69 @@ export async function assertStepRows(ex: Executor, programExerciseId: number): P
     test: slot?.rideTest,
   });
   if (problems.length) throw new StepRowsError(stepProblemText(problems));
+}
+
+const slotSport = async (ex: Executor, programExerciseId: number) => {
+  // plan-read: includes deleted (the slot being written, for its sport, test and name)
+  const [slot] = await ex
+    .select({ discipline: exercises.discipline, poolLengthM: programExercises.poolLengthM, rideTest: programExercises.rideTest, name: programs.name })
+    .from(programExercises)
+    .innerJoin(exercises, eq(exercises.id, programExercises.exerciseId))
+    .innerJoin(programs, eq(programs.id, programExercises.programId))
+    .where(eq(programExercises.id, programExerciseId));
+  return slot?.discipline === "bike" || slot?.discipline === "run" ? { ...slot, sport: slot.discipline } : null;
+};
+
+/**
+ * The steps a bike or run exercise holds before a write, as step keys
+ * (`stepTargetKey`, docs/plans/strict-targets.md, decision 3): its step rows,
+ * and its plain sets as the steps settleStepRows turns them into. The strict
+ * work step check leaves these steps as they are.
+ */
+export async function heldStepKeys(ex: Executor, programExerciseId: number): Promise<Set<string>> {
+  const slot = await slotSport(ex, programExerciseId);
+  if (!slot) return new Set();
+  const rows = (await ex
+    .select()
+    .from(programSets)
+    .where(and(eq(programSets.programExerciseId, programExerciseId), isNull(programSets.deletedAt)))
+    .orderBy(asc(programSets.setNumber), asc(programSets.id))) as (StepRow & { targetHeartRateZone: number | null; sessionRole: string | null; setType: string | null })[];
+  const steps = rows.flatMap((r) => stepOfRow(r, slot.sport) ?? []);
+  const plain = rows.filter((r) => r.stepKind == null);
+  if (plain.length) steps.push(...plainSetsToWorkout(plain, { sport: slot.sport, name: slot.name }).steps.flatMap((n) => (n.type === "repeat" ? n.steps : [n])));
+  return new Set(steps.map(stepTargetKey));
+}
+
+/**
+ * The strict work step check (docs/plans/strict-targets.md, decisions 2 and
+ * 3), after a write from new step input: throws StepRowsError when a bike or
+ * run work step that is not in `known` (heldStepKeys before the write) lacks
+ * a required target. Not part of assertStepRows, which every copy and share
+ * runs: only MCP edit_program_exercise and saveExerciseSteps call it.
+ */
+export async function assertNewWorkSteps(ex: Executor, programExerciseId: number, known: ReadonlySet<string>): Promise<void> {
+  const slot = await slotSport(ex, programExerciseId);
+  if (!slot) return;
+  const rows = await ex
+    .select()
+    .from(programSets)
+    .where(and(eq(programSets.programExerciseId, programExerciseId), isNotNull(programSets.stepKind), isNull(programSets.deletedAt)));
+  if (rows.length === 0) return;
+  const built = buildWorkout(rows as StepRow[], { sport: slot.sport, name: slot.name, poolLengthM: slot.poolLengthM, test: slot.rideTest });
+  // A broken tree is assertStepRows' to report.
+  if ("problems" in built) return;
+  const gaps = workStepGaps(built.workout, known);
+  if (gaps.length === 0) return;
+  const setOf = (path: string) => {
+    const m = /^steps\[(\d+)\](?:\.steps\[(\d+)\])?$/.exec(path)!;
+    return built.nodeSets[Number(m[1])][m[2] !== undefined ? Number(m[2]) : 0];
+  };
+  throw new StepRowsError(
+    gaps
+      .slice(0, 5)
+      .map((g) => `Set ${setOf(g.path)} · ${workStepRuleText(slot.sport)}, missing ${needsText(g.missing)}`)
+      .join(". "),
+  );
 }
 
 /**

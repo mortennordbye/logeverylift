@@ -47,7 +47,14 @@ const intervals: Workout = {
       type: "repeat",
       count: 4,
       steps: [
-        { type: "work", end: { type: "distance", meters: 1000 }, target: { metric: "pace", anchor: "threshold_pace", low: 98, high: 102 } },
+        {
+          type: "work",
+          end: { type: "distance", meters: 1000 },
+          target: { metric: "pace", anchor: "threshold_pace", low: 98, high: 102 },
+          target2: { metric: "hr", anchor: "lthr", zone: 4 },
+          cadence: { low: 176, high: 186 },
+          belt: 14,
+        },
         { type: "recovery", end: { type: "time", seconds: 120 } },
       ],
     },

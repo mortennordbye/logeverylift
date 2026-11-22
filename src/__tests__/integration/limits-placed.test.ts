@@ -135,12 +135,12 @@ describe("heavy_legs_before_key", () => {
       sport: "run",
       name: "Base",
       steps: [
-        { type: "work", end: { type: "time", seconds: 50 * MIN }, target: { metric: "hr", anchor: "lthr", zone: 2 } },
+        { type: "work", end: { type: "time", seconds: 50 * MIN }, target: { metric: "hr", anchor: "lthr", zone: 2 }, belt: 9.5, cadence: { low: 166, high: 176 } },
         {
           type: "repeat",
           count: 6,
           steps: [
-            { type: "work", end: { type: "time", seconds: 20 }, target: { metric: "rpe", anchor: "absolute", low: 8, high: 8 } },
+            { type: "work", end: { type: "time", seconds: 20 }, target: { metric: "rpe", anchor: "absolute", low: 8, high: 8 }, target2: { metric: "hr", anchor: "lthr", zone: 3 }, belt: 13, cadence: { low: 180, high: 190 } },
             { type: "recovery", end: { type: "time", seconds: 100 } },
           ],
         },

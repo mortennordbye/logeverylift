@@ -140,7 +140,8 @@ describe("edit_program_exercise with run steps", () => {
       operation: "update",
       programExerciseId: slots[0].programExerciseId,
       sets: [
-        { setNumber: 1, stepKind: "work", durationSeconds: 30, beltKmh: 13, inclinePercent: 0.5 },
+        // Heart rate and cadence too: the strict work step check (docs/plans/strict-targets.md, decision 2).
+        { setNumber: 1, stepKind: "work", durationSeconds: 30, beltKmh: 13, inclinePercent: 0.5, targets: [{ metric: "hr", anchor: "lthr", zone: 3 }], cadenceLow: 180, cadenceHigh: 190 },
         { setNumber: 2, stepKind: "recovery", durationSeconds: 90, beltKmh: 7 },
       ],
       reason: "Strides",

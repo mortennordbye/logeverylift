@@ -220,6 +220,9 @@ describe("step 1 review fixes", () => {
   });
 });
 
+/** A run work step with the targets the strict check needs (docs/plans/strict-targets.md, decision 2). */
+const runWork = (seconds: number) => ({ type: "work", end: { type: "time", seconds }, target: z(2), belt: 9.5, cadence: { low: 166, high: 176 } });
+
 describe("no writer stores a plain run set for an endurance user", () => {
   it("edit_program_exercise turns plain run sets into steps", async () => {
     const call = mcpTools(registerProgramTools, me);
@@ -295,7 +298,7 @@ describe("no writer stores a plain run set for an endurance user", () => {
     const { saveExerciseSteps } = await import("@/lib/actions/program-steps");
     const res = await saveExerciseSteps({
       programExerciseId: slots[0].programExerciseId,
-      workout: { v: 2, sport: "run", name: "Run", steps: [{ type: "work", end: { type: "time", seconds: 600 } }, { type: "work", end: { type: "time", seconds: 600 } }] },
+      workout: { v: 2, sport: "run", name: "Run", steps: [runWork(600), runWork(600)] },
     });
     expect(res.success, !res.success ? res.error : "").toBe(true);
     // The rest of each plain set stays with its place, as a rest step.

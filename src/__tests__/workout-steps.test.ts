@@ -7,6 +7,7 @@ import {
   type Workout,
   type WorkoutStep,
 } from "@/lib/utils/workout-steps";
+import { workStepGaps } from "@/lib/utils/work-step-gaps";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -35,6 +36,14 @@ describe("the resource doc", () => {
   it("has the examples and the wrong examples", () => {
     expect(examples.length).toBeGreaterThanOrEqual(4);
     expect(blocks.filter((b) => b.wrong).length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("writes every bike and run work step with the targets the strict check needs", () => {
+    for (const e of examples) {
+      const r = parseWorkout(e);
+      if (!r.ok) throw new Error(JSON.stringify(r.errors));
+      expect({ name: e.name, gaps: workStepGaps(r.workout) }).toEqual({ name: e.name, gaps: [] });
+    }
   });
 
   it.each(blocks.map((b, i) => [i, b]))("block %i parses, or is refused when marked wrong", (_i, b) => {
