@@ -77,7 +77,7 @@ test("an endurance user's bike exercise shows the ride, switches mode, starts th
   await expect(page.getByTestId("ride-profile")).toHaveCount(0);
   await expect(page.getByTestId("ride-step-target")).toHaveText(["HR under 139", "HR 139-152", "Effort 2 · easy spin", "HR 139-152", "HR 139-152"]);
 
-  // The workout layout opens the session in the background; Start ride needs it.
+  // The workout page opens the session in the background; Start ride needs it.
   const db = testDb();
   await expect.poll(async () => (await db.select().from(workoutSessions).where(eq(workoutSessions.userId, userId))).length).toBe(1);
   await page.getByRole("button", { name: "Start ride" }).click();

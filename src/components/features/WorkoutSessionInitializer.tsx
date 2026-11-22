@@ -8,9 +8,22 @@ import { getActiveSessionCompletedProgramSetIds } from "@/lib/actions/workout-se
 import { localDateStr } from "@/lib/utils/user-date";
 
 /**
- * Mounted in the workout layout so every route under /programs/[id]/workout/*
- * — including deep links straight to an exercise — guarantees a workout
- * session exists for the visited program. Without this, deep links would
+ * The session this page load already checked or started. Each workout page
+ * mounts the initializer, so a later page of the same workout skips the
+ * server round trip.
+ */
+let checkedSessionId: number | null = null;
+/**
+ * The program a new session is being created for. A tap to the next page can
+ * mount the initializer again before the first create answers; without this
+ * it would create a second session.
+ */
+let startingProgramId: number | null = null;
+
+/**
+ * Mounted on every page under /programs/[id]/workout/* (WorkoutSessionStart)
+ * — including deep links straight to an exercise — so a workout session
+ * exists for the visited program. Without this, deep links would
  * inherit a stale session from a different program (or none at all), and
  * `logWorkoutSet` would silently fail when the user tapped a set.
  */
@@ -18,12 +31,19 @@ export function WorkoutSessionInitializer({
   programId,
   timeZone,
   planVersion,
+  startNew = true,
 }: {
   programId: number;
   /** The user's stored zone; null dates the session in the phone's zone. */
   timeZone: string | null;
   /** The program's version now; kept for a new workout as the version it started on. */
   planVersion: number | null;
+  /**
+   * False on a page that only shows a finished ride or run: it resumes an
+   * open workout but never starts one, so opening a summary leaves no empty
+   * workout behind.
+   */
+  startNew?: boolean;
 }) {
   const workoutSession = useWorkoutSession();
   const hydrateCompletedSetIds = workoutSession?.hydrateCompletedSetIds;
@@ -115,6 +135,8 @@ export function WorkoutSessionInitializer({
     }
 
     const startFreshSession = async () => {
+      if (startingProgramId === programId) return;
+      startingProgramId = programId;
       const startTime = new Date();
       // Unreachable server: leave the session unset, and the next mount of the
       // workout layout tries again.
@@ -126,7 +148,9 @@ export function WorkoutSessionInitializer({
         intendedDate,
         ...(plannedSessionId != null && { plannedSessionId }),
       }).catch(() => null);
+      startingProgramId = null;
       if (result?.success) {
+        checkedSessionId = result.data.id;
         workoutSession?.setActiveWorkout(
           programId,
           startTime.toISOString(),
@@ -149,12 +173,31 @@ export function WorkoutSessionInitializer({
       // Only a definite `false` replaces it — a failed check means offline or
       // server down, where the session we have is the best we've got.
       const sessionId = storedSessionId;
+      const start = storedStart;
       // The version the workout started on, not today's: a resumed workout
       // keeps comparing against the plan it was shown.
-      workoutSession?.setActiveWorkout(programId, storedStart, sessionId, storedPlanVersion);
+      const restore = () => workoutSession?.setActiveWorkout(programId, start, sessionId, storedPlanVersion);
+      if (sessionId === checkedSessionId) {
+        restore();
+        return;
+      }
+      // A page that starts no workout restores only once the check says the
+      // session is open, so a done one never shows as in progress.
+      if (startNew) restore();
       void (async () => {
         const check = await isSessionResumable({ sessionId, programId }).catch(() => null);
-        if (check?.success && !check.data) await startFreshSession();
+        if (!check?.success) {
+          if (!startNew) restore();
+          return;
+        }
+        if (check.data) {
+          checkedSessionId = sessionId;
+          if (!startNew) restore();
+        } else if (startNew) {
+          await startFreshSession();
+        } else {
+          workoutSession?.clearActiveWorkout();
+        }
       })();
       return;
     }
@@ -168,7 +211,7 @@ export function WorkoutSessionInitializer({
     }
 
     // Different program (or none) — start a fresh session.
-    void startFreshSession();
+    if (startNew) void startFreshSession();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [programId]);
 

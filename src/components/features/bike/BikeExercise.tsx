@@ -63,7 +63,7 @@ export function BikeExercise({
 
   async function start() {
     if (starting) return;
-    // The workout layout makes the session; read it at the tap, not in the
+    // The workout page makes the session; read it at the tap, not in the
     // render, so the server HTML and the first client render agree.
     if (session?.sessionId == null) {
       setError("The workout is still starting. Try again in a moment.");

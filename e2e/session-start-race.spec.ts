@@ -2,7 +2,7 @@ import { expect, test } from "./fixtures/test";
 import { programWorkoutHrefs, waitForLiveSession } from "./helpers";
 
 /**
- * The workout layout starts a session on load (WorkoutSessionInitializer).
+ * Each workout page starts a session on load (WorkoutSessionInitializer).
  * A tap into an exercise can land while that Server Action is in flight. The
  * navigation supersedes the action, and when an action that revalidated
  * finishes after being superseded, Next schedules a refresh. If the

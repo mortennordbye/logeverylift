@@ -225,7 +225,7 @@ export async function stableBox(locator: Locator): Promise<{ x: number; y: numbe
   return box!;
 }
 
-/** Wait until the workout layout has created or restored its session. */
+/** Wait until the workout page has created or restored its session. */
 export async function waitForLiveSession(page: Page): Promise<void> {
   await page.waitForFunction(
     () => {

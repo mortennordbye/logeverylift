@@ -151,7 +151,7 @@ async function holdToSkip(page: Page, step: number) {
 
 async function savedSteps(userId: string) {
   const db = testDb();
-  // The first workout: opening the exercise again after it finished starts a new, empty one.
+  // The first workout: the one the ride ran in.
   const [session] = await db.select().from(workoutSessions).where(eq(workoutSessions.userId, userId)).orderBy(asc(workoutSessions.id));
   if (!session) return [];
   return db.select().from(workoutSets).where(eq(workoutSets.sessionId, session.id)).orderBy(asc(workoutSets.setNumber));
@@ -229,6 +229,12 @@ test("D14: the play address of a bike program opens its bike exercise; a 5-step 
       [100, 6, "typed", "clock"],
     ]);
   expect((await savedSteps(s.userId))[1].avgHr).toBe(150);
+
+  // Opening the summary again starts no new workout: the done one is dropped from the phone, and the database holds one session.
+  await page.reload();
+  await expect(page.getByTestId("ride-summary-screen").filter({ visible: true })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("activeWorkout"))).toBeNull();
+  expect(await testDb().select().from(workoutSessions).where(eq(workoutSessions.userId, s.userId))).toHaveLength(1);
 
   await page.goto("/week");
   const week = page.getByTestId("week-session").filter({ hasText: "Ride mode e2e" });

@@ -89,8 +89,8 @@ export function WorkoutSessionClient({
   const workoutSession = useWorkoutSession();
 
   // Session creation/restore is handled by WorkoutSessionInitializer, mounted
-  // in the workout layout so deep links to /workout/exercises/... also get a
-  // session. Don't duplicate the effect here — it would race.
+  // by each workout page (WorkoutSessionStart) so deep links to
+  // /workout/exercises/... also get a session. Don't duplicate the effect here — it would race.
 
   // Show readiness check-in once the session is live and readiness is unknown
   useEffect(() => {
