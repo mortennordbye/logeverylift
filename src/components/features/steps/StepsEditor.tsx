@@ -692,9 +692,15 @@ function StepSheet({
         <input aria-label="Note" maxLength={140} className={input} value={s.note ?? ""} onChange={(ev) => set({ note: ev.target.value.trim() ? ev.target.value : undefined })} />
       </label>
 
-      {(problem || missing.length > 0) && (
+      {(problem || blocked) && (
         <p role="alert" className="text-sm text-destructive" data-testid="step-problem">
           {problem ?? workStepRuleText(sport, isShortStep(s))}
+        </p>
+      )}
+      {/* An old step the server already holds takes edits; what it lacks is a hint, not an error. */}
+      {!problem && !blocked && missing.length > 0 && (
+        <p className="text-sm text-muted-foreground" data-testid="step-hint">
+          {workStepRuleText(sport, isShortStep(s))}
         </p>
       )}
     </PlanSheetPanel>

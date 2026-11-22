@@ -136,11 +136,12 @@ describe("StepsEditor · a step the exercise held already", () => {
     steps: [{ type: "work", id: "s1", end: { type: "time", seconds: 1200 }, target: { metric: "power", anchor: "ftp", zone: 2 } }],
   };
 
-  it("takes a small edit and saves, with the message shown", async () => {
+  it("takes a small edit and saves, with the message shown as a hint, not an error", async () => {
     renderEditor(old, { unsaved: false });
     expect(screen.queryByTestId("steps-error")).toBeNull();
     fireEvent.click(screen.getByTestId("step-row"));
-    expect(within(sheet()).getByTestId("step-problem").textContent).toBe("A bike work step needs power, heart rate and cadence");
+    expect(within(sheet()).queryByRole("alert")).toBeNull();
+    expect(within(sheet()).getByTestId("step-hint").textContent).toBe("A bike work step needs power, heart rate and cadence");
     fireEvent.change(within(sheet()).getByLabelText("Minutes"), { target: { value: "25" } });
     expect(done().disabled).toBe(false);
     fireEvent.click(done());

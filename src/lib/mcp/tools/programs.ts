@@ -645,6 +645,9 @@ export function registerProgramTools(server: McpServer, userId: string, clientId
             peUpdates.progressionConfigAt = new Date();
           }
 
+          // The steps held before the weekly sync below can rewrite their zones:
+          // the model read them that way (get_program does not sync).
+          const heldBeforeSync = stepInput ? await heldStepKeys(db, programExerciseId) : null;
           // Before the transaction: the share runs a due weekly sync, which
           // rewrites this slot's sets, and the replace below must read them after.
           const share =
@@ -671,7 +674,7 @@ export function registerProgramTools(server: McpServer, userId: string, clientId
                 }
                 // The steps held before this write: the strict check leaves
                 // them as they are, so an old program still takes a small edit.
-                const held = stepInput ? await heldStepKeys(tx, programExerciseId) : null;
+                const held = stepInput ? new Set([...(heldBeforeSync ?? []), ...(await heldStepKeys(tx, programExerciseId))]) : null;
                 // Matched by id, then by set number, and updated in place, so ids
                 // stay and logged rows keep their link (docs/plans/revisions.md,
                 // 2.3). The anchors and the role carry over from the matched set,
