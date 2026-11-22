@@ -10,6 +10,7 @@ import type { HomeCore } from "@/lib/home/core";
 import type { WeightSummary } from "@/lib/home/widget-data";
 import type { FriendWorkout } from "./widgets/friends-activity/load";
 import type { GarminReadinessData } from "./widgets/garmin-readiness/load";
+import type { LastSessionData } from "./widgets/last-session/load";
 import type { RaceCountdownData } from "./widgets/race-countdown/load";
 import type { RecentPr } from "./widgets/recent-prs/load";
 import type { StreakData } from "./widgets/streak/load";
@@ -104,6 +105,24 @@ const LOADS = [62, 0, 48, 70, 0, 55, 0, 66, 0, 52, 74, 0, 58, 0, 71, 0, 60, 80, 
 /** Fatigue as a 7-day exponential average of the loads, from 40. */
 const FATIGUE = LOADS.reduce<number[]>((out, l) => [...out, (out.at(-1) ?? 40) + (l - (out.at(-1) ?? 40)) / 7], []);
 export const SAMPLE_LOAD: TrainingLoadData = { loads: LOADS, fatigue: FATIGUE, form: 6, formLabel: "Fresh", weekLoad: 199, ramp: "normal" };
+
+/** The ride of the session check plan page (docs/design/session-check/plan.html, section 1); no link, so the gallery tap adds it. */
+export const SAMPLE_LAST_SESSION: LastSessionData = {
+  cards: [
+    {
+      plannedSessionId: 0,
+      title: "Long ride · Sun 22 Nov",
+      match: "Matched to Garmin · Indoor Cycling · 2 h 16 min",
+      rows: [
+        { label: "Power", value: "150 W", plan: "plan 110-130", mark: "over" },
+        { label: "Heart rate", value: "122", plan: "plan 107-135", mark: "in" },
+        { label: "Cadence", value: "85 rpm", plan: "no target", mark: "none" },
+      ],
+      time: { label: "Time", value: "2:16", plan: "plan 2:15", mark: "in" },
+      href: null,
+    },
+  ],
+};
 
 export const SAMPLE_SETS: WeeklySetsData = {
   total: 38,

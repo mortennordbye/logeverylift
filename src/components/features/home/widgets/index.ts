@@ -12,6 +12,7 @@ import { dateWidget } from "./date/View";
 import { enduranceTodayWidget } from "./endurance-today/View";
 import { friendsActivityWidget } from "./friends-activity/View";
 import { garminReadinessWidget } from "./garmin-readiness/View";
+import { lastSessionWidget } from "./last-session/View";
 import { raceCountdownWidget } from "./race-countdown/View";
 import { recentPrsWidget } from "./recent-prs/View";
 import { streakWidget } from "./streak/View";
@@ -28,6 +29,7 @@ export const RENDERERS = {
   cycle: cycleWidget,
   enduranceToday: enduranceTodayWidget,
   week: weekWidget,
+  lastSession: lastSessionWidget,
   weeklyGoal: weeklyGoalWidget,
   recentPrs: recentPrsWidget,
   friendsActivity: friendsActivityWidget,

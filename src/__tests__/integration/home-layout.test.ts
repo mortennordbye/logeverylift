@@ -133,7 +133,7 @@ describe("saveHomeLayout (I1)", () => {
     await db.update(users).set({ enduranceEnabled: true }).where(eq(users.id, me));
     const visible = resolveLayout(row, { endurance: true, garmin: false, cycle: true }).filter((i) => !i.hidden).map((i) => i.id);
     // Kept items are appended after what the user saved (mergeForSave), still visible.
-    expect(visible).toEqual(["title", "today", "week", "enduranceToday"]);
+    expect(visible).toEqual(["title", "today", "week", "enduranceToday", "lastSession"]);
   });
 
   it("without an active cycle, a saved Cycle progress is kept but not taken from the client", async () => {

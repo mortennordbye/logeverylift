@@ -195,6 +195,7 @@ Phase: **1** = this PR (section 6; "built" once merged code has it), **2** = nex
 | Next session | Name and day | Name, day, summary, start link | - | cycle info, planned sessions | cycle | low | 2 |
 | Season phase | Phase, week x of y | Plus phase bar | - | `listSeasons` (`src/lib/seasons.ts:83`) | endurance with a season | low | 2 |
 | Race countdown | Days to race | Race, date, days, phase | - | `listSeasons`; `training_cycles.race_date` | users with a race | low | 2, built (S) |
+| Last session | - | One card per bike or run session of the last day with any: match line, metric rows with marks, time, "See every step ›" | - | `sessionCompliance`, `plannedSessionCheck`, `sessionMatch` | endurance (on by default) | medium | session check, built (M) |
 | Missed this week, Make up | - | - | - | notice N5 | | | 1 (notice) |
 | Did you do these? | - | - | - | notice N4 | | | 1 (notice) |
 | Readiness swap | - | - | - | notice, package D4 | endurance | | with D4 |
@@ -551,7 +552,8 @@ Phase 1 registry:
 Notices: `policy`, `checkin`, `illness` (slot `top`); `didYouDoIt`, `missed` (slot
 `afterTraining`); `share` (slot `end`). Pinned: `startBar`.
 
-`defaultLayout(audience)` gives `title M, today L, enduranceToday M (endurance only), week L`.
+`defaultLayout(audience)` gives `title M, today L, enduranceToday M (endurance only), week L`
+(since the session check, then `lastSession M` for endurance users).
 With the slots in section 3, this renders the same parts in the same order as today for
 every user type in the 6.2 table.
 
@@ -1014,6 +1016,14 @@ Where the build differs from it or from section 4, and why:
   `ctx.today`). Without the range, as on the Progress page, the week is the server's UTC week.
 - **Race countdown** (S) is for endurance users: the soonest A race on or after today from
   `listSeasons`. A cycle's own `race_date` is not read.
+- **Last session** (M, `lastSession`, docs/plans/session-check.md decision 9) is for endurance
+  users and on by default for them. `loadLastSession` reads `sessionCompliance` over the last
+  14 days and takes the done bike and run sessions of the newest day that has any, in the
+  day's order; each card reads `plannedSessionCheck` and `sessionMatch` with that session
+  passed in. The rows are each metric of the sport over the work steps (`sessionVerdict`),
+  shaped in `src/lib/utils/last-session.ts`; the Garmin activity shows only where
+  `sessionMatch` gives one (`garminAllowedFor`), else "Logged in the app". A saved layout
+  from before gets it hidden, as every new widget.
 - Sizes from section 4 that the design does not show (Weekly volume M and L, Body weight L,
   Training load S and per-sport L, Race countdown M) are in `BACKLOG.md`.
 - **Samples and previews.** The "Add widget" gallery shows each widget's own view with

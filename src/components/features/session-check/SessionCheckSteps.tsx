@@ -5,7 +5,7 @@ import type { SessionCheckView } from "@/lib/session-check";
 import { MARK_TEXT, type Mark, type StepCheck } from "@/lib/utils/session-check";
 
 /** A mark as words and an arrow (decision 2): only over and under in the accent colour, everything else neutral. */
-function MarkChip({ mark }: { mark: Mark }) {
+export function MarkChip({ mark }: { mark: Mark }) {
   const out = mark === "over" || mark === "under";
   return (
     <span
