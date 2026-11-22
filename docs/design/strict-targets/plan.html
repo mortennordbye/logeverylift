@@ -1,0 +1,273 @@
+<title>Strict session targets</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<style>
+/* Layout: one reading column; phone mockups in before/after pairs that stack on a phone. */
+:root {
+  --bg: #f6f7fb; --fg: #161a24; --muted: #5d6475; --line: #dde1ea; --card: #ffffff; --accent: #3d63dd;
+  --new: #1f7a4d; --new-bg: #e5f4ec; --old-bg: #f0f1f5;
+  --app-bg: #0b0b0d; --app-card: #1c1c1f; --app-muted: #8b8d94; --app-fg: #f4f4f5; --app-primary: #6c95ff; --app-chip: #2a2a2e;
+  --display: "Space Grotesk", "Inter", system-ui, sans-serif; --body: "Inter", system-ui, -apple-system, sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #101218; --fg: #e8eaf0; --muted: #9aa1b2; --line: #272b36; --card: #171a22; --accent: #7d9bff;
+  --new: #6fd3a0; --new-bg: #15291f; --old-bg: #1b1e27; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #101218; --fg: #e8eaf0; --muted: #9aa1b2; --line: #272b36; --card: #171a22; --accent: #7d9bff;
+  --new: #6fd3a0; --new-bg: #15291f; --old-bg: #1b1e27; color-scheme: dark }
+body { background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 15px; line-height: 1.55; }
+main { max-width: 860px; margin: 0 auto; padding-block: 28px 64px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 36px; }
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; }
+h1 { font-size: 30px; line-height: 1.15; }
+h2 { font-size: 21px; margin-bottom: 10px; }
+h3 { font-size: 15px; margin-bottom: 6px; }
+p { margin: 0 0 8px; max-width: 65ch; }
+ul, ol { margin: 0; padding-left: 20px; max-width: 68ch; }
+li { margin-bottom: 5px; }
+.lede { color: var(--muted); font-size: 16px; }
+.eyebrow { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.decisions { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; }
+.decision { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+.decision b { display: block; font-size: 13px; color: var(--muted); font-weight: 600; margin-bottom: 2px; }
+.pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; align-items: start; }
+.col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.tag { align-self: flex-start; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 99px; background: var(--old-bg); color: var(--muted); }
+.tag.new { background: var(--new-bg); color: var(--new); }
+.note { font-size: 13px; color: var(--muted); }
+.phone { background: var(--app-bg); color: var(--app-fg); border-radius: 22px; padding: 16px 14px 18px; font-family: -apple-system, "SF Pro Text", var(--body); display: flex; flex-direction: column; gap: 10px; max-width: 320px; width: 100%; box-sizing: border-box; border: 1px solid var(--line); }
+.top { display: flex; justify-content: space-between; font-size: 11px; color: var(--app-muted); }
+.bar { height: 22px; border-radius: 4px; background: var(--app-primary); opacity: .85; position: relative; }
+.bar i { position: absolute; left: 72%; top: -3px; bottom: -3px; width: 2px; background: var(--app-fg); }
+.step { font-size: 20px; font-weight: 700; }
+.clock { font-size: 54px; font-weight: 700; text-align: center; line-height: 1; letter-spacing: -1px; font-variant-numeric: tabular-nums; }
+.target { background: var(--app-card); border-radius: 14px; padding: 12px; text-align: center; }
+.big { font-size: 30px; font-weight: 700; color: var(--app-primary); font-variant-numeric: tabular-nums; }
+.big small { font-size: 14px; color: var(--app-muted); font-weight: 500; }
+.second { display: flex; justify-content: center; gap: 14px; font-size: 12.5px; color: var(--app-muted); margin-top: 4px; flex-wrap: wrap; }
+.second span b { color: var(--app-fg); font-weight: 600; }
+.second .hl b { color: var(--app-fg); }
+.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.btn { background: var(--app-card); border-radius: 10px; text-align: center; font-size: 12px; padding: 9px 0; font-weight: 500; }
+.row { background: var(--app-card); border-radius: 14px; padding: 11px 12px; display: grid; grid-template-columns: 24px 1fr auto; gap: 10px; align-items: center; }
+.row .n { width: 22px; height: 22px; border-radius: 99px; background: var(--app-bg); display: grid; place-items: center; font-size: 11px; }
+.row .t { font-size: 15px; font-weight: 600; }
+.row .d { font-size: 12px; color: var(--app-muted); }
+.row .r { text-align: right; font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.row .r span { display: block; font-size: 12px; color: var(--app-muted); font-weight: 400; }
+.prop { background: var(--app-card); border-radius: 14px; padding: 12px; display: flex; flex-direction: column; gap: 6px; }
+.prop .k { font-size: 12px; color: var(--app-muted); }
+.prop .v { font-size: 17px; font-weight: 600; }
+.prop .v s { color: var(--app-muted); font-weight: 400; }
+.prop .why { font-size: 12px; color: var(--app-muted); }
+.prop .acts { display: flex; gap: 8px; margin-top: 4px; }
+.prop .acts span { flex: 1; text-align: center; padding: 9px 0; border-radius: 10px; font-size: 13px; font-weight: 600; background: var(--app-chip); }
+.prop .acts span.go { background: var(--app-primary); color: #0b0b0d; }
+.err { font-size: 12px; color: #ff8a80; }
+.field { background: var(--app-card); border-radius: 10px; padding: 9px 12px; display: flex; justify-content: space-between; font-size: 13px; }
+.field em { font-style: normal; color: var(--app-muted); }
+.field.add em { color: var(--app-primary); }
+.steps { counter-reset: s; list-style: none; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.steps li { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px 12px 48px; position: relative; margin: 0; }
+.steps li::before { counter-increment: s; content: counter(s); position: absolute; left: 14px; top: 12px; width: 24px; height: 24px; border-radius: 99px; background: var(--accent); color: var(--bg); display: grid; place-items: center; font-weight: 700; font-size: 13px; }
+.tbl { border-collapse: collapse; width: 100%; min-width: 560px; font-size: 14px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; }
+.tbl th, .tbl td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.tbl thead th { font-size: 12px; color: var(--muted); font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.tbl tbody th { white-space: nowrap; }
+.tbl tr:last-child th, .tbl tr:last-child td { border-bottom: 0; }
+.q { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+.q p { margin: 0; }
+.q .pick { font-size: 13px; color: var(--muted); margin-top: 4px; }
+</style>
+
+<main>
+  <header>
+    <div class="eyebrow">Plan · approved 22 Nov · building</div>
+    <h1>Strict session targets</h1>
+    <p class="lede">Each bike and run step tells you the exact point to hit: power or pace, heart rate and cadence. The AI coach works out your numbers from your Garmin data and proposes them. You accept them before they apply.</p>
+  </header>
+
+  <section>
+    <h2>Decisions made</h2>
+    <div class="decisions">
+      <div class="decision"><b>New numbers</b>The coach proposes. You accept or decline. Nothing changes without your yes.</div>
+      <div class="decision"><b>How strict</b>Each work step has a full target for every place you can do it: inside and outside. What it needs depends on what you can measure there (table below). Warm-up, cool-down and recovery need one target.</div>
+      <div class="decision"><b>By what you can measure</b>Inside, the trainer and the belt give exact numbers. Outside, heart rate, time and distance lead. The app has no live GPS; Garmin records speed and pace.</div>
+      <div class="decision"><b>Shown in the app</b>All targets show on the ride screen, the run screen and the step list before you start.</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Targets by place</h2>
+    <p>A work step must have every target in the "Required" column for both places. The app shows the target for the place you pick at the start.</p>
+    <div style="overflow-x:auto">
+      <table class="tbl">
+        <thead><tr><th></th><th>Main target</th><th>Required with it</th><th>Shown, not a target</th></tr></thead>
+        <tbody>
+          <tr><th>Bike inside</th><td>Power (W)</td><td>Heart rate · cadence (rpm)</td><td>Time</td></tr>
+          <tr><th>Bike outside</th><td>Heart rate</td><td>Time or distance</td><td>Power when a power meter is paired</td></tr>
+          <tr><th>Run inside</th><td>Belt speed (km/h)</td><td>Heart rate · cadence (spm) · incline</td><td>Time · distance</td></tr>
+          <tr><th>Run outside</th><td>Heart rate</td><td>Time or distance</td><td>Planned pace · cadence</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">Short hard intervals outside (under 3 min) keep an effort target, as now, because heart rate is too slow for them.</p>
+  </section>
+
+  <section>
+    <h2>1 · Ride screen</h2>
+    <p>Today cadence and HR show only indoors, and only when the step has them. After the change they show indoors and outdoors.</p>
+    <div class="pair">
+      <div class="col"><span class="tag">Now · your ride today</span>
+        <div class="phone">
+          <div class="top"><span>Indoor · step 1 of 1</span><span>96:59 of 135:00</span></div>
+          <div class="bar"><i></i></div>
+          <div class="step">Work</div>
+          <div class="clock">38:01</div>
+          <div class="target"><div class="big">110-130 <small>W</small></div><div class="second"><span>HR <b>146-160</b></span></div></div>
+          <div class="grid3"><div class="btn">−5 W</div><div class="btn">+1 min</div><div class="btn">+5 W</div></div>
+        </div>
+      </div>
+      <div class="col"><span class="tag new">After</span>
+        <div class="phone">
+          <div class="top"><span>Indoor · step 1 of 1</span><span>96:59 of 135:00</span></div>
+          <div class="bar"><i></i></div>
+          <div class="step">Work</div>
+          <div class="clock">38:01</div>
+          <div class="target"><div class="big">110-130 <small>W</small></div><div class="second"><span>HR <b>146-160</b></span><span>Cadence <b>85-95</b> rpm</span></div></div>
+          <div class="grid3"><div class="btn">−5 W</div><div class="btn">+1 min</div><div class="btn">+5 W</div></div>
+        </div>
+        <p class="note">Example numbers.</p>
+      </div>
+      <div class="col"><span class="tag new">After · outside</span>
+        <div class="phone">
+          <div class="top"><span>Outdoor · step 1 of 1</span><span>96:59 of 135:00</span></div>
+          <div class="bar"><i></i></div>
+          <div class="step">Work</div>
+          <div class="clock">38:01</div>
+          <div class="target"><div class="big">146-160 <small>bpm</small></div><div class="second"><span>Z2 · steady</span></div></div>
+          <div class="grid3"><div class="btn">−5 bpm</div><div class="btn">+1 min</div><div class="btn">+5 bpm</div></div>
+        </div>
+        <p class="note">No cadence and no power outside: you have no sensor for them on the road bike. Heart rate leads, the clock counts the time.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>2 · Run screen</h2>
+    <p>Today the treadmill screen has no big target: it shows the belt as a pace, and HR only when HR is the main target. It never shows cadence. After the change the belt speed in km/h is the big target inside, and heart rate leads outside.</p>
+    <div class="pair">
+      <div class="col"><span class="tag">Now · treadmill</span>
+        <div class="phone">
+          <div class="top"><span>Treadmill · step 2 of 3</span><span>12:30 of 45:00</span></div>
+          <div class="step">Steady</div>
+          <div class="clock">22:30</div>
+          <div class="target"><div class="second"><span>Pace <b>6:19</b></span></div></div>
+        </div>
+      </div>
+      <div class="col"><span class="tag new">After · treadmill</span>
+        <div class="phone">
+          <div class="top"><span>Treadmill · step 2 of 3</span><span>12:30 of 45:00</span></div>
+          <div class="step">Steady</div>
+          <div class="clock">22:30</div>
+          <div class="target"><div class="big">9.5 <small>km/h</small></div><div class="second"><span>HR <b>142-155</b></span><span>Cadence <b>168-176</b> spm</span><span>Incline <b>1%</b></span></div></div>
+        </div>
+        <p class="note">Example numbers. Run cadence is in steps per minute (spm).</p>
+      </div>
+      <div class="col"><span class="tag new">After · outside</span>
+        <div class="phone">
+          <div class="top"><span>Outdoor · step 2 of 3</span><span>12:30 of 45:00</span></div>
+          <div class="step">Steady</div>
+          <div class="clock">22:30</div>
+          <div class="target"><div class="big">142-155 <small>bpm</small></div><div class="second"><span>Z2 · easy</span><span>Planned pace <b>6:25</b> /km</span></div></div>
+        </div>
+        <p class="note">Heart rate leads. The planned pace shows only as information. The app has no live GPS: Garmin records your real pace.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>3 · Step list before you start</h2>
+    <div class="pair">
+      <div class="col"><span class="tag">Now · your Long ride</span>
+        <div class="row"><span class="n">1</span><span><span class="t">Work</span><br><span class="d">Z2</span></span><span class="r">110-130 W<span>135 min</span></span></div>
+      </div>
+      <div class="col"><span class="tag new">After</span>
+        <div class="row"><span class="n">1</span><span><span class="t">Work</span><br><span class="d">Z2 · HR 146-160 · 85-95 rpm</span></span><span class="r">110-130 W<span>135 min</span></span></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>4 · The coach proposes, you accept</h2>
+    <p>The coach reads your Garmin rides and runs: best 20 min power, HR at threshold, pace, and the cadence you hold at each intensity. It sends a proposal with the reason. You see it in Account › Thresholds and accept or decline it there. When you ask in the chat, the coach can also show it to you there.</p>
+    <div class="pair">
+      <div class="col"><span class="tag new">New · Account › Thresholds</span>
+        <div class="prop">
+          <div class="k">Coach proposes · 22 Nov</div>
+          <div class="v"><s>180 W</s> → 188 W FTP</div>
+          <div class="why">Best 20 min power 198 W on the ride of 12 Nov (Garmin) × 0.95</div>
+          <div class="acts"><span>Decline</span><span class="go">Accept</span></div>
+        </div>
+        <div class="prop">
+          <div class="k">Coach proposes · 22 Nov</div>
+          <div class="v">88 rpm bike cadence</div>
+          <div class="why">Median cadence in Z2 over your last 8 rides (Garmin)</div>
+          <div class="acts"><span>Decline</span><span class="go">Accept</span></div>
+        </div>
+        <p class="note">Example numbers. After you accept, the coach updates the steps in your programs to match.</p>
+      </div>
+      <div class="col"><span class="tag new">New · step editor</span>
+        <div class="phone">
+          <div class="step">Work · bike</div>
+          <div class="field"><span>Power</span><em>61-72 % FTP</em></div>
+          <div class="field add"><span>Heart rate</span><em>Add ›</em></div>
+          <div class="field add"><span>Cadence</span><em>Add ›</em></div>
+          <div class="err">A bike work step needs power, heart rate and cadence</div>
+        </div>
+        <p class="note">The coach gets the same check over MCP. Your existing programs keep working. The check applies when a step is written or changed.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>What does not change</h2>
+    <ul>
+      <li>FTP and run test rides keep their own targets. Ramps and free spins are exempt.</li>
+      <li>"Sync from Garmin" on Account keeps working as now. When it is on, Garmin values still apply without asking. The coach proposals are separate.</li>
+      <li>The app does not connect to a sensor. You see the targets during the session, and Garmin gives the measured values after it.</li>
+      <li>Swim steps do not change.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Steps in order</h2>
+    <ol class="steps">
+      <li><b>Show all targets.</b> Ride screen indoors and outdoors, run screen, both step lists. Run cadence in spm. Also the chart fix: "120" and "135 min" overlap at the end of the time axis.</li>
+      <li><b>Strict work steps.</b> The new check for bike and run work steps, in MCP and in the step editor. The editor gets a heart rate field next to power or pace.</li>
+      <li><b>Coach proposals.</b> A store for proposals, an MCP tool for the coach to send one, Garmin cadence for the coach to read, and the Accept and Decline card. Privacy policy and record of processing updated.</li>
+      <li><b>Your programs.</b> The coach reads your data, proposes your numbers, and after your yes rewrites the steps of your bike and run programs. This is a coach task, not code.</li>
+    </ol>
+    <p class="note">Each step is its own PR, with tests and a screenshot next to this picture. No deploy while you train.</p>
+  </section>
+
+  <section>
+    <h2>How you check</h2>
+    <ul>
+      <li>Open the Long ride. The step list shows HR and cadence. Start it: the target card shows both.</li>
+      <li>Open a run program. The list and the run screen show HR and cadence.</li>
+      <li>In the step editor, remove the cadence from a bike work step. Save says what is missing.</li>
+      <li>Ask the coach for new numbers. A proposal shows in Account › Thresholds. Accept it, and the value is in the threshold history with the source "coach".</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Open questions</h2>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div class="q"><p>Store your typical cadence (bike and run) as two new thresholds, next to FTP and LTHR?</p><p class="pick">My pick · yes. The coach then sets each step's range from it, for example 85-95 rpm in Z2 and 90-100 in intervals.</p></div>
+      <div class="q"><p>Your watch counts run cadence outside too (from the wrist). Show a cadence target on outside runs as well?</p><p class="pick">My pick · show it on the second line, but do not require it. Inside it is required.</p></div>
+      <div class="q"><p>The coach proposes your treadmill speed per zone (for example Z2 at 9.5 km/h) from the belt speeds you logged and your heart rate on them. Use the belt speeds the app logged, not the watch's indoor speed?</p><p class="pick">My pick · yes. The watch guesses speed inside from your wrist; the belt is exact.</p></div>
+      <div class="q"><p>Show a pending proposal on the home screen too, or only in Account › Thresholds?</p><p class="pick">My pick · only in Account › Thresholds, with a dot on the Account row.</p></div>
+    </div>
+  </section>
+</main>
