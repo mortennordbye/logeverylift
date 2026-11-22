@@ -1,0 +1,214 @@
+<title>Session check</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<style>
+/* Layout: one reading column; app mockups in pairs that stack on a phone. */
+:root {
+  --bg: #f6f7fb; --fg: #161a24; --muted: #5d6475; --line: #dde1ea; --card: #ffffff; --accent: #3d63dd;
+  --new: #1f7a4d; --new-bg: #e5f4ec; --old-bg: #f0f1f5;
+  --app-bg: #0b0b0d; --app-card: #1c1c1f; --app-muted: #8b8d94; --app-fg: #f4f4f5; --app-primary: #6c95ff; --app-chip: #2a2a2e;
+  --display: "Space Grotesk", "Inter", system-ui, sans-serif; --body: "Inter", system-ui, -apple-system, sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #101218; --fg: #e8eaf0; --muted: #9aa1b2; --line: #272b36; --card: #171a22; --accent: #7d9bff;
+  --new: #6fd3a0; --new-bg: #15291f; --old-bg: #1b1e27; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #101218; --fg: #e8eaf0; --muted: #9aa1b2; --line: #272b36; --card: #171a22; --accent: #7d9bff;
+  --new: #6fd3a0; --new-bg: #15291f; --old-bg: #1b1e27; color-scheme: dark }
+body { background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 15px; line-height: 1.55; }
+main { max-width: 860px; margin: 0 auto; padding-block: 28px 64px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 36px; }
+h1, h2 { font-family: var(--display); text-wrap: balance; margin: 0; }
+h1 { font-size: 30px; line-height: 1.15; }
+h2 { font-size: 21px; margin-bottom: 10px; }
+p { margin: 0 0 8px; max-width: 65ch; }
+ul, ol { margin: 0; padding-left: 20px; max-width: 68ch; }
+li { margin-bottom: 5px; }
+.lede { color: var(--muted); font-size: 16px; }
+.eyebrow { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; align-items: start; }
+.col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.tag { align-self: flex-start; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 99px; background: var(--old-bg); color: var(--muted); }
+.tag.new { background: var(--new-bg); color: var(--new); }
+.note { font-size: 13px; color: var(--muted); }
+.phone { background: var(--app-bg); color: var(--app-fg); border-radius: 22px; padding: 16px 14px 18px; font-family: -apple-system, "SF Pro Text", var(--body); display: flex; flex-direction: column; gap: 10px; max-width: 340px; width: 100%; box-sizing: border-box; border: 1px solid var(--line); }
+.w { background: var(--app-card); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+.w .k { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--app-muted); font-weight: 600; }
+.w .t { font-size: 17px; font-weight: 600; }
+.w .src { font-size: 12px; color: var(--app-muted); }
+.m { display: grid; grid-template-columns: 76px 1fr auto; gap: 8px; align-items: baseline; font-size: 14px; font-variant-numeric: tabular-nums; }
+.m .l { color: var(--app-muted); font-size: 12px; }
+.m .v { font-weight: 600; }
+.m .v small { color: var(--app-muted); font-weight: 400; font-size: 12px; }
+.mk { font-size: 12px; font-weight: 600; padding: 1px 7px; border-radius: 99px; background: var(--app-chip); color: var(--app-fg); white-space: nowrap; }
+.mk.out { background: var(--app-primary); color: #0b0b0d; }
+.link { color: var(--app-primary); font-size: 14px; font-weight: 500; }
+.hd { display: flex; justify-content: space-between; font-size: 14px; color: var(--app-primary); }
+.h1 { font-size: 22px; font-weight: 700; }
+.step { background: var(--app-card); border-radius: 14px; padding: 12px; display: flex; flex-direction: column; gap: 6px; }
+.step .sh { display: flex; justify-content: space-between; font-size: 15px; font-weight: 600; }
+.step .sh span { color: var(--app-muted); font-weight: 400; font-size: 13px; }
+.steps { counter-reset: s; list-style: none; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.steps li { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px 12px 48px; position: relative; margin: 0; }
+.steps li::before { counter-increment: s; content: counter(s); position: absolute; left: 14px; top: 12px; width: 24px; height: 24px; border-radius: 99px; background: var(--accent); color: var(--bg); display: grid; place-items: center; font-weight: 700; font-size: 13px; }
+.q { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+.q p { margin: 0; }
+.q .pick { font-size: 13px; color: var(--muted); margin-top: 4px; }
+</style>
+
+<main>
+  <header>
+    <div class="eyebrow">Plan · approved 22 Nov · building</div>
+    <h1>Session check</h1>
+    <p class="lede">After each bike or run session you see which Garmin activity the app matched it to, and each target against what you did: power, heart rate, cadence and time. A home widget shows the last session; a page shows every step.</p>
+  </header>
+
+  <section>
+    <h2>Why</h2>
+    <p>Your Long ride today was matched and filled from Garmin, but no screen says so. The plan said 110-130 W and you rode 150 W on average. The app showed no flag, because it marks only "under target". It never checks heart rate zones on the bike or cadence. And after 12 hours the ride summary is gone from the app.</p>
+  </section>
+
+  <section>
+    <h2>1 · Home widget · last session</h2>
+    <div class="pair">
+      <div class="col"><span class="tag new">New · your ride today</span>
+        <div class="phone">
+          <div class="w">
+            <div class="k">Last session</div>
+            <div class="t">Long ride · Sun 22 Nov</div>
+            <div class="src">Matched to Garmin · Indoor Cycling · 2 h 16 min</div>
+            <div class="m"><span class="l">Power</span><span class="v">150 W <small>· plan 110-130</small></span><span class="mk out">↑ over</span></div>
+            <div class="m"><span class="l">Heart rate</span><span class="v">122 <small>· plan zone 2</small></span><span class="mk">✓ in</span></div>
+            <div class="m"><span class="l">Cadence</span><span class="v">85 rpm <small>· no target</small></span><span class="mk">·</span></div>
+            <div class="m"><span class="l">Time</span><span class="v">2:16 <small>· plan 2:15</small></span><span class="mk">✓ in</span></div>
+            <span class="link">See every step ›</span>
+          </div>
+        </div>
+        <p class="note">Your real numbers from today. Heart rate is judged with your new bike LTHR 150.</p>
+      </div>
+      <div class="col"><span class="tag new">New · the brick run</span>
+        <div class="phone">
+          <div class="w">
+            <div class="k">Last session</div>
+            <div class="t">Run off bike · Sun 22 Nov</div>
+            <div class="src">Matched to Garmin · Oslo Running · 20 min · 3.3 km</div>
+            <div class="m"><span class="l">Heart rate</span><span class="v">148 <small>· plan under 162</small></span><span class="mk">✓ in</span></div>
+            <div class="m"><span class="l">Cadence</span><span class="v">160 spm <small>· plan 155-165</small></span><span class="mk">✓ in</span></div>
+            <div class="m"><span class="l">Pace</span><span class="v">5:59 /km <small>· info</small></span><span class="mk">·</span></div>
+            <div class="m"><span class="l">Time</span><span class="v">20:00 <small>· plan 20:00</small></span><span class="mk">✓ in</span></div>
+            <span class="link">See every step ›</span>
+          </div>
+        </div>
+        <p class="note">The marks are words and arrows in neutral colours: ✓ in, ↑ over, ↓ under. Only "out" is highlighted.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>2 · Every step</h2>
+    <p>A page for any done session, kept for good: from the widget, from the session in Plan, and from History. Each step shows each target the plan had.</p>
+    <div class="pair">
+      <div class="col"><span class="tag new">New · Bike tempo, an example</span>
+        <div class="phone">
+          <div class="hd"><span>‹ Back</span><span></span></div>
+          <div class="h1">Bike tempo · Tue 24 Nov</div>
+          <div class="src" style="font-size:12px;color:var(--app-muted)">Matched to Garmin · Indoor Cycling · steps split by Garmin laps</div>
+          <div class="step">
+            <div class="sh">2 · Work <span>15:00 · plan 15:00</span></div>
+            <div class="m"><span class="l">Power</span><span class="v">146 W <small>· 140-149</small></span><span class="mk">✓ in</span></div>
+            <div class="m"><span class="l">Heart rate</span><span class="v">141 <small>· zone 3</small></span><span class="mk">✓ in</span></div>
+            <div class="m"><span class="l">Cadence</span><span class="v">83 rpm <small>· 85-95</small></span><span class="mk out">↓ under</span></div>
+          </div>
+          <div class="step">
+            <div class="sh">4 · Work <span>15:00 · plan 15:00</span></div>
+            <div class="m"><span class="l">Power</span><span class="v">151 W <small>· 140-149</small></span><span class="mk out">↑ over</span></div>
+            <div class="m"><span class="l">Heart rate</span><span class="v">146 <small>· zone 3</small></span><span class="mk">✓ in</span></div>
+            <div class="m"><span class="l">Cadence</span><span class="v">88 rpm <small>· 85-95</small></span><span class="mk">✓ in</span></div>
+          </div>
+        </div>
+        <p class="note">Example numbers. Warm-up, recovery and cool-down show time only.</p>
+      </div>
+      <div class="col">
+        <h2 style="font-size:17px">How it judges</h2>
+        <ul>
+          <li><b>In</b> · the step's average is inside the range.</li>
+          <li><b>Over or under</b> · outside the range by more than a small margin (3 W, 2 bpm, 2 rpm or spm, 5 s per km).</li>
+          <li><b>A cap</b> ("HR under 162") passes when the average is under it.</li>
+          <li>Heart rate is not judged on steps under 3 min. It rises too slowly.</li>
+          <li><b>Time</b> · in when within 10 % of the plan, as the Plan colours do today.</li>
+          <li>Pace outside is shown, not judged. Outside the heart rate leads.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>3 · The match on the session and the program</h2>
+    <p>Where you open a planned session (Plan, Week, the calendar) and on the program's exercise page after the session, a line names the Garmin activity it is matched to. Tap it to open the Garmin activity; tap "See every step" for the step page. When nothing is matched yet, the line says so, and you can pick the activity.</p>
+    <div class="pair">
+      <div class="col"><span class="tag new">New · Plan › Long ride</span>
+        <div class="phone">
+          <div class="hd"><span>‹ Plan</span><span></span></div>
+          <div class="h1">Long ride</div>
+          <div class="src" style="font-size:13px;color:var(--app-muted)">Sun 22 Nov · key session · done · on plan</div>
+          <div class="w">
+            <div class="m"><span class="l">Program</span><span class="v">1 General · Long ride</span><span class="mk">›</span></div>
+            <div class="m"><span class="l">Logged</span><span class="v">In the app · ride mode</span><span class="mk">✓</span></div>
+            <div class="m"><span class="l">Garmin</span><span class="v">Indoor Cycling <small>· 08:05 · 2 h 16 min</small></span><span class="mk">›</span></div>
+            <div class="src">Numbers filled from Garmin · split by time</div>
+            <span class="link">See every step ›</span>
+          </div>
+        </div>
+      </div>
+      <div class="col"><span class="tag new">New · no match yet</span>
+        <div class="phone">
+          <div class="hd"><span>‹ Plan</span><span></span></div>
+          <div class="h1">Run</div>
+          <div class="src" style="font-size:13px;color:var(--app-muted)">Wed 25 Nov · done?</div>
+          <div class="w">
+            <div class="m"><span class="l">Program</span><span class="v">1 General · Run</span><span class="mk">›</span></div>
+            <div class="m"><span class="l">Garmin</span><span class="v">Not matched <small>· 1 run that day</small></span><span class="mk out">Pick ›</span></div>
+          </div>
+        </div>
+        <p class="note">Pick shows the Garmin activities of that sport on that day. Today this is only possible through the coach.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>4 · Which sessions it covers</h2>
+    <ul>
+      <li><b>Started in the app, filled from Garmin</b> (like today) · each step's numbers come from the fill.</li>
+      <li><b>Done only on the watch</b> · the app already matches it to the planned session by sport and day. New · the steps are split by Garmin laps when the counts match, else by the planned step times.</li>
+      <li><b>Started in the app, no Garmin</b> · the steps show what the app logged (time, belt, your taps).</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>What does not change</h2>
+    <ul>
+      <li>The matching rules and the Plan colours stay as they are.</li>
+      <li>Garmin parts show only for accounts with Garmin (today Premium).</li>
+      <li>The ride and run summaries after a session keep their place. They use the same judging, so they also show "over".</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Steps in order</h2>
+    <ol class="steps">
+      <li><b>One judging rule</b> for power, heart rate, cadence, pace and time, with in, over and under. The ride and run summaries use it.</li>
+      <li><b>The match</b> · keep which Garmin activity a session was matched or filled from, show it on the planned session and the program's exercise page, with Pick when nothing is matched.</li>
+      <li><b>The step page</b> · for any done bike or run session, from Plan and History.</li>
+      <li><b>Watch-only sessions</b> · split by laps or planned times.</li>
+      <li><b>The home widget</b> · last done bike or run session, on by default for endurance users.</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>Open questions</h2>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div class="q"><p>Highlight "out" marks in the accent colour, with everything else neutral?</p><p class="pick">My pick · yes. No green and red, as on the measurements.</p></div>
+      <div class="q"><p>The widget shows the last session only, or the last two (for example the ride and the brick run on a Sunday)?</p><p class="pick">My pick · the last day with sessions: one or two cards.</p></div>
+      <div class="q"><p>Judge the whole session in the widget by the work steps only?</p><p class="pick">My pick · yes. The warm-up and cool-down would hide what matters.</p></div>
+    </div>
+  </section>
+</main>
