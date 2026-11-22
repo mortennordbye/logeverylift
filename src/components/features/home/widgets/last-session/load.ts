@@ -1,4 +1,5 @@
 import { enduranceEnabledFor } from "@/lib/endurance";
+import { garminAllowedFor } from "@/lib/garmin/access";
 import type { HomeContext } from "@/lib/home/core";
 import { plannedSessionCheck } from "@/lib/session-check";
 import { sessionCompliance } from "@/lib/session-compliance";
@@ -28,10 +29,10 @@ export async function loadLastSession(ctx: HomeContext): Promise<LastSessionData
   const all = await sessionCompliance(ctx.userId, addDaysStr(ctx.today, -(WINDOW_DAYS - 1)), ctx.today);
   const day = lastDaySessions(all);
   if (!day.length) return null;
-  const { units } = await getUserSettings(ctx.userId);
+  const [{ units }, garminOn] = await Promise.all([getUserSettings(ctx.userId), garminAllowedFor(ctx.userId)]);
   const cards = await Promise.all(
     day.map(async (s): Promise<LastSessionCard> => {
-      const [check, match] = await Promise.all([plannedSessionCheck(ctx.userId, s.id, s), sessionMatch(ctx.userId, s.id, s)]);
+      const [check, match] = await Promise.all([plannedSessionCheck(ctx.userId, s.id, s), sessionMatch(ctx.userId, s.id, { known: s, garminOn, today: ctx.today })]);
       const sport = s.sport === "run" ? "run" : "bike";
       const steps = (check?.parts ?? []).filter((p) => p.sport === sport).flatMap((p) => p.steps);
       return {
