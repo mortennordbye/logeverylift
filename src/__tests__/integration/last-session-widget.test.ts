@@ -141,7 +141,8 @@ describe("loadLastSession", () => {
     const card = data!.cards[0];
     expect(card.match).toBe("Matched to Garmin · Monday Ride · 30 min");
     expect(card.rows[0]).toEqual({ label: "Power", value: "145 W", plan: "plan 140-149", mark: "in" });
-    expect(card.time).toEqual({ label: "Time", value: "15:00", plan: "plan 15:00", mark: "in" });
+    // The whole session, warm-up and cool-down included.
+    expect(card.time).toEqual({ label: "Time", value: "30:00", plan: "plan 30:00", mark: "in" });
     expect(card.href).toBe(`/planned/${card.plannedSessionId}/check`);
   });
 

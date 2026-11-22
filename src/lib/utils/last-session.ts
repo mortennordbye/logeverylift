@@ -112,13 +112,16 @@ export function metricRows(sport: "bike" | "run", steps: StepCheck[]): LastSessi
 }
 
 /**
- * The time row: the work steps' total against their plan, else (no timed
- * work step, as for a session confirmed by hand) the session's done time
- * against its planned time. Null with no time at all.
+ * The time row: the whole session, done against planned, as the Plan colours
+ * read it (not the work steps only, unlike the metric rows). From the steps
+ * when each has a planned time; else (a step to the lap, or no steps, as for
+ * a session confirmed by hand) the session's done time against its planned
+ * time. Null with no time at all.
  */
 export function timeRow(steps: StepCheck[], fallback: { done: number | null; planned: number | null }): LastSessionRow | null {
-  const t = sessionVerdict(steps).find((v) => v.metric === "time");
-  const [done, planned] = t && t.actual !== null ? [t.actual, t.planned] : [fallback.done, fallback.planned];
+  const timed = steps.length > 0 && steps.every((s) => s.plannedSeconds !== null);
+  const done = timed ? steps.reduce((a, s) => a + (s.seconds ?? 0), 0) : fallback.done;
+  const planned = timed ? steps.reduce((a, s) => a + s.plannedSeconds!, 0) : fallback.planned;
   if (!done) return null;
   return {
     label: "Time",

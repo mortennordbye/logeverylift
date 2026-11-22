@@ -97,9 +97,12 @@ describe("metricRows", () => {
 });
 
 describe("timeRow", () => {
-  it("the work steps' total against their plan", () => {
-    const steps = checkSteps(bike, { 1: log({ durationSeconds: 600 }), 2: log({ durationSeconds: 900 }), 3: log({ durationSeconds: 1200 }) });
-    expect(timeRow(steps, { done: null, planned: null })).toEqual({ label: "Time", value: "35:00", plan: "plan 30:00", mark: "over" });
+  it("the whole session against its plan, warm-up and cool-down included", () => {
+    const steps = checkSteps(bike, { 1: log({ durationSeconds: 600 }), 2: log({ durationSeconds: 900 }), 3: log({ durationSeconds: 900 }), 4: log({ durationSeconds: 300 }) });
+    expect(timeRow(steps, { done: null, planned: null })).toEqual({ label: "Time", value: "45:00", plan: "plan 45:00", mark: "in" });
+    // No cool-down: 40 of 45 min is more than 10 % short.
+    const short = checkSteps(bike, { 1: log({ durationSeconds: 600 }), 2: log({ durationSeconds: 900 }), 3: log({ durationSeconds: 900 }) });
+    expect(timeRow(short, { done: null, planned: null })).toEqual({ label: "Time", value: "40:00", plan: "plan 45:00", mark: "under" });
   });
 
   it("falls back to the session's done and planned time with no steps", () => {
