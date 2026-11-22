@@ -133,14 +133,14 @@ afterEach(() => {
 });
 
 describe("RideMode", () => {
-  it("indoors: header, profile, step, clock, watts with cadence and heart rate, and the next step", async () => {
+  it("indoors: header, profile, step, clock, watts with heart rate and cadence, and the next step", async () => {
     await open(600 + 198);
     expect(text("ride-header")).toBe("Indoor · step 2 of 3" + "13:18 of 30:00");
     expect(screen.getByTestId("ride-mini-profile")).toBeTruthy();
     expect(text("ride-step-title")).toBe("Work");
     expect(text("ride-clock")).toBe("11:42");
     expect(text("ride-target-value")).toBe("135-146");
-    expect(text("ride-second")).toBe("Cadence 85-95HR 139-152");
+    expect(text("ride-second")).toBe("HR 139-152Cadence 85-95 rpm");
     expect(text("ride-next")).toContain("Easy · 5 min");
     // At 320 px the title wraps only between its parts: "5 min" never breaks, and no line starts with a dot (as on the Plan screens).
     expect(screen.getByText("Easy ·").className).toContain("whitespace-nowrap");
@@ -287,12 +287,12 @@ describe("RideMode", () => {
     expect(detectStepAlerts).toHaveBeenCalledWith("key");
   });
 
-  it("outdoors: heart rate as the big number, the power meter below, and Lap", async () => {
+  it("outdoors: heart rate as the big number, the zone and the power meter below, and Lap", async () => {
     await open(700, { mode: "outdoor" });
     expect(text("ride-header")).toContain("Outdoor · step 2 of 3");
     expect(text("ride-target-value")).toBe("139-152");
     expect(text("ride-target")).toContain("bpm");
-    expect(text("ride-second")).toBe("Power meter 135-146 W");
+    expect(text("ride-second")).toBe("Z2-3 Power meter 135-146 W");
     expect(screen.queryByTestId("ride-mini-profile")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Lap" }));
     await advance(0);

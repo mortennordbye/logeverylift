@@ -36,8 +36,10 @@ describe("runScreen on a treadmill", () => {
     expect(s.title).toBe("Warm-up");
     expect(s.clock).toBe("9:30");
     expect(s.treadmill).toEqual({ belt: 7.5, planBelt: 7.5, incline: 1 });
+    // The step's incline is in the line too (docs/plans/strict-targets.md, decision 1).
     expect(s.second).toEqual([
       { label: "HR", value: "under 153" },
+      { label: "Incline", value: "1%" },
       { label: "Pace", value: "8:00 /km" },
     ]);
     expect(s.next).toEqual({ title: "Steady · 50:00", target: "8.2 km/h" });
@@ -60,7 +62,7 @@ describe("runScreen on a treadmill", () => {
   it("a belt tap moves the belt now, and the plan's stays to compare", () => {
     const s = screenAt(treadmill, 60, [ev("belt", 40, 85, "s1")]);
     expect(s.treadmill).toEqual({ belt: 8.5, planBelt: 7.5, incline: 1 });
-    expect(s.second[1]).toEqual({ label: "Pace", value: "7:03 /km" });
+    expect(s.second[2]).toEqual({ label: "Pace", value: "7:03 /km" });
   });
 
   it("cues the belt 10 s before a step whose belt differs by 1 km/h or more, not before", () => {
@@ -129,6 +131,43 @@ describe("runScreen outdoors", () => {
       { label: "Effort", value: "4-5" },
       { label: "Short quick steps", value: "" },
     ]);
+  });
+});
+
+describe("all targets of a run step (docs/plans/strict-targets.md, decision 1)", () => {
+  const w = tree({
+    v: 2,
+    sport: "run",
+    name: "Steady",
+    steps: [
+      { type: "work", end: { type: "time", seconds: 1500 }, target: { metric: "pace", anchor: "absolute", low: 2.564, high: 2.632 }, target2: { metric: "hr", anchor: "absolute", low: 142, high: 155 }, cadence: { low: 168, high: 176 }, belt: 9.5, incline: 1 },
+      { type: "work", end: { type: "time", seconds: 120 }, target: { metric: "pace", anchor: "threshold_pace", low: 105, high: 110 }, target2: { metric: "hr", anchor: "absolute", low: 165, high: 175 } },
+    ],
+  });
+
+  it("on a treadmill: the step's heart rate, the cadence in spm and the incline under the belt", () => {
+    const s = screenAt(buildRunPlan(w, ids(w), OWNER, "indoor"), 30);
+    expect(s.treadmill).toMatchObject({ planBelt: 9.5 });
+    expect(s.second).toEqual([
+      { label: "HR", value: "142-155" },
+      { label: "Cadence", value: "168-176 spm" },
+      { label: "Incline", value: "1%" },
+      { label: "Pace", value: "6:18 /km" },
+    ]);
+  });
+
+  it("outdoors: heart rate leads, the zone, the planned pace and the cadence below it", () => {
+    const s = screenAt(buildRunPlan(w, ids(w), OWNER, "outdoor"), 30);
+    expect(s.target).toEqual({ value: "142-155", unit: "bpm" });
+    expect(s.second).toEqual([
+      { label: "Z3", value: "" },
+      { label: "Planned pace", value: "6:19-6:30 /km" },
+      { label: "Cadence", value: "168-176 spm" },
+    ]);
+  });
+
+  it("outdoors on work under 3 min: the effort words stay, as heart rate is too slow for it", () => {
+    expect(screenAt(buildRunPlan(w, ids(w), OWNER, "outdoor"), 1500 + 30).target).toEqual({ value: "Hard", unit: null });
   });
 });
 

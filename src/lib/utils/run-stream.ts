@@ -20,7 +20,7 @@
 
 import type { RideMode } from "@/db/schema/rides";
 import { sampleDurations } from "@/lib/garmin/analytics/load";
-import { CHART } from "@/lib/utils/bike-ride-view";
+import { CHART, timeTicks } from "@/lib/utils/bike-ride-view";
 import {
   DRIFT_STEADY_PCT,
   sampleIndices,
@@ -417,11 +417,7 @@ export function runDoneChart(input: RunStreamInput): DoneChart | null {
       yTicks.push({ y: ty, label: t.label });
     }
   }
-  const minutes = total / 60;
-  const every = minutes <= 90 ? 15 : minutes <= 180 ? 30 : 60;
-  const xTicks: DoneChart["xTicks"] = [];
-  for (let m = 0; m <= minutes - every / 2; m += every) xTicks.push({ x: +(left + ((m * 60) / total) * span).toFixed(1), label: `${m}` });
-  xTicks.push({ x: right, label: `${Math.round(minutes)} min` });
+  const xTicks = timeTicks(total);
 
   return {
     bands,

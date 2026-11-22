@@ -64,7 +64,7 @@ describe("RunExercise", () => {
     expect(screen.getByTestId("ride-profile")).toBeTruthy();
     expect(screen.getByTestId("run-stats").textContent).toBe("10.1km est.70load50 minin Z2");
     expect(screen.getByTestId("run-zones")).toBeTruthy();
-    expect(details()).toEqual(["Belt 7.5 km/h · incline 1%", "HR under 162 · start 8.2 km/h", "30 s · 13.0 km/h · 1:30 easy between", "Walk 5.5 km/h"]);
+    expect(details()).toEqual(["Belt 7.5 km/h · HR under 153 · incline 1%", "HR under 162 · start 8.2 km/h", "30 s · 13.0 km/h · 1:30 easy between", "Walk 5.5 km/h"]);
     expect(screen.queryByTestId("no-threshold-pace")).toBeNull();
     // A treadmill keeps the phone on the console: no alerts row (4.6 is outdoor).
     expect(screen.queryByTestId("step-alerts")).toBeNull();
@@ -81,7 +81,7 @@ describe("RunExercise", () => {
       expect(sheet.querySelector("[aria-pressed=true]")!.textContent).toBe("Outdoor");
       fireEvent.click(screen.getByRole("button", { name: "Treadmill" }));
       expect(screen.getByTestId("run-mode").textContent).toBe("Treadmill");
-      expect(details()[0]).toBe("Belt 7.5 km/h · incline 1%");
+      expect(details()[0]).toBe("Belt 7.5 km/h · HR under 153 · incline 1%");
     });
 
     it("outdoors: the surface choice, Road first, and the alerts-off row with what to do (4.6)", () => {

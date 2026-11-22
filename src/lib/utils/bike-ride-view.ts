@@ -9,11 +9,11 @@
  */
 
 import type { RideMode } from "@/db/schema/rides";
-import { powerZone } from "@/lib/utils/bike-outdoor";
+import { powerLowZone, powerZone } from "@/lib/utils/bike-outdoor";
 import type { RidePlan, RidePlanStep } from "@/lib/utils/ride-timeline";
 import { DEFAULT_IF, plannedLoad, stepIntensity } from "@/lib/utils/training-load";
 import { DEFAULT_UNITS, METERS_PER_MILE, type Units } from "@/lib/utils/units";
-import { mainTarget, targetLabel, type WorkoutStep } from "@/lib/utils/workout-steps";
+import { mainTarget, targetLabel, type ResolvedTarget, type WorkoutStep } from "@/lib/utils/workout-steps";
 
 // ── Mode ─────────────────────────────────────────────────────────────────────
 
@@ -185,14 +185,27 @@ export function rideChart(plan: RidePlan): RideChart {
   return { bars, bands, ftpY: y(100), yTicks, xTicks: timeTicks(total) };
 }
 
-/** Minute ticks under a chart of `total` seconds: every 15 min up to 90 min, 30 up to 3 h, else 60, and the length at the end. */
+/** Width of a tick label in the chart's units: about 0.6 of its 7.5 font size per character (RideProfileChart). */
+const labelWidth = (label: string) => label.length * 4.5;
+/** Space kept between the last minute tick and the end label. */
+const TICK_GAP = 3;
+
+/**
+ * Minute ticks under a chart of `total` seconds: every 15 min up to 90 min, 30
+ * up to 3 h, else 60, and the length at the end. The last minute tick goes
+ * when its label would touch the end label ("120" and "135 min" read "1235 min").
+ */
 export function timeTicks(total: number): RideChart["xTicks"] {
   const span = CHART.right - CHART.left;
   const minutes = total / 60;
   const every = minutes <= 90 ? 15 : minutes <= 180 ? 30 : 60;
   const xTicks: RideChart["xTicks"] = [];
   for (let m = 0; m <= minutes - every / 2; m += every) xTicks.push({ x: +(CHART.left + ((m * 60) / total) * span).toFixed(1), label: `${m}` });
-  xTicks.push({ x: CHART.right, label: `${Math.round(minutes)} min` });
+  const end = `${Math.round(minutes)} min`;
+  const last = xTicks[xTicks.length - 1];
+  // A middle tick is centred on its x; the end label ends at the right edge. The first tick (0) starts at the left edge and stays.
+  if (xTicks.length > 1 && last.x + labelWidth(last.label) / 2 + TICK_GAP > CHART.right - labelWidth(end)) xTicks.pop();
+  xTicks.push({ x: CHART.right, label: end });
   return xTicks;
 }
 
@@ -205,7 +218,7 @@ export type BikeStepRow = {
   n: number;
   /** "Work · 1 of 2", "Easy". */
   title: string;
-  /** "Z2-3 · 85-95 rpm"; outdoors "Z2-3 · 135-145 W with a power meter". */
+  /** "Z2-3 · HR 139-152 · 85-95 rpm"; outdoors "Z2-3 · 135-145 W with a power meter". */
   detail: string | null;
   note: string | null;
   /** The main target: "135-145 W" indoors, "HR 139-152" outdoors. */
@@ -217,7 +230,7 @@ export type BikeStepRow = {
 };
 
 /** "Z3", "Z2-3", "Ramp", "Free spin": the zone of a step's power target. */
-function zoneChip(step: WorkoutStep, ftp: number | null): string | null {
+export function zoneChip(step: WorkoutStep, ftp: number | null): string | null {
   if (step.free) return "Free spin";
   if (step.ramp && !step.target) return "Ramp";
   if (step.target?.metric === "power" && step.target.zone !== undefined) return `Z${step.target.zone}`;
@@ -240,6 +253,46 @@ export function wattsText(s: Pick<RidePlanStep, "power" | "step">): string | nul
 
 /** Effort 2 outdoors, the "easy spin" of 4.2. */
 export const isEasySpin = (t: { unit: string; low: number | null; high: number | null }) => t.unit === "RPE" && t.low === 2 && t.high === 2;
+
+/** "142-152", "under 139", "150 or more" of a heart rate target. */
+export function bpmText(t: ResolvedTarget): string {
+  const r = (n: number) => Math.round(n);
+  if (t.low !== null && t.high !== null) return r(t.low) === r(t.high) ? `${r(t.low)}` : `${r(t.low)}-${r(t.high)}`;
+  if (t.high !== null) return `under ${r(t.high)}`;
+  if (t.low !== null) return `${r(t.low)} or more`;
+  return t.text;
+}
+
+/** The step's second target when it is a heart rate with its numbers. */
+const hrSecond = (s: RidePlanStep) => (s.target2?.unit === "bpm" && !s.target2.missing ? s.target2 : null);
+
+/**
+ * The heart rate shown with the watts indoors (docs/plans/strict-targets.md,
+ * decision 1): the step's second target, else the heart rate of its outdoor
+ * target. Null on a step whose main target is a heart rate, or with none.
+ */
+export function indoorHr(s: RidePlanStep): ResolvedTarget | null {
+  if (mainTarget(s.step)?.metric === "hr") return null;
+  return hrSecond(s) ?? (s.outdoor?.unit === "bpm" ? s.outdoor : null);
+}
+
+/**
+ * The main target outdoors (decision 1): heart rate leads. A heart rate
+ * second target takes the place of the heart rate the zone gives, and of the
+ * effort a 3 min or longer zone 2 to 4 work step gets with no bike LTHR. An
+ * outdoor target the step writes, an FTP test, and the effort of short or hard
+ * work, a recovery or a free spin stay as `outdoorTarget` gives them (4.2).
+ */
+export function outdoorMain(s: RidePlanStep, plan: Pick<RidePlan, "test" | "thresholds">): ResolvedTarget | null {
+  const hr = hrSecond(s);
+  const o = s.outdoor;
+  if (!hr || plan.test || s.step.outdoor) return o;
+  const own = { ...hr, text: `HR ${bpmText(hr)}` };
+  if (o?.unit === "bpm") return own;
+  const zone = powerLowZone(s.step, plan.thresholds.ftp);
+  const hrApplies = s.step.type === "work" && !s.step.free && !s.step.ramp && zone !== null && zone >= 2 && zone <= 4 && (s.seconds ?? s.estSeconds) >= 180;
+  return o?.unit === "RPE" && hrApplies ? own : o;
+}
 
 /** The indoor target: watts, else the target as written ("75-80% FTP" with no FTP). */
 function indoorText(s: RidePlanStep): string | null {
@@ -279,9 +332,12 @@ export function bikeStepRows(plan: RidePlan, units: Units = DEFAULT_UNITS): Bike
     const chip = zoneChip(step, ftp);
     const cadence = step.cadence ? `${step.cadence.low}-${step.cadence.high} rpm` : null;
     const watts = wattsText(s);
+    const hr = indoorHr(s);
+    const main = outdoor ? outdoorMain(s, plan) : null;
+    // Outdoors heart rate leads and no cadence shows: the road bike has no sensor for it.
     const detail = outdoor
-      ? [chip, watts && s.outdoor ? `${watts} with a power meter` : null, s.outdoor2?.text ?? null]
-      : [chip, cadence];
+      ? [chip, watts && main ? `${watts} with a power meter` : null, s.outdoor2?.text ?? null]
+      : [chip, hr ? `HR ${bpmText(hr)}` : null, cadence];
     return {
       key: s.key,
       n: i + 1,
@@ -289,7 +345,7 @@ export function bikeStepRows(plan: RidePlan, units: Units = DEFAULT_UNITS): Bike
       title: `${STEP_WORD[step.type]}${s.round && step.type !== "recovery" && step.type !== "rest" ? ` · ${s.round.index} of ${s.round.of}` : ""}`,
       detail: detail.filter(Boolean).join(" · ") || null,
       note: step.note ?? null,
-      target: outdoor ? (s.outdoor ? (isEasySpin(s.outdoor) ? `${s.outdoor.text} · easy spin` : s.outdoor.text) : indoorText(s)) : indoorText(s),
+      target: main ? (isEasySpin(main) ? `${main.text} · easy spin` : main.text) : indoorText(s),
       time: timeText(s, units),
       easy: step.type === "recovery" || step.type === "rest" || !!step.free,
     };

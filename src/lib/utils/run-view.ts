@@ -140,6 +140,22 @@ function targetText(s: RidePlanStep, zone: number | null, thresholds: ThresholdV
   return s.target?.text ?? null;
 }
 
+/** The heart rate of a step's second target ("HR 142-155"); null when it is not a heart rate or has no numbers. */
+function secondHrText(s: RidePlanStep): string | null {
+  const t = s.target2;
+  return t?.unit === "bpm" && !t.missing ? hrText(t.low, t.high, false) : null;
+}
+
+/** A step's heart rate as words: its main target when that is a heart rate, else its second target. */
+export function runHrText(s: RidePlanStep, th: ThresholdValues): string | null {
+  return mainTarget(s.step)?.metric === "hr" ? runTargetText(s, th) : secondHrText(s);
+}
+
+/** "168-176 spm": a run step's cadence, in steps per minute; null without one. */
+export function runCadenceText(step: WorkoutStep): string | null {
+  return step.cadence ? `${step.cadence.low}-${step.cadence.high} spm` : null;
+}
+
 /**
  * The target of an outdoor step when the plan wrote none (4.2): a heart rate
  * cap for easy and long steps, a pace range with heart rate as the second
@@ -171,6 +187,36 @@ export function runOutdoorText(s: RidePlanStep, thresholds: ThresholdValues, sur
   const hr = lthr ? zoneHrText(zone, false, thresholds) : null;
   if (t.metric === "pace") return { main: targetText(s, zone, thresholds), second: hr };
   return speed ? { main: zonePaceText(zone, speed), second: hr } : { main: targetText(s, zone, thresholds), second: null };
+}
+
+const isPaceText = (t: string) => t.endsWith(" /km");
+
+/** The pace a step writes, in its main or its second target, as words; null without one. */
+function writtenPaceText(s: RidePlanStep, th: ThresholdValues): string | null {
+  if (mainTarget(s.step)?.metric === "pace") return runTargetText(s, th);
+  const t = s.target2;
+  return t?.unit === "m/s" && !t.missing && t.low !== null && t.high !== null ? paceRangeText(t.low, t.high) : null;
+}
+
+/**
+ * What the run screen and the step list show outdoors (docs/plans/strict-targets.md,
+ * decision 1): heart rate leads on steps of 3 min or more, the step's own heart
+ * rate second target else the one `runOutdoorText` gives, and `second` is the planned pace,
+ * only information, as the app has no live GPS. A target the step writes for
+ * outdoors, strides, short work and a recovery keep their words; with no heart
+ * rate to show, `runOutdoorText` stays as it is. On Trail or snow (R14) no pace shows.
+ */
+export function runOutdoorShown(s: RidePlanStep, th: ThresholdValues, surface: RunSurface): { main: string | null; second: string | null } {
+  const o = runOutdoorText(s, th, surface);
+  const step = s.step;
+  const fixedWords = step.type === "recovery" || step.type === "rest" || !!s.run?.block || (step.type === "work" && (s.seconds ?? s.estSeconds) < 180);
+  if (s.outdoor || fixedWords || !o.main) return o;
+  // The step's own heart rate second target wins over the zone's, as on the bike.
+  const own = mainTarget(step)?.metric === "hr" ? null : secondHrText(s);
+  const hr = own ?? [o.main, o.second].find((t) => t?.startsWith("HR ")) ?? null;
+  if (!hr) return o;
+  const pace = surface === "trail" ? null : isPaceText(o.main) ? o.main : writtenPaceText(s, th);
+  return { main: hr, second: pace };
 }
 
 /** A step's pace is a share of the threshold pace, so the screen needs one; a pace in m/s needs none. */
@@ -280,7 +326,7 @@ export function runChart(plan: RidePlan): RideChart {
       return;
     }
     // The chart says what the list says: outdoors the outdoor target of its surface.
-    const text = plan.mode === "outdoor" ? runOutdoorText(s, th, plan.surface ?? "road").main : targetText(s, zone, th);
+    const text = plan.mode === "outdoor" ? runOutdoorShown(s, th, plan.surface ?? "road").main : targetText(s, zone, th);
     const label = w >= 80 ? `Z${zone}${text ? ` · ${text}` : ""}` : null;
     if (isCap(s.step, zone, s.seconds ?? s.estSeconds)) bars.push({ key: s.key, x, w, kind: "under", y: y(zone - 0.5), y2: y(zone - 0.5), capY: y(zone), zone, label });
     else bars.push({ key: s.key, x, w, kind: "range", y: y(zone - 1), y2: y(zone - 1), capY: y(zone), zone, label });
@@ -296,7 +342,7 @@ export type RunStepRow = {
   n: number;
   /** "Warm-up", "Steady", "Work · 2 of 4", "Strides 6 ×". */
   title: string;
-  /** "Belt 7.5 km/h · incline 1%", "HR under 162 · start 8.2 km/h"; outdoors the target. */
+  /** "Belt 9.5 km/h · HR 142-155 · 168-176 spm · incline 1%", "HR under 162 · start 8.2 km/h"; outdoors the target, the planned pace and the cadence. */
   detail: string | null;
   note: string | null;
   /** "10:00", "1 km", "to lap". */
@@ -323,18 +369,24 @@ function clockText(seconds: number): string {
 
 const distanceText = (m: number) => (m < 1000 ? `${Math.round(m)} m` : `${+(m / 1000).toFixed(2)} km`);
 
-/** The treadmill words of a step (4.2): its belt and where it came from, and its own incline. */
+/**
+ * The treadmill words of a step (4.2): its belt and where it came from, then
+ * its heart rate, cadence and incline (docs/plans/strict-targets.md, decision 1).
+ */
 function treadmillText(s: RidePlanStep, th: ThresholdValues, zone: number | null): string {
   const run = s.run!;
   const t = mainTarget(s.step);
-  const hr = t?.metric === "hr" ? targetText(s, zone, th) : null;
+  const hr = t?.metric === "hr" ? targetText(s, zone, th) : secondHrText(s);
+  // A belt the heart rate sets (by feel, or a start from the zone or history) comes after the heart rate.
+  const hrFirst = hr !== null && !run.carry && (run.belt === null || run.beltFrom === "zone" || run.beltFrom === "history");
   let text: string;
   if (run.carry) text = KEEP_BELT;
   else if (run.belt === null) text = hr ? `${hr} · set the belt by feel` : "Set the belt by feel";
   else if (run.beltFrom === "zone" || run.beltFrom === "history") text = `${hr} · start ${kmh(run.belt)} km/h`;
   else if (run.beltFrom === "effort" && run.belt === WALK_BELT_KMH * 10) text = `Walk ${kmh(run.belt)} km/h`;
   else text = `Belt ${kmh(run.belt)} km/h`;
-  return s.step.incline !== undefined ? `${text} · incline ${s.step.incline}%` : text;
+  const parts = [text, hrFirst ? null : hr, runCadenceText(s.step), s.step.incline !== undefined ? `incline ${s.step.incline}%` : null];
+  return parts.filter(Boolean).join(" · ");
 }
 
 /** "Warm-up", "Steady" (a work step in zone 1 or 2), "Work · 2 of 4", "Easy". */
@@ -405,8 +457,8 @@ export function runStepRows(plan: RidePlan, surface: RunSurface = "road"): RunSt
     let detail: string | null;
     if (treadmill) detail = treadmillText(s, th, zone);
     else {
-      const o = runOutdoorText(s, th, surface);
-      detail = [o.main, o.second].filter(Boolean).join(" · ") || null;
+      const o = runOutdoorShown(s, th, surface);
+      detail = [o.main, o.second, runCadenceText(s.step)].filter(Boolean).join(" · ") || null;
     }
     if (rule === "estimate" && s.seconds !== null) detail = [detail, `about ${minSec(s.seconds)}`].filter(Boolean).join(" · ");
     const meters = s.run?.meters ?? null;

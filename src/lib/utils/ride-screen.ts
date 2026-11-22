@@ -8,7 +8,7 @@
 
 import type { RideEventKind, RideMode } from "@/db/schema/rides";
 import type { RideView } from "@/lib/actions/rides";
-import { bikeStepRows, isEasySpin, rideChart, wattsText } from "@/lib/utils/bike-ride-view";
+import { bikeStepRows, bpmText, indoorHr, isEasySpin, outdoorMain, rideChart, wattsText, zoneChip } from "@/lib/utils/bike-ride-view";
 import { isRampTestStep } from "@/lib/utils/ftp-tests";
 import { NUDGE_CAP_W, eventTime, type RideEventInput, type RidePlan, type RidePlanStep, type RideStepResult, type RideTimeline } from "@/lib/utils/ride-timeline";
 import { DEFAULT_UNITS, type Units } from "@/lib/utils/units";
@@ -32,15 +32,6 @@ export function shiftedWattsText(s: RidePlanStep, offsetW: number): string | nul
   return wattsText({ step: s.step, power: shiftedPower(s, offsetW) });
 }
 
-/** "142-152", "under 139", "150 or more" of a heart rate target. */
-function bpmText(t: ResolvedTarget): string {
-  const r = (n: number) => Math.round(n);
-  if (t.low !== null && t.high !== null) return r(t.low) === r(t.high) ? `${r(t.low)}` : `${r(t.low)}-${r(t.high)}`;
-  if (t.high !== null) return `under ${r(t.high)}`;
-  if (t.low !== null) return `${r(t.low)} or more`;
-  return t.text;
-}
-
 /** The big target: the number and its unit apart, so the unit can be small. */
 function bigTarget(text: string | null, outdoor: ResolvedTarget | null): { value: string; unit: string | null } | null {
   if (outdoor?.unit === "bpm") return { value: bpmText(outdoor), unit: "bpm" };
@@ -61,7 +52,7 @@ export type RideScreen = {
   /** Seconds left; null on a lap step. */
   remaining: number | null;
   target: { value: string; unit: string | null } | null;
-  /** The second line: cadence and heart rate indoors, the power meter outdoors. */
+  /** The second line: heart rate and cadence indoors; outdoors the zone, the power meter and an effort. */
   second: { label: string; value: string }[];
   next: { title: string; target: string | null };
   /** The last minute of a step: the Next card turns accent. */
@@ -95,14 +86,18 @@ export function rideScreen(plan: RidePlan, t: RideTimeline, units: Units = DEFAU
 
   const second: RideScreen["second"] = [];
   const watts = shiftedWattsText(s, cur.offsetW);
+  // Outdoors heart rate leads, with the zone and the power meter's watts below; no cadence, as the road bike has no sensor for it.
+  const main = outdoor ? outdoorMain(s, plan) : null;
   if (outdoor) {
+    const chip = zoneChip(s.step, plan.thresholds.ftp ?? null);
+    if (chip?.startsWith("Z")) second.push({ label: chip, value: "" });
     if (watts) second.push({ label: "Power meter", value: watts });
     if (s.outdoor2?.unit === "RPE" && s.outdoor2.low !== null) second.push({ label: "Effort", value: `${s.outdoor2.low}` });
-    if (s.outdoor && isEasySpin(s.outdoor)) second.push({ label: "Easy spin", value: "" });
+    if (main && isEasySpin(main)) second.push({ label: "Easy spin", value: "" });
   } else {
-    if (s.step.cadence) second.push({ label: "Cadence", value: `${s.step.cadence.low}-${s.step.cadence.high}` });
-    const hr = s.target2?.unit === "bpm" && !s.target2.missing ? s.target2 : s.outdoor?.unit === "bpm" ? s.outdoor : null;
+    const hr = indoorHr(s);
     if (hr) second.push({ label: "HR", value: bpmText(hr) });
+    if (s.step.cadence) second.push({ label: "Cadence", value: `${s.step.cadence.low}-${s.step.cadence.high} rpm` });
   }
 
   const after = rows[cur.index + 1];
@@ -128,7 +123,7 @@ export function rideScreen(plan: RidePlan, t: RideTimeline, units: Units = DEFAU
     title: row.title,
     clock: rideClock(remaining ?? cur.activeSeconds),
     remaining,
-    target: bigTarget(outdoor ? null : row.target, outdoor ? s.outdoor : null) ?? bigTarget(row.target, null),
+    target: bigTarget(outdoor ? null : row.target, main) ?? bigTarget(row.target, null),
     second,
     next,
     lastMinute: remaining !== null && remaining <= 60,
