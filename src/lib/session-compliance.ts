@@ -75,6 +75,10 @@ export type SessionCompliance = {
   state: SessionState;
   matchedBy: MatchedBy | null;
   loggedSessionId: number | null;
+  /**
+   * The app id of the Garmin activity matched: the pick, the Garmin pair, or
+   * (link and app) the activity of that sport and day the logged workout took.
+   */
   garminActivityId: number | null;
   done: Amount | null;
   ratio: number | null;
@@ -287,13 +291,18 @@ export async function sessionCompliance(userId: string, from: string, to: string
 
   const activities = garmin ? await garminCandidates(userId, from, until) : [];
   const picks = new Set(views.map((v) => v.row.garminActivityId).filter((id): id is number => id != null));
-  // A logged workout of a sport on a day stands for one Garmin activity of that sport that day.
-  const takenByApp = new Set<number>();
+  // A logged workout of a sport on a day stands for one Garmin activity of that sport that day,
+  // kept per planned session so the match can name it (docs/plans/session-check.md, decision 6).
+  const takenByApp = new Map<number, number>();
+  const taken = new Set<number>();
   for (const v of views) {
     const m = match.get(v.row.id) ?? (linkedTo.has(v.row.id) ? { sessionId: linkedTo.get(v.row.id)! } : undefined);
     if (!m || !v.sport) continue;
-    const a = activities.find((x) => !takenByApp.has(x.id) && !picks.has(x.id) && x.date === v.row.date && x.sport === v.sport);
-    if (a) takenByApp.add(a.id);
+    const a = activities.find((x) => !taken.has(x.id) && !picks.has(x.id) && x.date === v.row.date && x.sport === v.sport);
+    if (a) {
+      taken.add(a.id);
+      takenByApp.set(v.row.id, a.id);
+    }
   }
   const garminMatch = garmin
     ? pairGarmin(
@@ -301,7 +310,7 @@ export async function sessionCompliance(userId: string, from: string, to: string
           .filter((v) => v.sport && v.row.status === "planned" && !match.has(v.row.id) && !linkedTo.has(v.row.id) && v.row.garminActivityId == null && v.row.date! <= today)
           .map((v) => ({ id: v.row.id, date: v.row.date!, position: v.row.position, sport: v.sport!, plannedDurationS: v.planned.durationSeconds, plannedDistanceM: v.planned.distanceMeters })),
         activities,
-        new Set([...picks, ...takenByApp]),
+        new Set([...picks, ...taken]),
       )
     : new Map<number, number>();
   const actById = new Map(activities.map((a) => [a.id, a]));
@@ -337,7 +346,9 @@ export async function sessionCompliance(userId: string, from: string, to: string
       inIllness: inIllness(r.date!, illness),
     });
     const loggedSessionId = matchedBy === "link" ? linkedId : matchedBy === "app" ? (m?.sessionId ?? null) : null;
-    const garminActivityId = matchedBy === "pick" ? r.garminActivityId : matchedBy === "garmin" ? (gId ?? null) : null;
+    // A workout the app logged names the activity of its day it took (null when there was none).
+    const garminActivityId =
+      matchedBy === "pick" ? r.garminActivityId : matchedBy === "garmin" ? (gId ?? null) : matchedBy === "link" || matchedBy === "app" ? (takenByApp.get(r.id) ?? null) : null;
     let done: Amount | null = null;
     if (loggedSessionId != null && v.sport) {
       done = completed.find((c) => c.id === loggedSessionId)?.bySport.get(v.sport) ?? null;

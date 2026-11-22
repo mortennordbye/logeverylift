@@ -43,7 +43,10 @@ export function RunSummary({
   garmin,
   timeZone = null,
   thresholdTest = null,
+  match = null,
 }: {
+  /** The planned session's match block (docs/plans/session-check.md, decision 4). */
+  match?: React.ReactNode;
   programId: number;
   exerciseName: string;
   doneLine: string;
@@ -228,6 +231,7 @@ export function RunSummary({
           </p>
         </div>
 
+        {match}
         {garmin && <GarminFill rideId={rideId} garmin={garmin} timeZone={timeZone} noun="runs" />}
 
         {error && (
