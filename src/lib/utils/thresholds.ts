@@ -395,6 +395,8 @@ export function weeksSince(measuredOn: string, today: string): number {
   return Math.max(0, Math.floor(ms / (7 * 86_400_000)));
 }
 
-export function isStale(measuredOn: string, today: string): boolean {
+/** A value old enough to retest. Cadence has no test, so it never goes stale. */
+export function isStale(measuredOn: string, today: string, kind?: ThresholdKind): boolean {
+  if (kind === "bike_cadence" || kind === "run_cadence") return false;
   return weeksSince(measuredOn, today) >= THRESHOLD_STALE_WEEKS;
 }

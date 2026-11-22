@@ -136,6 +136,10 @@ describe("current value and staleness", () => {
     expect(weeksSince("2026-09-17", "2026-11-12")).toBe(8);
     expect(isStale("2026-09-17", "2026-11-12")).toBe(true);
     expect(isStale("2026-09-18", "2026-11-12")).toBe(false);
+    // Cadence has no test to repeat.
+    expect(isStale("2026-01-01", "2026-11-12", "bike_cadence")).toBe(false);
+    expect(isStale("2026-01-01", "2026-11-12", "run_cadence")).toBe(false);
+    expect(isStale("2026-01-01", "2026-11-12", "max_hr")).toBe(true);
   });
 });
 

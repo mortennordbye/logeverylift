@@ -198,7 +198,7 @@ export function thresholdSourceLine(current: ThresholdView, today: string, premi
       : fromGarmin && !premium
         ? shortDay(current.measuredOn)
         : sourceLine({ by: fromGarmin ? "garmin" : "you", on: current.measuredOn });
-  return isStale(current.measuredOn, today) ? `${line} · Last tested ${weeksSince(current.measuredOn, today)} weeks ago. Retest after a recovery week.` : line;
+  return isStale(current.measuredOn, today, current.kind) ? `${line} · Last tested ${weeksSince(current.measuredOn, today)} weeks ago. Retest after a recovery week.` : line;
 }
 
 /** The values entered for one kind, each with Delete. */

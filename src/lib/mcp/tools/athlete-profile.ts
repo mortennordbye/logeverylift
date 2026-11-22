@@ -62,7 +62,7 @@ function thresholdOut(t: ThresholdRow, today: string) {
     testData: t.testData,
     notes: t.notes,
     ageWeeks: weeksSince(t.measuredOn, today),
-    stale: isStale(t.measuredOn, today),
+    stale: isStale(t.measuredOn, today, t.kind),
     version: t.version,
   };
 }
