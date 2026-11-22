@@ -76,7 +76,7 @@ test("an endurance user's run exercise shows the run, changes mode and surface, 
   await expect(page.getByTestId("run-summary")).toHaveText("75 min · load about 70 · threshold 5:39 /km");
   await expect(page.getByTestId("ride-profile")).toBeVisible();
   await expect(page.getByTestId("run-stats")).toContainText("10.1");
-  await expect(page.getByTestId("run-step-detail")).toHaveText(["Belt 7.5 km/h · incline 1%", "HR under 162 · start 8.2 km/h", "30 s · 13.0 km/h · 1:30 easy between", "Walk 5.5 km/h"]);
+  await expect(page.getByTestId("run-step-detail")).toHaveText(["Belt 7.5 km/h · HR under 153 · incline 1%", "HR under 162 · start 8.2 km/h", "30 s · 13.0 km/h · 1:30 easy between", "Walk 5.5 km/h"]);
   await expect(page.getByTestId("step-alerts")).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Log by hand" })).toHaveAttribute("href", `/programs/${programId}/workout/exercises/${peId}?hand=1`);
 
