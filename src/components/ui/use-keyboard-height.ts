@@ -7,13 +7,11 @@ import { useEffect, useState } from "react";
  * With interactiveWidget="resizes-visual" the visual viewport shrinks when
  * the keyboard appears, so window.innerHeight - vv.height = keyboard height.
  *
- * Two-path detection handles a first-open timing quirk on iOS:
- * 1. vv.resize  — fires during the keyboard animation; works reliably after
- *    the first keyboard interaction in a session.
- * 2. focusin + 300 ms fallback — on the very first keyboard open iOS may fire
- *    vv.resize before the keyboard is fully shown (height not yet final).
- *    Re-reading after 300 ms (≥ keyboard animation duration) guarantees the
- *    correct value regardless of vv.resize timing.
+ * On the first keyboard open iOS can fire vv.resize before the keyboard is
+ * fully up, and then no more. So every resize and every field focus also
+ * reads the height again after 300 ms (longer than the keyboard animation).
+ * A field that already has the focus when this starts (autoFocus, which runs
+ * before effects) counts as a focus.
  */
 export function useKeyboardHeight(active: boolean): number {
   const [kbHeight, setKbHeight] = useState(0);
@@ -28,24 +26,27 @@ export function useKeyboardHeight(active: boolean): number {
       setKbHeight(Math.max(0, window.innerHeight - vv!.height));
     }
 
-    sync(); // read immediately (keyboard may already be open)
-    vv.addEventListener("resize", sync);
-
-    let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
-
-    function onFocusIn(e: FocusEvent) {
-      const t = e.target as HTMLElement;
-      if (t.tagName !== "INPUT" && t.tagName !== "TEXTAREA") return;
-      if (fallbackTimer) clearTimeout(fallbackTimer);
-      fallbackTimer = setTimeout(sync, 300);
+    let settleTimer: ReturnType<typeof setTimeout> | null = null;
+    function settle() {
+      sync();
+      if (settleTimer) clearTimeout(settleTimer);
+      settleTimer = setTimeout(sync, 300);
     }
 
+    const isField = (el: Element | null) => el?.tagName === "INPUT" || el?.tagName === "TEXTAREA";
+    function onFocusIn(e: FocusEvent) {
+      if (isField(e.target as Element)) settle();
+    }
+
+    if (isField(document.activeElement)) settle();
+    else sync(); // the keyboard may already be open
+    vv.addEventListener("resize", settle);
     document.addEventListener("focusin", onFocusIn);
 
     return () => {
-      vv.removeEventListener("resize", sync);
+      vv.removeEventListener("resize", settle);
       document.removeEventListener("focusin", onFocusIn);
-      if (fallbackTimer) clearTimeout(fallbackTimer);
+      if (settleTimer) clearTimeout(settleTimer);
       setKbHeight(0);
     };
   }, [active]);

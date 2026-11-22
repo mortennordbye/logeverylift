@@ -403,10 +403,14 @@ test.describe("at 390 px", () => {
     await expect(first.getByTestId("phase-name")).toBeVisible();
     // Polled: the page can still be drawing in when the badge text is first found.
     await expect.poll(async () => (await lineCounts(first, "[data-testid=phase-name]"))[0].lines, { message: "name on one line" }).toBe(1);
-    await expect.poll(async () => (await lineCounts(first, "[data-testid=phase-sub]"))[0].lines, { message: "dates on one line" }).toBe(1);
+    // The dates depend on today: a range across a new year ("23 Nov 2026 – 10 Jan 2027")
+    // can break once after "7 wk ·" in a wide font. keepDates keeps the range itself whole.
+    await expect.poll(async () => (await lineCounts(first, "[data-testid=phase-sub]"))[0].lines, { message: "dates in at most two lines" }).toBeLessThanOrEqual(2);
     const nameBox = (await first.getByTestId("phase-name").boundingBox())!;
+    const subBox = (await first.getByTestId("phase-sub").boundingBox())!;
     const badgeBox = (await first.getByTestId("phase-badge").boundingBox())!;
     expect(badgeBox.y, "badge under the name").toBeGreaterThanOrEqual(nameBox.y + nameBox.height - 1);
+    expect(badgeBox.y, "badge under the dates, not beside them").toBeGreaterThanOrEqual(subBox.y + subBox.height - 1);
     await page.screenshot({ path: testInfo.outputPath("season-phases-390.png") });
   });
 });
