@@ -36,6 +36,7 @@ when the brief was written.
 | 18 | [One program model](one-program-model.md) (structured endurance workouts move into programs; the workout library goes) | done (1-5 and 6a in #251, 6b in #252) | yes | yes (set logging, drag-reorder) |
 | 19 | [Bike ride logger](bike-ride-logger.md) (the bike exercise plans, runs and logs a ride: modes, ride mode, push, Garmin fill, cycling numbers; nine steps, no owner input needed) | steps 0 to 8 built on `feat/bike-ride-logger` (push off until the VAPID keys are set) | yes | yes (timers, set logging) |
 | 20 | [Run logger](run-logger.md) (the run exercise plans, runs and logs a run: Treadmill with belt speed and Outdoor, run mode, alerts, Garmin fill, run numbers, run threshold test; nine steps, no owner input needed) | steps 0 to 8 built on `feat/run-logger` (push off until the VAPID keys are set) | yes | yes (timers, set logging) |
+| 21 | [Coach rules in the MCP instructions](coach-rules.md) (coach rules first, whole text under the 4,096 characters Claude Code shows) | done | no | no |
 
 Why this order:
 - 1 is small, has no schema change, and clears two BACKLOG items.
