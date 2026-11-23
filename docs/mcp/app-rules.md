@@ -137,7 +137,7 @@ what it describes, that package updates this file and the server instructions in
   offset, fuel interval, caffeine, race temperature); the timeline, pacing and fuel schedule are
   worked out on read. Fuel logs, products and sweat tests are logged data (no revision); a race
   plan change is a revision (`race_plan`). Every number carries its evidence label and the line
-  that it is not medical advice: pass both on.
+  that it is not medical advice: pass both on. Never present the pacing as a finish prediction.
 - **Training load** (endurance features only). One scale: 100 = one hour at threshold.
   `get_training_load` gives load per day and sport, fitness (42-day), fatigue (7-day) and form,
   and the weekly ramp. With Garmin data it reads the Garmin series, which also holds the app

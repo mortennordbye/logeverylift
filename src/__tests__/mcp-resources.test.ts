@@ -4,7 +4,7 @@
  * standalone production build.
  */
 
-import { serverInstructions } from "@/lib/mcp/instructions";
+import { MAX_INSTRUCTIONS_LENGTH, serverInstructions } from "@/lib/mcp/instructions";
 import { MCP_RESOURCE_DOCS } from "@/lib/mcp/resource-docs";
 import { docDate, docVersion, loadResourceDocs, registerResources, servedText } from "@/lib/mcp/resources";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -65,5 +65,14 @@ describe("server instructions", () => {
     }
     expect(serverInstructions("read")).toContain("read only");
     expect(serverInstructions("write")).toContain("can read and change");
+  });
+
+  it("fit in what Claude Code shows (4,096 characters) and start with the coach rules", () => {
+    for (const access of ["read", "write"] as const) {
+      const text = serverInstructions(access);
+      expect(text.length).toBeLessThanOrEqual(MAX_INSTRUCTIONS_LENGTH);
+      expect(text.startsWith("Coach rules")).toBe(true);
+      expect(text).toContain("get_garmin_status");
+    }
   });
 });
