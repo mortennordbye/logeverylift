@@ -277,12 +277,6 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** A morning entry of resting HR (and HRV if the user has it) in the app, or another wearable source. Then feed it to `readinessFlag` with the same two-signal rule.
 - **Touchpoints:** `src/lib/utils/training-limits.ts` (`readinessFlag`), `src/lib/training-limits.ts` (`limitContext`).
 
-### Discipline on the custom-exercise form inside a program
-- **What:** The custom-exercise form on `/exercises` shows the discipline field (swim, bike or run) when the endurance switch is on. The same form opened from a program's "Add exercise" picker does not, because the picker does not pass the switch.
-- **Why deferred:** The owner's decision 5 in `docs/plans/ai-coach.md` named the custom-exercise form; the picker is a second entry point that needs the switch read on the program page, and the assistant can set the discipline with `create_exercise` meanwhile.
-- **Unblocked by:** Reading `enduranceEnabledFor` on the program page and passing `enduranceEnabled` through `ProgramAddExerciseWrapper` to `ExercisesClient`.
-- **Touchpoints:** `src/components/features/ProgramAddExerciseWrapper.tsx`, `src/components/features/ExercisesClient.tsx`, `src/app/programs/[id]/page.tsx`.
-
 ### Sport-specific endurance fields (pool length, bike power/cadence, swim stroke)
 - **What:** The set editor captures distance/duration/incline/HR-zone only. Triathletes often want pool length, swim stroke, or bike power/cadence. Planned structured workouts now hold a pool length, a stroke per step and cadence targets (`poolLengthM`, `stroke`, `cadence` in `src/lib/utils/workout-steps.ts`), but logged sets have no columns for them.
 - **Why deferred:** Not needed to log and track the three disciplines; add when a concrete need appears.
