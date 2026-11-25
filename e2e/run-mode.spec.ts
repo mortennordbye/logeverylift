@@ -5,7 +5,7 @@ import { e2eUser } from "./fixtures/env";
 import { testDb } from "./fixtures/reset";
 import { insertStepProgram } from "./fixtures/step-program";
 import { expect, test } from "./fixtures/test";
-import { freezeClock, waitForLiveSession } from "./helpers";
+import { freezeClock, rideClock, waitForLiveSession } from "./helpers";
 import { runTestWorkout } from "../src/lib/utils/run-test";
 import { paceText } from "../src/lib/utils/run-numbers";
 
@@ -110,12 +110,16 @@ async function program(userId: string, workout: unknown) {
   return { userId, programId, peId: pe.id, setIds };
 }
 
+/** This test's page clock (`rideClock`): `advance` jumps it with no reply on the jump. */
+let clock: ReturnType<typeof rideClock>;
+
 test.beforeEach(async ({ page }) => {
   // Headless browsers give no wake lock; the stub lets the app ask for one.
   await page.addInitScript(() => {
     Object.defineProperty(navigator, "wakeLock", { configurable: true, value: { request: async () => ({ release: async () => undefined }) } });
   });
   await page.clock.install({ time: Date.now() });
+  clock = rideClock(page);
 });
 
 /** When the run's clock started by the test's count, and how far `advance` has moved it, per user. */
@@ -127,6 +131,8 @@ async function advance(page: Page, userId: string, seconds: number) {
   if (await page.evaluate(() => navigator.onLine)) {
     await expect.poll(() => page.evaluate(() => localStorage.getItem("rideEventQueue"))).toBeNull();
   }
+  // No reply in flight reads the ride while it moves.
+  await clock.settled();
   const db = testDb();
   const shift = sql`${seconds} * interval '1 second'`;
   const mine = db.select({ id: rides.id }).from(rides).where(eq(rides.userId, userId));
@@ -139,7 +145,7 @@ async function advance(page: Page, userId: string, seconds: number) {
     .set({ at: sql`${rideEvents.at} - ${shift}`, clientAt: sql`${rideEvents.clientAt} - ${shift}` })
     .where(sql`${rideEvents.rideId} in ${mine}`);
   shifted.set(userId, (shifted.get(userId) ?? 0) + seconds);
-  await page.clock.runFor(seconds * 1000);
+  await clock.jump(seconds * 1000);
 }
 
 const visible = (page: Page, id: string) => page.getByTestId(id).filter({ visible: true });
@@ -261,7 +267,8 @@ test("1: a treadmill run counts in, saves belt taps with an Undo, resumes after 
   ]);
   expect(warm.distanceMeters).toBeGreaterThanOrEqual(130);
   expect(warm.distanceMeters).toBeLessThanOrEqual(140);
-  expect(warm.avgSpeed).toBeCloseTo(warm.distanceMeters! / 60, 2);
+  // The speed comes from the exact meters, the distance is rounded to the meter.
+  expect(Math.abs(warm.avgSpeed! * 60 - warm.distanceMeters!)).toBeLessThanOrEqual(0.5);
 
   // A reload mid-step resumes at the right second.
   await advance(page, s.userId, 30);
