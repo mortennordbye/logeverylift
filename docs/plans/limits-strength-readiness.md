@@ -369,7 +369,7 @@ can break; it still runs the limit check like any session op so the result carri
 
 A warn mode on the engine: the same before and after read, the same rules, but broken rules go to
 `warnings`, `passed` is the rest, and nothing is refused. The check is stored on the write's
-revisions in `limit_check`, so the history rows show "Breaks a training limit: ..." (existing
+revisions in `limit_check`, so the history rows show "Breaks a training limit · ..." (existing
 line).
 
 | Write | Writer | Mode | Scope |
