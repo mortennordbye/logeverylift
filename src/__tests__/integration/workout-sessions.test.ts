@@ -47,6 +47,31 @@ describe("createWorkoutSession", () => {
     expect((await byId(recent.id))?.isCompleted).toBe(false);
     expect((await byId(othersStale.id))?.isCompleted).toBe(false);
   });
+
+  it("resumes the caller's open session on the same program instead of starting a second one", async () => {
+    // The steps journey review (2026-11-16): a fresh sign-in has no stored
+    // session, and the workout page opened a new empty one beside the open one.
+    const start = new Date(Date.now() - 20 * 60_000);
+    const open = await createSession(userId, programId, { startTime: start });
+
+    const result = await createWorkoutSession({ date: "2026-10-21", startTime: new Date().toISOString(), programId });
+    expect(result.success && result.data.id).toBe(open.id);
+    expect(result.success && new Date(result.data.startTime).getTime()).toBe(start.getTime());
+    const rows = await db.select().from(workoutSessions).where(eq(workoutSessions.userId, userId));
+    expect(rows).toHaveLength(1);
+  });
+
+  it("starts a new session when the open one is on another program, or another user's", async () => {
+    const other = await createProgram(userId, [{ exerciseId: slots[0].exerciseId, sets: [{}] }]);
+    const elsewhere = await createSession(userId, other.program.id);
+    const othersOpen = await createSession(otherUserId, programId);
+
+    const result = await createWorkoutSession({ date: "2026-10-21", programId });
+    expect(result.success).toBe(true);
+    expect(result.success && result.data.id).not.toBe(elsewhere.id);
+    expect(result.success && result.data.id).not.toBe(othersOpen.id);
+    expect((await byId(elsewhere.id))?.isCompleted).toBe(false);
+  });
 });
 
 const byId = async (id: number) =>

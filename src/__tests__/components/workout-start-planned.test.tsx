@@ -28,7 +28,7 @@ vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams(s
 beforeEach(() => {
   localStorage.clear();
   createWorkoutSession.mockReset();
-  createWorkoutSession.mockResolvedValue({ success: true, data: { id: 11 } });
+  createWorkoutSession.mockResolvedValue({ success: true, data: { id: 11, startTime: new Date() } });
 });
 
 async function start() {
