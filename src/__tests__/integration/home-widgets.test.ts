@@ -80,11 +80,18 @@ describe("Recent PRs loader", () => {
       { userId: me, exerciseId: lift.id, sessionId: mine.id, prType: "weight", value: "105", achievedAt: new Date("2026-11-12T10:00:00Z") },
       { userId: other.id, exerciseId: lift.id, sessionId: theirs.id, prType: "weight", value: "200", achievedAt: new Date("2026-11-12T11:00:00Z") },
     ]);
-    const rows = await loadRecentPrs(ctx());
-    expect(rows!.map((r) => [r.value, r.date])).toEqual([
-      ["105 kg", "12 Nov"],
-      ["100 kg", "10 Nov"],
-    ]);
+    // The dates read without a year only while the clock is in 2026 (yearSuffix).
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-25T12:00:00Z"));
+    try {
+      const rows = await loadRecentPrs(ctx());
+      expect(rows!.map((r) => [r.value, r.date])).toEqual([
+        ["105 kg", "12 Nov"],
+        ["100 kg", "10 Nov"],
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

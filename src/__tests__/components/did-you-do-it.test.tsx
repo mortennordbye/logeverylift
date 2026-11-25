@@ -4,7 +4,14 @@ import { DidYouDoItCard } from "@/components/features/DidYouDoIt";
 import { parseDuration } from "@/components/features/SessionAnswers";
 import type { Units } from "@/lib/utils/units";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+
+// The fixed 2026 dates here read without a year only while the clock is in
+// 2026 (yearSuffix in src/lib/utils/date-label.ts). Pinned at load, before any
+// fixture below is built.
+vi.useFakeTimers({ toFake: ["Date"] });
+vi.setSystemTime(new Date("2026-11-25T12:00:00Z"));
+afterAll(() => vi.useRealTimers());
 
 /**
  * The home card "Did you do these?" (docs/plans/workouts-and-compliance.md,

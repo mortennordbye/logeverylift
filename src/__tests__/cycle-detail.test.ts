@@ -1,5 +1,12 @@
 import { blockWeeks, canBackToTemplate, cycleSubLine, dayLabels, dayNotes, doneLabel, endedLine, rotationRows, rowAction, sessionSub, setsShort, weekIndexOf, weekRangeLabel } from "@/lib/utils/cycle-detail";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
+
+// The fixed 2026 dates here read without a year only while the clock is in
+// 2026 (yearSuffix in src/lib/utils/date-label.ts). Pinned at load, before any
+// fixture below is built.
+vi.useFakeTimers({ toFake: ["Date"] });
+vi.setSystemTime(new Date("2026-11-25T12:00:00Z"));
+afterAll(() => vi.useRealTimers());
 
 describe("cycleSubLine", () => {
   it("puts the length first, as the Plan list row does (J2-13)", () => {
