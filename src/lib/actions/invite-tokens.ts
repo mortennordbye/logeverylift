@@ -7,7 +7,7 @@ import { consentRecord, termsConsentSchema } from "@/lib/consent";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { ForbiddenError, requireAdmin } from "@/lib/utils/session";
 import type { ActionResult } from "@/types/workout";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
 import { headers } from "next/headers";
 import { randomBytes } from "crypto";
 import { z } from "zod";
@@ -56,7 +56,6 @@ export async function registerWithToken(
   }
 
   try {
-    // Re-validate token under a transaction to prevent double-use
     const row = await db.query.inviteTokens.findFirst({
       where: (t, { eq }) => eq(t.token, parsed.data.token),
     });
@@ -67,9 +66,27 @@ export async function registerWithToken(
       return { success: false, error: "This invite token has expired" };
     }
 
-    if (row.maxUses !== null && row.usedCount >= row.maxUses) {
+    // Take one use before the account exists, in one conditional UPDATE, so
+    // parallel sign-ups cannot take more uses than the token has.
+    const [claimed] = await db
+      .update(inviteTokens)
+      .set({ usedCount: sql`${inviteTokens.usedCount} + 1` })
+      .where(
+        and(
+          eq(inviteTokens.id, row.id),
+          or(isNull(inviteTokens.maxUses), lt(inviteTokens.usedCount, inviteTokens.maxUses)),
+        ),
+      )
+      .returning({ id: inviteTokens.id });
+    if (!claimed) {
       return { success: false, error: "This invite token has already been used" };
     }
+    // A sign-up that fails gives its use back.
+    const giveBack = () =>
+      db
+        .update(inviteTokens)
+        .set({ usedCount: sql`greatest(${inviteTokens.usedCount} - 1, 0)` })
+        .where(eq(inviteTokens.id, row.id));
 
     // Stored with the account, as open sign-up does (src/lib/auth.ts), so a
     // failed request after this can't lose it. Without it, home asks.
@@ -80,28 +97,31 @@ export async function registerWithToken(
     // gate. Open sign-up also exists (auth.ts); this path is kept so invited
     // accounts are counted against their token. It does not create a session; SignupForm signs in
     // afterwards with authClient.signIn.email.
-    const result = await auth.api.createUser({
-      body: {
-        name: parsed.data.name,
-        email: parsed.data.email,
-        password: parsed.data.password,
-        data: consented ? consentRecord() : {},
-      },
-    });
+    let result;
+    try {
+      result = await auth.api.createUser({
+        body: {
+          name: parsed.data.name,
+          email: parsed.data.email,
+          password: parsed.data.password,
+          data: consented ? consentRecord() : {},
+        },
+      });
+    } catch (error) {
+      await giveBack();
+      throw error;
+    }
 
     if (!result?.user) {
+      await giveBack();
       return { success: false, error: "Failed to create account" };
     }
 
-    // Credit the token's creator as the inviter, then count the use.
+    // Credit the token's creator as the inviter.
     await db
       .update(users)
       .set({ invitedById: row.createdBy })
       .where(eq(users.id, result.user.id));
-    await db
-      .update(inviteTokens)
-      .set({ usedCount: row.usedCount + 1 })
-      .where(eq(inviteTokens.id, row.id));
 
     return { success: true, data: undefined };
   } catch (error) {

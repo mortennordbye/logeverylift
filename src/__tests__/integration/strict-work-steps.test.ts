@@ -5,7 +5,7 @@
  * copies and takes a small edit.
  */
 import { db } from "@/db";
-import { programExercises, programSets, programShares } from "@/db/schema";
+import { programExercises, programSets, friendships, programShares } from "@/db/schema";
 import { saveExerciseSteps } from "@/lib/actions/program-steps";
 import { copySharedProgram } from "@/lib/actions/program-shares";
 import { exportProgram, importProgram } from "@/lib/actions/programs";
@@ -132,6 +132,7 @@ describe("an old program without the targets", () => {
     expect(imported.success, !imported.success ? imported.error : "").toBe(true);
 
     const friend = (await createUser({ enduranceEnabled: true })).id;
+    await db.insert(friendships).values({ requesterId: me, addresseeId: friend, status: "accepted" });
     const [share] = await db.insert(programShares).values({ programId: program.id, sharedByUserId: me, sharedWithUserId: friend }).returning();
     asUser(friend);
     const copied = await copySharedProgram({ shareId: share.id });

@@ -5,7 +5,7 @@
  * share of a stepped run to a user without them.
  */
 import { db } from "@/db";
-import { athleteProfiles, exercises, planRevisions, programExercises, programSets, programShares, programs, trainingCycleSlots, trainingCycles, workoutSessions } from "@/db/schema";
+import { athleteProfiles, exercises, planRevisions, programExercises, programSets, friendships, programShares, programs, trainingCycleSlots, trainingCycles, workoutSessions } from "@/db/schema";
 import WorkoutExerciseSetsPage from "@/app/programs/[id]/workout/exercises/[programExerciseId]/page";
 import { WorkoutSetsClient } from "@/components/features/WorkoutSetsClient";
 import { setUserEndurance } from "@/lib/actions/admin";
@@ -332,6 +332,7 @@ describe("a share of a stepped run to a user without endurance features", () => 
     const stepped = await liveSets(slots[0].programExerciseId);
 
     const friend = (await createUser()).id;
+    await db.insert(friendships).values({ requesterId: me, addresseeId: friend, status: "accepted" });
     const [share] = await db.insert(programShares).values({ programId: program.id, sharedByUserId: me, sharedWithUserId: friend }).returning();
     asUser(friend);
     const copied = await copySharedProgram({ shareId: share.id });

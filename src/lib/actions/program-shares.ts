@@ -84,19 +84,32 @@ export async function getIncomingShares(): Promise<ActionResult<IncomingShare[]>
   const me = session.user.id;
 
   try {
-    const rows = await db.query.programShares.findMany({
-      where: eq(programShares.sharedWithUserId, me),
-      with: {
-        program: true,
-        sharedBy: true,
-      },
-      orderBy: (s, { desc }) => [desc(s.createdAt)],
-    });
+    const [rows, friendRows] = await Promise.all([
+      db.query.programShares.findMany({
+        where: eq(programShares.sharedWithUserId, me),
+        with: {
+          program: true,
+          sharedBy: true,
+        },
+        orderBy: (s, { desc }) => [desc(s.createdAt)],
+      }),
+      db
+        .select({ requesterId: friendships.requesterId, addresseeId: friendships.addresseeId })
+        .from(friendships)
+        .where(
+          and(
+            or(eq(friendships.requesterId, me), eq(friendships.addresseeId, me)),
+            eq(friendships.status, "accepted"),
+          ),
+        ),
+    ]);
+    const friendIds = new Set(friendRows.map((f) => (f.requesterId === me ? f.addresseeId : f.requesterId)));
 
     return {
       success: true,
-      // A share of a program its owner has since deleted is not offered.
-      data: rows.filter((row) => row.program.deletedAt == null).map((row) => ({
+      // A share of a program its owner has since deleted is not offered, nor
+      // one from someone who is no longer a friend (it comes back on re-friending).
+      data: rows.filter((row) => row.program.deletedAt == null && friendIds.has(row.sharedByUserId)).map((row) => ({
         shareId: row.id,
         programId: row.programId,
         programName: row.program.name,
@@ -186,6 +199,18 @@ export async function copySharedProgram(
       return { success: false, error: "Not authorised" };
     }
     if (share.program.deletedAt != null) {
+      return { success: false, error: "Share not found" };
+    }
+    const friendship = await db.query.friendships.findFirst({
+      where: and(
+        or(
+          and(eq(friendships.requesterId, me), eq(friendships.addresseeId, share.sharedByUserId)),
+          and(eq(friendships.requesterId, share.sharedByUserId), eq(friendships.addresseeId, me)),
+        ),
+        eq(friendships.status, "accepted"),
+      ),
+    });
+    if (!friendship) {
       return { success: false, error: "Share not found" };
     }
 
