@@ -307,12 +307,6 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** The owner picking which to build. Pair 7 needs local session end times compared with the local sleep start; pair 10 needs steps in the daily series.
 - **Touchpoints:** `src/components/features/GarminTodayTab.tsx`, `src/components/features/GarminLoadTab.tsx`, `src/components/features/GarminSleepTab.tsx`, `src/components/features/GarminActivitiesTab.tsx`, `src/components/features/GarminActivityView.tsx`, `src/lib/garmin/analytics/correlations.ts` (`PAIRS`).
 
-### Garmin: plan-aware strength_before_key insight
-- **What:** The `strength_before_key` insight fires on any heavy strength load the day before. Plan 4.1 wants it only for a heavy leg session before a planned quality run or ride.
-- **Why deferred:** It needs which lifts were legs (muscle groups of the matched LogEveryLift session) and which of today's planned sessions is the key one (the cycle's slot for today).
-- **Unblocked by:** Reading today's planned session from the active cycle, and the muscle groups of yesterday's sets.
-- **Touchpoints:** `src/lib/garmin/analytics/session-insights.ts`, `getSessionInsights` in `src/lib/garmin/queries.ts`.
-
 ### iOS backgrounding — residual gaps after the resume-hardening pass
 - **What:** A Jun 2026 pass made the rest/exercise timers and completed-set toggles re-sync on resume (visibilitychange + pageshow + focus; rest timers rebuild from `restTimerEnds`, completed sets re-pull from the server). Two gaps remain: (1) the **exercise (timed-set) countdown** isn't persisted, so a *cold* eviction mid-timed-set loses it entirely (only warm resume recovers it); (2) **unsaved SetEditView edits** (typed but not Saved) live only in React state and are lost on eviction — only Saved overrides persist to localStorage.
 - **Why deferred:** (1) timed sets are short and rarely span a long background; persisting `endsAt` to the context/localStorage is extra surface for an edge case. (2) auto-persisting drafts on each keystroke is a bigger change; the explicit Save is the documented contract.
