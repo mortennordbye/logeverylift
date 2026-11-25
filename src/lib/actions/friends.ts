@@ -7,6 +7,7 @@ import {
   respondToFriendRequestSchema,
   searchUsersSchema,
   sendFriendRequestSchema,
+  friendIdSchema,
   friendSessionSchema,
   markFriendsSeenSchema,
   sendNudgeSchema,
@@ -609,9 +610,10 @@ export async function updateActivityPrivacy(data: unknown): Promise<ActionResult
 // ─── Friend Profile Stats ─────────────────────────────────────────────────
 
 export async function getFriendProfile(
-  userId: string,
+  friendId: string,
 ): Promise<ActionResult<FriendProfileStats>> {
   const session = await requireSession();
+  if (!friendIdSchema.safeParse(friendId).success) return { success: false, error: "Invalid input" };
   const me = session.user.id;
 
   try {
@@ -623,8 +625,8 @@ export async function getFriendProfile(
         and(
           eq(friendships.status, "accepted"),
           or(
-            and(eq(friendships.requesterId, me), eq(friendships.addresseeId, userId)),
-            and(eq(friendships.addresseeId, me), eq(friendships.requesterId, userId)),
+            and(eq(friendships.requesterId, me), eq(friendships.addresseeId, friendId)),
+            and(eq(friendships.addresseeId, me), eq(friendships.requesterId, friendId)),
           ),
         ),
       )
@@ -635,7 +637,7 @@ export async function getFriendProfile(
     const [targetUser] = await db
       .select({ showActivity: users.showActivityToFriends })
       .from(users)
-      .where(eq(users.id, userId))
+      .where(eq(users.id, friendId))
       .limit(1);
 
     if (!targetUser?.showActivity) {
@@ -655,7 +657,7 @@ export async function getFriendProfile(
       // Streak dates
       db.select({ date: workoutSessions.date })
         .from(workoutSessions)
-        .where(and(eq(workoutSessions.userId, userId), eq(workoutSessions.isCompleted, true), gt(workoutSessions.startTime, since90))),
+        .where(and(eq(workoutSessions.userId, friendId), eq(workoutSessions.isCompleted, true), gt(workoutSessions.startTime, since90))),
 
       // This week's volume + count
       db.select({
@@ -664,7 +666,7 @@ export async function getFriendProfile(
       })
         .from(workoutSessions)
         .leftJoin(workoutSets, and(eq(workoutSets.sessionId, workoutSessions.id), eq(workoutSets.isCompleted, true)))
-        .where(and(eq(workoutSessions.userId, userId), eq(workoutSessions.isCompleted, true), gte(workoutSessions.startTime, weekStart))),
+        .where(and(eq(workoutSessions.userId, friendId), eq(workoutSessions.isCompleted, true), gte(workoutSessions.startTime, weekStart))),
 
       // Recent 5 sessions with stats
       db.select({
@@ -682,7 +684,7 @@ export async function getFriendProfile(
         // plan-read: includes deleted (history keeps the name of a deleted program)
       .leftJoin(programs, eq(programs.id, workoutSessions.programId))
         .leftJoin(workoutSets, and(eq(workoutSets.sessionId, workoutSessions.id), eq(workoutSets.isCompleted, true)))
-        .where(and(eq(workoutSessions.userId, userId), eq(workoutSessions.isCompleted, true)))
+        .where(and(eq(workoutSessions.userId, friendId), eq(workoutSessions.isCompleted, true)))
         .groupBy(workoutSessions.id, programs.name)
         .orderBy(sql`${workoutSessions.startTime} desc`)
         .limit(5),
@@ -690,7 +692,7 @@ export async function getFriendProfile(
       // Total workout count
       db.select({ total: count() })
         .from(workoutSessions)
-        .where(and(eq(workoutSessions.userId, userId), eq(workoutSessions.isCompleted, true))),
+        .where(and(eq(workoutSessions.userId, friendId), eq(workoutSessions.isCompleted, true))),
     ]);
 
     const streak = calcStreak(sessionDateRows.map((r) => r.date));

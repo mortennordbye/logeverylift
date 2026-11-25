@@ -263,6 +263,12 @@ describe("sendFriendRequest", () => {
   });
 });
 
+describe("getFriendProfile", () => {
+  it("refuses an empty friend id", async () => {
+    expect(await getFriendProfile("")).toEqual({ success: false, error: "Invalid input" });
+  });
+});
+
 describe("removeFriend", () => {
   async function declinedByOther() {
     const other = await createUser();
