@@ -100,12 +100,6 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** Being accepted into the Garmin Connect Developer Program and moving from per-user Personal API keys to its OAuth flow. Then: decide whether GPS tracks in `garmin_activity_streams` need their own opt-in (decision G-2 in `docs/plans/garmin-deep-data.md`); follow the `privacy-compliance` checklist (policy text from `docs/privacy/data-inventory.md`, including the AI tools' Garmin metrics, `garmin_fuel_logs`, the population ratings from profile gender and age, and the opt-in weight sync whose copies stay when Garmin data is deleted), bump `LEGAL_VERSION`, raise `CONSENT_VERSION` because these are new health-data categories; then widen `garminAllowed`.
 - **Touchpoints:** `src/lib/garmin/access.ts`, `src/lib/actions/garmin.ts`, `src/lib/garmin/`, `src/app/privacy/page.tsx`, `src/lib/constants/legal.ts`.
 
-### Seasons: fitness projection across phases
-- **What:** The Garmin race views read the A race from the season, but the fitness projection to race day uses only the active phase's curve. Phases after it are not projected. (The other gap of the seasons package, limits on the chained start and on `resume`, closed with D2 part 2: `docs/plans/limits-strength-readiness.md`.)
-- **Why deferred:** The projection across phases needs the timeline of every later phase and its programs, which belongs with D2's load model.
-- **Unblocked by:** Nothing now: D1's load and the weekly load ramp (D2 part 2) are in. Build the projection from `getSeasonDetail` phases, each with its own curve (`cycleLoad`).
-- **Touchpoints:** `src/lib/garmin/analytics/projection.ts`, `src/lib/garmin/queries.ts` (`getRaceProjection`).
-
 ### Plan redesign: what the four packages left for later
 - **What:** A gap found while building the Plan tab (`docs/plans/plan-tab-redesign.md`): the triathlon plan gives every phase its own copy of the generator's programs, so Programs lists names like "Long Run" once per phase.
 - **Why deferred:** Out of the packages' scope; it needs its own decision (shared programs across phases).
