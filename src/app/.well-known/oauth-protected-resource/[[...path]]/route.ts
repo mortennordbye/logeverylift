@@ -7,8 +7,6 @@
  * bare path. The `mcp` plugin answers both from inside Better Auth's handler.
  */
 
-// Relative import (not the @/ alias): this dot-folder lives outside the tsconfig
-// program, so the alias doesn't resolve here.
 import { auth } from "../../../../lib/auth";
 
 export const GET = (request: Request) => auth.handler(request);
