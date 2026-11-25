@@ -750,6 +750,13 @@
       "when": 1795345419494,
       "tag": "0106_threshold_proposals",
       "breakpoints": true
+    },
+    {
+      "idx": 107,
+      "version": "7",
+      "when": 1795617175816,
+      "tag": "0107_drop_interview_column",
+      "breakpoints": true
     }
   ]
 }

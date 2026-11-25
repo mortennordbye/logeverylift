@@ -258,7 +258,6 @@ export type ProfileChange = {
   longestDayMinutes?: number | null;
   longDay?: number | null;
   strengthGoal?: StrengthGoal | null;
-  completeInterview?: boolean;
 };
 
 /**
@@ -277,7 +276,6 @@ export async function saveAthleteProfile(
     if (change[k] !== undefined) (set as Record<string, unknown>)[k] = change[k];
   }
   if (set.availableDays) set.availableDays = [...new Set(set.availableDays)].sort((a, b) => a - b);
-  if (change.completeInterview) set.interviewCompletedAt = new Date();
   // Days or the long day changed by anyone but the sync lock availability against Garmin; the sync skips it
   // when locked. `garmin` comes from the sync with its run's date; `take` ("Use") stores Garmin's days and clears
   // the lock in this same transaction.
@@ -314,7 +312,6 @@ export async function saveAthleteProfile(
           longestDayMinutes: null,
           longDay: null,
           strengthGoal: null,
-          interviewCompletedAt: null,
           ...set,
           deletedAt: null,
           updatedAt: new Date(),
