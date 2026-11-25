@@ -292,7 +292,7 @@ Inference".
 
 **Shown to the user.** The program and cycle history rows and the AI changes feed from A4 show
 an overridden limit under the reason: "Went past a training limit · run 1:45 h is 1.31x your
-longest run in 30 days (limit 1.10x). · The assistant's reason was ...". One shared formatter from the
+longest run in 30 days (limit 1.10x). · Assistant reason · ...". One shared formatter from the
 pure module.
 
 ### 2.5 Coach memory (B4)
