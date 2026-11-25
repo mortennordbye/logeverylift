@@ -11,6 +11,7 @@ import {
 } from "@/lib/validators/workout";
 import type { ActionResult, ExportedSessions, WorkoutSession } from "@/types/workout";
 import { and, asc, desc, eq, inArray, lt, or, sql } from "drizzle-orm";
+import { livePrograms } from "@/lib/plan-live";
 import { startablePlannedId } from "@/lib/planned-sessions";
 import { endRidesOfFinishedSession } from "@/lib/ride-settle";
 import { revalidatePath } from "next/cache";
@@ -65,6 +66,13 @@ export async function createWorkoutSession(
 
   try {
     const { date, startTime, notes, programId, intendedDate } = validation.data;
+    if (programId != null) {
+      const [program] = await db
+        .select({ id: programs.id })
+        .from(programs)
+        .where(and(eq(programs.id, programId), eq(programs.userId, auth.user.id), livePrograms));
+      if (!program) return { success: false, error: "Program not found" };
+    }
     const plannedSessionId = await startablePlannedId(auth.user.id, validation.data.plannedSessionId, programId);
 
     // Sweep orphaned open sessions for this user. Without this, a user who

@@ -2,13 +2,13 @@
 
 import { db } from "@/db";
 import { exerciseNotes, exercises, programExercises, programs, workoutSessions, workoutSets } from "@/db/schema";
-import { createCustomExerciseFor } from "@/lib/custom-exercises";
+import { createCustomExerciseFor, findVisibleExercise } from "@/lib/custom-exercises";
 import { getSystemExercises } from "@/lib/data/exercises";
 import { liveProgramExercises, livePrograms } from "@/lib/plan-live";
 import { requireSession } from "@/lib/utils/session";
 import { createExerciseSchema, upsertExerciseNoteSchema } from "@/lib/validators/workout";
 import type { ActionResult, Exercise } from "@/types/workout";
-import { asc, eq, and, exists, isNull, or, sql } from "drizzle-orm";
+import { asc, eq, and, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
 /**
@@ -202,33 +202,6 @@ export async function updateCustomExercise(
     console.error("[updateCustomExercise] failed", error);
     return { success: false, error: "Failed to update exercise. Please try again." };
   }
-}
-
-/**
- * The exercise if this user can see it: a built-in one, their own custom one,
- * or another user's custom one that a program they copied still uses.
- */
-async function findVisibleExercise(exerciseId: number, userId: string) {
-  const [row] = await db
-    .select()
-    .from(exercises)
-    .where(
-      and(
-        eq(exercises.id, exerciseId),
-        or(
-          isNull(exercises.userId),
-          eq(exercises.userId, userId),
-          exists(
-            db
-              .select({ id: programExercises.id })
-              .from(programExercises)
-              .innerJoin(programs, eq(programs.id, programExercises.programId))
-              .where(and(eq(programExercises.exerciseId, exercises.id), eq(programs.userId, userId), liveProgramExercises, livePrograms)),
-          ),
-        ),
-      ),
-    );
-  return row ?? null;
 }
 
 /**

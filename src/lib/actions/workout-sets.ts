@@ -69,6 +69,7 @@ import type {
     WorkoutSet,
     WorkoutStats,
 } from "@/types/workout";
+import { findVisibleExercise } from "@/lib/custom-exercises";
 import { plannedStepSnapshot } from "@/lib/program-steps-db";
 import { rideStepSnapshot, sessionRide } from "@/lib/ride-plan-db";
 import { serverBeltResults } from "@/lib/run-belt-results";
@@ -92,6 +93,8 @@ import { z } from "zod";
  */
 type PlanSlot = {
   programExerciseId: number;
+  /** The slot's exercise. */
+  exerciseId: number;
   programSetId: number | null;
   /** "working" | "warmup", snapshotted onto the row so the log describes itself. */
   setType: string;
@@ -126,8 +129,11 @@ function workingSetCount(slotIdColumn: string) {
  *
  * Returns `{ error }` only when the caller named a slot that exists but belongs
  * to a different program.
+ *
+ * Only a program `userId` owns gives a slot.
  */
 async function resolvePlanSlot(
+  userId: string,
   programId: number | null,
   exerciseId: number,
   setNumber: number,
@@ -140,6 +146,7 @@ async function resolvePlanSlot(
       .select({
         programSetId: programSets.id,
         programExerciseId: programSets.programExerciseId,
+        exerciseId: programExercises.exerciseId,
         programId: programExercises.programId,
         setType: programSets.setType,
         stepKind: programSets.stepKind,
@@ -151,6 +158,7 @@ async function resolvePlanSlot(
         programExercises,
         eq(programExercises.id, programSets.programExerciseId),
       )
+      .innerJoin(programs, and(eq(programs.id, programExercises.programId), eq(programs.userId, userId)))
       .where(eq(programSets.id, programSetId))
       .limit(1);
     if (row) {
@@ -160,6 +168,7 @@ async function resolvePlanSlot(
       return {
         slot: {
           programExerciseId: row.programExerciseId,
+          exerciseId: row.exerciseId,
           programSetId: row.programSetId,
           setType: row.setType,
           prescribedWorkingSets: row.prescribedWorkingSets || null,
@@ -189,7 +198,9 @@ async function resolvePlanSlot(
       setType: programSets.setType,
       prescribedWorkingSets: workingSetCount('"program_exercises"."id"'),
     })
+    // plan-read: includes deleted (a program deleted mid-workout still gives its slots)
     .from(programExercises)
+    .innerJoin(programs, and(eq(programs.id, programExercises.programId), eq(programs.userId, userId)))
     .leftJoin(
       programSets,
       and(
@@ -213,6 +224,7 @@ async function resolvePlanSlot(
   return {
     slot: {
       programExerciseId: row.programExerciseId,
+      exerciseId,
       programSetId: namedSetDeleted ? null : row.programSetId,
       // The left join misses when the plan has no set at that position, which
       // says nothing about whether the set logged there was a warm-up. Default
@@ -393,6 +405,7 @@ export async function logWorkoutSet(
     // Which plan slot this row belongs to. Resolved before the write because it
     // is part of the row's identity: the upsert below conflicts on it.
     const resolved = await resolvePlanSlot(
+      auth.user.id,
       session.programId,
       exerciseId,
       setNumber,
@@ -406,6 +419,18 @@ export async function logWorkoutSet(
       return { success: false, error: resolved.error };
     }
     const slot = resolved.slot;
+    // Only an exercise the user can see: a system one, their own, or one in a
+    // program they copied. A slot of the user's own program also counts when
+    // it holds this exercise, so a copied program deleted mid-workout still
+    // takes its sets (resolvePlanSlot reads deleted programs too).
+    const exercise =
+      slot?.exerciseId === exerciseId
+        ? (await db.select().from(exercises).where(eq(exercises.id, exerciseId)))[0]
+        : await findVisibleExercise(exerciseId, auth.user.id);
+    if (!exercise) {
+      console.error("[logWorkoutSet] exercise_not_visible", { sessionId, exerciseId });
+      return { success: false, error: "Exercise not found" };
+    }
     // An endurance step keeps its plan with the log (docs/plans/one-program-model.md, 1.2).
     // A step of the session's ride keeps the plan the ride froze at its start (D9), not the program as edited since.
     const plannedStep =
@@ -427,13 +452,8 @@ export async function logWorkoutSet(
     // completion (no override, program had no planned duration) silently logs
     // duration=null, which then displays as "—" forever in history.
     if (isCompleted) {
-      const [exercise] = await db
-        .select({ isTimed: exercises.isTimed, category: exercises.category })
-        .from(exercises)
-        .where(eq(exercises.id, exerciseId))
-        .limit(1);
-      const isCardio = exercise?.category === "cardio";
-      if (exercise?.isTimed && !isCardio) {
+      const isCardio = exercise.category === "cardio";
+      if (exercise.isTimed && !isCardio) {
         if (durationSeconds == null || durationSeconds <= 0) {
           return {
             success: false,
@@ -720,6 +740,7 @@ export async function unlogWorkoutSet(
     }
 
     const resolved = await resolvePlanSlot(
+      auth.user.id,
       session.programId,
       exerciseId,
       setNumber,
@@ -1234,7 +1255,7 @@ export async function getSessionDetail(
         })
         .from(workoutSessions)
         // plan-read: includes deleted (history keeps the name of a deleted program)
-        .leftJoin(programs, eq(workoutSessions.programId, programs.id))
+        .leftJoin(programs, and(eq(workoutSessions.programId, programs.id), eq(programs.userId, workoutSessions.userId)))
         .where(
           and(
             eq(workoutSessions.id, sessionId),
@@ -1334,6 +1355,7 @@ export async function updateWorkoutSetNotes(
       return { success: false, error: "Unauthorized" };
     }
     const resolved = await resolvePlanSlot(
+      auth.user.id,
       session.programId,
       data.exerciseId,
       data.setNumber,
