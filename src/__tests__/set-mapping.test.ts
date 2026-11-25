@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeMapping, toFlatItems } from "@/lib/utils/set-mapping";
+import { computeMapping, moveFlatItem, toFlatItems } from "@/lib/utils/set-mapping";
 import type { FlatItem } from "@/lib/utils/set-mapping";
 import type { ProgramSet } from "@/types/workout";
 
@@ -124,5 +124,53 @@ describe("computeMapping", () => {
     const { orderedSetIds, restAssignments } = computeMapping(items);
     expect(orderedSetIds).toHaveLength(0);
     expect(restAssignments.size).toBe(0);
+  });
+});
+
+// ─── moveFlatItem ─────────────────────────────────────────────────────────────
+
+describe("moveFlatItem", () => {
+  // Three sets, each with its own rest: [S1, R60, S2, R90, S3, R120].
+  const items = () => toFlatItems([makeSet(1, 60), makeSet(2, 90), makeSet(3, 120)]);
+  const rests = (moved: FlatItem[]) => Object.fromEntries(computeMapping(moved).restAssignments);
+
+  it("moves a set dragged down with its rest, and every set keeps its own rest", () => {
+    // The steps journey review (2026-11-16): set 1 dragged below set 3 left
+    // set 3 with no rest, and set 1 took set 3's.
+    const moved = moveFlatItem(items(), "set-1", "set-3");
+    expect(computeMapping(moved).orderedSetIds).toEqual([2, 3, 1]);
+    expect(rests(moved)).toEqual({ 1: 60, 2: 90, 3: 120 });
+  });
+
+  it("moves a set dragged up with its rest", () => {
+    const moved = moveFlatItem(items(), "set-3", "set-1");
+    expect(computeMapping(moved).orderedSetIds).toEqual([3, 1, 2]);
+    expect(rests(moved)).toEqual({ 1: 60, 2: 90, 3: 120 });
+  });
+
+  it("drops a set dragged up onto a rest after that rest, so the set above keeps it", () => {
+    const moved = moveFlatItem(items(), "set-3", "rest-1");
+    expect(moved.map((i) => i.id)).toEqual(["set-1", "rest-1", "set-3", "rest-3", "set-2", "rest-2"]);
+  });
+
+  it("drops a set dragged down onto a rest after that rest", () => {
+    const moved = moveFlatItem(items(), "set-1", "rest-2");
+    expect(moved.map((i) => i.id)).toEqual(["set-2", "rest-2", "set-1", "rest-1", "set-3", "rest-3"]);
+  });
+
+  it("moves a set with no rest on its own", () => {
+    const list = toFlatItems([makeSet(1), makeSet(2, 90), makeSet(3, 120)]);
+    const moved = moveFlatItem(list, "set-1", "set-3");
+    expect(moved.map((i) => i.id)).toEqual(["set-2", "rest-2", "set-3", "rest-3", "set-1"]);
+  });
+
+  it("moves a dragged rest on its own", () => {
+    const moved = moveFlatItem(items(), "rest-1", "set-3");
+    expect(moved.map((i) => i.id)).toEqual(["set-1", "set-2", "rest-2", "set-3", "rest-1", "rest-3"]);
+  });
+
+  it("leaves the list as it is for an unknown id", () => {
+    const list = items();
+    expect(moveFlatItem(list, "set-1", "set-9")).toBe(list);
   });
 });

@@ -16,7 +16,7 @@ import { formatPlates } from "@/lib/utils/plates";
 import { disciplineConfig, type Discipline } from "@/lib/utils/discipline";
 import { haptics } from "@/lib/utils/haptics";
 import { buildSetLog } from "@/lib/utils/set-log";
-import { computeMapping, toFlatItems } from "@/lib/utils/set-mapping";
+import { computeMapping, moveFlatItem, toFlatItems } from "@/lib/utils/set-mapping";
 import type { FlatItem, RestFlatItem, SetFlatItem } from "@/lib/utils/set-mapping";
 import type { PRResult, ProgramSet } from "@/types/workout";
 import {
@@ -45,7 +45,6 @@ import {
 } from "@dnd-kit/core";
 import {
   SortableContext,
-  arrayMove,
   sortableKeyboardCoordinates,
   useSortable,
   verticalListSortingStrategy,
@@ -895,11 +894,9 @@ export function WorkoutSetsList({
   async function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    const oldIndex = flatItems.findIndex((i) => i.id === active.id);
-    const newIndex = flatItems.findIndex((i) => i.id === over.id);
-    if (oldIndex === -1 || newIndex === -1) return;
+    const reordered = moveFlatItem(flatItems, String(active.id), String(over.id));
+    if (reordered === flatItems) return;
     haptics.tick();
-    const reordered = arrayMove(flatItems, oldIndex, newIndex);
     setFlatItems(reordered);
     await saveCurrentState(reordered);
   }
