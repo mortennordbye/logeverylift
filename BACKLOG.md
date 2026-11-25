@@ -381,12 +381,6 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** The failing runs' `playwright-report-shard-1` artifacts have traces. For (1), check whether the Save handler ran at all (a tap before hydration, or a re-render swallowing it); for (2), whether the list re-rendered from a stale `sets` prop after the insert.
 - **Touchpoints:** `e2e/exercise-timer-delay.spec.ts`, `e2e/warmups.spec.ts`, `e2e/drag-reorder.spec.ts`, `src/components/features/SetEditView.tsx`, `src/components/features/WorkoutSetsList.tsx`.
 
-### `e2e/session-edit.spec.ts` fails on a developer Mac, also on main
-- **What:** "a set's weight edited in history is saved and becomes the record" fails locally on WebKit and Chromium, also on a clean `main` (checked 2026-11-01), and passes in CI. The current weight record comes back as 82.49 kg, from the Bench Press history the e2e reset seeds, instead of the 72.5 kg the spec writes.
-- **Why deferred:** Not caused by the work it was found during; CI is green, so it does not block merges, but it makes every local `make e2e` report two failures.
-- **Unblocked by:** Compare the seeded set dates and `rebuildPRsFrom`'s window under the Mac's UTC+1 against CI's UTC; if a timezone moves which seeded sets the rebuild sees, either the spec should pick an exercise with no seeded history or the rebuild has a real timezone bug.
-- **Touchpoints:** `e2e/session-edit.spec.ts`, `e2e/fixtures/reset.ts` (`seedDemoData`), `src/lib/actions/workout-sets.ts` (`rebuildPRsFrom`).
-
 ### Check prod for timed sets that carry a planned weight
 - **What:** Since #180 a timed set whose planned working sets carry a weight is a weighted hold and progresses its weight at a fixed time instead of its time (SI-29a in `docs/specs/smart-incrementation.md`). Before, the weight was ignored. Any existing timed set with an incidental weight (an import, an AI or MCP-built plan) switched silently. Dev data has none.
 - **Why deferred:** Answering it means querying the production database, which was out of scope for that change.
