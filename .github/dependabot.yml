@@ -31,8 +31,6 @@ updates:
         applies-to: security-updates
         patterns: ["*"]
     ignore:
-      # Held until the react-hooks lint findings are fixed (BACKLOG.md).
-      - dependency-name: "eslint-config-next"
       # Types follow the Node major in the Dockerfile and CI (24).
       - dependency-name: "@types/node"
         versions: [">=25.0.0"]

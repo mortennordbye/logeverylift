@@ -94,7 +94,7 @@
     "drizzle-kit": "^0.31.11",
     "esbuild": "^0.28.2",
     "eslint": "^9",
-    "eslint-config-next": "16.1.6",
+    "eslint-config-next": "16.4.5",
     "jsdom": "26.1.0",
     "lefthook": "^2.2.2",
     "shadcn": "^4.23.0",
