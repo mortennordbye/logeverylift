@@ -211,6 +211,21 @@ test("in the program editor, a set dragged below another keeps its rest and leav
   await expect.poll(() => setIds(page)).toEqual([s2, s3, s1, ...rest]);
 });
 
+test("the editor opened in edit mode hydrates its drag handles with ids that exist", async ({ page }) => {
+  // The steps journey review (2026-11-16) saw a hydration mismatch here. The
+  // server numbered dnd-kit's description id across requests, so after the
+  // first request the handles pointed at an id the page does not have.
+  const editor = `${await benchEditorHref(page)}?edit=true`;
+  for (let load = 0; load < 2; load++) {
+    await page.goto(editor);
+    const handle = page.getByRole("button", { name: "Reorder set 1", exact: true });
+    await expect(handle).toBeVisible();
+    const describedBy = await handle.getAttribute("aria-describedby");
+    expect(describedBy).toBeTruthy();
+    await expect(page.locator(`[id="${describedBy}"]`)).toHaveCount(1);
+  }
+});
+
 test("exercises can be dragged into a new order that survives a reload", async ({ page }) => {
   const settle = trackActions(page);
   await openWorkout(page);

@@ -996,6 +996,9 @@ export function WorkoutSetsList({
   return (
     <>
       <DndContext
+        // A fixed id: dnd-kit's own counts up on the server across requests,
+        // so the handles' aria-describedby did not match on hydration.
+        id="set-list"
         sensors={sensors}
         collisionDetection={closestCenter}
         onDragEnd={handleDragEnd}
