@@ -19,7 +19,8 @@ export async function listAiModelConfigs(): Promise<ActionResult<typeof aiModelC
     const rows = await db.select().from(aiModelConfigs).orderBy(asc(aiModelConfigs.priority));
     return { success: true, data: rows };
   } catch (err) {
-    return { success: false, error: String(err) };
+    console.error("[listAiModelConfigs] failed", err);
+    return { success: false, error: "Failed to load models." };
   }
 }
 

@@ -23,11 +23,6 @@ export class StepRowsError extends Error {
     super(message);
     this.name = "StepRowsError";
   }
-
-  // Actions report String(err); the user reads the message alone.
-  override toString(): string {
-    return this.message;
-  }
 }
 
 /** Throws StepRowsError when the exercise holds steps that break a rule. */
