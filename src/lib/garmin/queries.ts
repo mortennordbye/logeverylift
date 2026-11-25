@@ -1302,6 +1302,7 @@ async function heavyLegSetsOn(userId: string, day: string): Promise<number> {
     .from(workoutSets)
     .innerJoin(workoutSessions, eq(workoutSessions.id, workoutSets.sessionId))
     .innerJoin(exercises, eq(exercises.id, workoutSets.exerciseId))
+    // plan-read: includes deleted (logged sets keep the type override of an exercise the program may have dropped since)
     .leftJoin(programExercises, eq(programExercises.id, workoutSets.programExerciseId))
     .where(and(eq(workoutSessions.userId, userId), eq(workoutSessions.date, day), eq(workoutSessions.isCompleted, true), eq(workoutSets.isCompleted, true)));
   // A logged set has the reps done, not a range: they stand in for the planned reps.
