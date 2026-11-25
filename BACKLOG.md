@@ -88,12 +88,6 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** The endurance switch removal. Then: one design document covering the whole model and every reader, an independent battle test of it, owner decisions one at a time (first: what triggers small weight steps, with the set's planned reps as the leading option; then whether the mix means what the user does or what the app plans, whether "endurance only" means zero strength sessions, how existing users convert from prod counts, and whether the assistant and outside model read the mix), one mockup, then build and review.
 - **Touchpoints:** `src/components/features/account/sections.tsx`, `ProfileSteps.tsx`, `src/lib/utils/goals.ts`, `src/lib/utils/progression.ts`, `src/lib/utils/plan-templates.ts`, `src/lib/utils/strength-goal.ts`, `src/lib/utils/triathlon-plan.ts`, `src/lib/utils/training-limits.ts`, `src/lib/mcp/tools/profile.ts`, `src/lib/mcp/tools/athlete-profile.ts`, `src/lib/utils/ai-prompt.ts`, `src/lib/utils/ai-edit.ts`, `src/app/privacy/page.tsx`.
 
-### Drop the unused interview column
-- **What:** Remove `athlete_profiles.interview_completed_at` and the `completeInterview` field of the MCP `manage_athlete_profile` tool. The in-app interview is gone and no page reads the column.
-- **Why deferred:** `feat/account-profile` already adds two migrations; a third for a column nothing reads can wait.
-- **Unblocked by:** Nothing. One migration plus removing the field from `ProfileChange` and the MCP tool's schema.
-- **Touchpoints:** `src/db/schema/athlete-profile.ts`, `src/lib/athlete-profile.ts` (`saveAthleteProfile`), `src/lib/mcp/tools/athlete-profile.ts`, `src/lib/validators/athlete-profile.ts`.
-
 ### Home widgets: catalogue sizes the locked design left out
 - **What:** Sizes from the widget catalogue (`docs/home-widgets-audit.md`, section 4) not built with the redesign: Weekly volume M (top muscles vs target) and L (all muscle bars), Body weight L (90-day line), Training load S (form and band) and per-sport L, Race countdown M (race, date, days, phase).
 - **Why deferred:** The locked design (`docs/design/home-redesign/home-locked.html`) gives these widgets only the sizes that were built, and the redesign built to it.
@@ -106,39 +100,17 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** Being accepted into the Garmin Connect Developer Program and moving from per-user Personal API keys to its OAuth flow. Then: decide whether GPS tracks in `garmin_activity_streams` need their own opt-in (decision G-2 in `docs/plans/garmin-deep-data.md`); follow the `privacy-compliance` checklist (policy text from `docs/privacy/data-inventory.md`, including the AI tools' Garmin metrics, `garmin_fuel_logs`, the population ratings from profile gender and age, and the opt-in weight sync whose copies stay when Garmin data is deleted), bump `LEGAL_VERSION`, raise `CONSENT_VERSION` because these are new health-data categories; then widen `garminAllowed`.
 - **Touchpoints:** `src/lib/garmin/access.ts`, `src/lib/actions/garmin.ts`, `src/lib/garmin/`, `src/app/privacy/page.tsx`, `src/lib/constants/legal.ts`.
 
-### Seasons: fitness projection across phases
-- **What:** The Garmin race views read the A race from the season, but the fitness projection to race day uses only the active phase's curve. Phases after it are not projected. (The other gap of the seasons package, limits on the chained start and on `resume`, closed with D2 part 2: `docs/plans/limits-strength-readiness.md`.)
-- **Why deferred:** The projection across phases needs the timeline of every later phase and its programs, which belongs with D2's load model.
-- **Unblocked by:** Nothing now: D1's load and the weekly load ramp (D2 part 2) are in. Build the projection from `getSeasonDetail` phases, each with its own curve (`cycleLoad`).
-- **Touchpoints:** `src/lib/garmin/analytics/projection.ts`, `src/lib/garmin/queries.ts` (`getRaceProjection`).
-
 ### Plan redesign: what the four packages left for later
-- **What:** Two gaps found while building the Plan tab (`docs/plans/plan-tab-redesign.md`):
-  - The triathlon plan gives every phase its own copy of the generator's programs, so Programs lists names like "Long Run" once per phase.
-  - Server Actions outside `src/lib/actions/training-cycles.ts` can still return `String(err)` to the client (the bug pass fixed only that file).
-- **Why deferred:** Out of the packages' scope; each needs its own decision (shared programs across phases) or a sweep of every action file.
-- **Unblocked by:** An owner choice on shared vs per-phase programs; a grep for `String(err)` and `String(e)` in `src/lib/actions/` with the canonical error pattern from `CLAUDE.md`.
-- **Touchpoints:** `src/lib/actions/triathlon-plan.ts`, `src/lib/utils/triathlon-phases.ts`, `src/lib/actions/`.
-
-### Tests that build date labels without a year
-- **What:** Plan date labels now show the year when a date is not in the current year (`dayMonth`, `shortDay`, `rangeLabel`, with `thisYear()` in `src/lib/utils/date-label.ts`). Some tests still build the label they expect from the real clock with no year, for example `shortDay` in `e2e/did-you-do-it.spec.ts` and the date helpers in `e2e/cycle-detail.spec.ts`. When a run's dates cross into the next year (late December), these tests expect "Fri 1 Jan" and the app shows "Fri 1 Jan 2027".
-- **Why deferred:** Found at the end of the Plan redesign fix rounds; the test files the change touched pin the clock, the others do not, and no test fails before late December.
-- **Unblocked by:** Nothing. Make the helpers use the app's own label functions, or pin the browser and server clock in those specs; grep `toLocaleDateString` in `e2e/` and `src/__tests__/`.
-- **Touchpoints:** `e2e/did-you-do-it.spec.ts`, `e2e/cycle-detail.spec.ts`, `src/lib/utils/date-label.ts`.
+- **What:** A gap found while building the Plan tab (`docs/plans/plan-tab-redesign.md`): the triathlon plan gives every phase its own copy of the generator's programs, so Programs lists names like "Long Run" once per phase.
+- **Why deferred:** Out of the packages' scope; it needs its own decision (shared programs across phases).
+- **Unblocked by:** An owner choice on shared vs per-phase programs.
+- **Touchpoints:** `src/lib/actions/triathlon-plan.ts`, `src/lib/utils/triathlon-phases.ts`.
 
 ### Ride and run e2e: a reply across `advance` sets the phone's clock offset wrong
 - **What:** `advance` in `e2e/run-mode.spec.ts` and `e2e/bike-ride.spec.ts` moves the stored ride back and runs the page clock forward. `useRide` sets its clock offset from each reply by the page time the request left and the reply came in (`applyView`). A reply whose round trip spans a `pauseAt` or a `runFor` (run mode's opening `getRide`, a heartbeat or a step save fired by `runFor`) measures the offset across a jump of the page clock, so the page counts the run seconds away from the server. Seen once in 40 runs of the offline belt spec before its fix: after `advance(page, s.userId, 6)` in `startRun` the count stayed on screen. The specs pass most of the time because a reply that came in while the clock was stopped had a round trip of 0 ms, and the offset then moves only for a difference over 500 ms. Two tries that changed this made it worse: waiting for no Server Action in flight before the stop broke spec 1b every run (a reply inside `runFor` then always moved the offset, by about 8 s), and stopping the clock before Start run broke 1b and 3.
 - **Why deferred:** Found while fixing the offline belt spec (`fix/flaky-offline-belt-e2e`); a fix needs a new clock model for these specs, not a small change.
 - **Unblocked by:** A way to keep replies out of a clock jump: for example, `advance` that waits until no Server Action is in flight both before and after each `runFor`, run in short steps, or a page hook that sets the offset straight from the server time.
 - **Touchpoints:** `e2e/run-mode.spec.ts` (`startRun`, `advance`), `e2e/bike-ride.spec.ts` (`advance`), `src/components/features/bike/useRide.ts` (`applyView`, `tickNow`), `e2e/helpers.ts` (`trackActions`, `freezeClock`).
-
-### UI text outside the Plan tab that still uses colons
-- **What:** The owner's copy rule (no colons and no em dashes in user-facing text) is met in the Plan tab, but the change history and the assistant changes page still show names and lines with a colon:
-  - `snapshotName` names a library workout "Workout: Tempo" (`src/lib/utils/plan-revisions.ts:96`) and an injury "Injury: left knee" (`src/lib/utils/plan-revisions.ts:93`). The names show on `/more/assistants/changes` (`getAssistantChanges` through `listAssistantChangeSets` in `src/lib/plan-revisions.ts`), and the injury name also goes into "Added injury: …" lines in `diffSnapshots`.
-  - The first entry of the athlete profile lists each field as "Experience: novice", "Days: …" (`diffSnapshots`, `src/lib/utils/plan-revisions.ts:419`), shown as the change lines of an assistant change set on the same page.
-- **Why deferred:** Out of the Plan tab fix rounds' scope. The same lines also go to the assistant over MCP (`diffSnapshots` in `src/lib/mcp/revisions.ts`), so a change needs a check of the MCP texts and their tests too.
-- **Unblocked by:** Nothing. Pick plain words ("Tempo workout", "Left knee injury", "Experience novice" or "Experience set to novice"), change `snapshotName` and `diffSnapshots`, and update the tests that read those strings (`grep -rn "Workout: \|Injury: " src/__tests__`).
-- **Touchpoints:** `src/lib/utils/plan-revisions.ts` (`snapshotName`, `diffSnapshots`), `src/lib/plan-revisions.ts`, `src/lib/mcp/revisions.ts`, `src/app/more/assistants/changes/page.tsx`.
 
 ### Dated sessions: what C2 left for later
 - **What:** Two gaps left by the session model (C2, `docs/plans/sessions.md`):
@@ -158,10 +130,16 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Touchpoints:** `src/db/schema/garmin.ts` (`garminFuelLogs`), `src/lib/account-data.ts`, `src/lib/garmin/delete-data.ts`, `src/lib/utils/race-plan.ts`, `src/lib/race-plans.ts`, `docs/research/endurance-training-reference.md`.
 
 ### Older screens: points from the steps journey review
-- **What:** Points the journey review of the one program model (2026-11-16) found on screens that looked the same before it. At 320 px (and the back link at 390 px too, seen 2026-11-18): the program page header cuts its back link and buttons ("Progra... Change history", Share, "Ed"), the workout header cuts its "+" button, and the home week ring overlaps the next day circles (strength users too). On the week page a sport's planned time is 0 min when one of its sessions has a step with no time (a distance step with no pace target, or a lap step), because compliance leaves the whole planned time unknown; structured workouts did the same; its "Ramp" line uses colons. The workout screen and set list show lifting copy on a run ("get a feel for the weights", "Setup notes: seat height, grip, cues"). The pool view offers "Start send-off clock" on a block with no send-off and has no Next button. The session page shows only planned totals after the session is done, not the time and RPE done. The results rows read "planned 02:00 · done 00:00 · not done", where "done" is both the time and the status. Swim summaries read "cool-down back" for the stroke. Plain set summaries use semicolons ("3 km; 14 km; 10:00"). A click test the same day added: the results form names its dropdowns by internal key ("Status of step s4#1", "e1:s1"); in the strength editor a drag-reorder of set 1 below set 3 left one rest at 0 (the rest mapping in `src/lib/utils/set-mapping.ts`, not changed by the step model); a fresh sign-in on the workout page opens a new empty workout session beside the open one; and one hydration mismatch showed on a strength exercise page in edit mode after a drag and Generate warm-ups. The fourth capture added: the guided player's copy uses colons and a semicolon ("First: …", "Keep the app open: …", "2 km: tap Lap when done", "Next: …", "Timing goes on; set Auto-Lock"), its banner touches the step label at 320 px and its colour stops short of the screen bottom; the pool view's "Start send-off clock" text has no side padding at 320 px; the session page writes a repeat block out row by row (10 × 100 is ten rows); "Last session · 1m" can read as one metre; a "Manual" progression chip shows on run step lists; the week title wraps "Nov" alone at 320 px; and a lifter's home says "0 of 4" with one planned day.
+- **What:** Points the journey review of the one program model (2026-11-16) found on screens that looked the same before it. At 320 px (and the back link at 390 px too, seen 2026-11-18): the program page header cuts its back link and buttons ("Progra... Change history", Share, "Ed"), the workout header cuts its "+" button, and the home week ring overlaps the next day circles (strength users too). On the week page a sport's planned time is 0 min when one of its sessions has a step with no time (a distance step with no pace target, or a lap step), because compliance leaves the whole planned time unknown; structured workouts did the same; its "Ramp" line uses colons. The workout screen and set list show lifting copy on a run ("get a feel for the weights", "Setup notes: seat height, grip, cues"). The pool view offers "Start send-off clock" on a block with no send-off and has no Next button. The session page shows only planned totals after the session is done, not the time and RPE done. The results rows read "planned 02:00 · done 00:00 · not done", where "done" is both the time and the status. Swim summaries read "cool-down back" for the stroke. Plain set summaries use semicolons ("3 km; 14 km; 10:00"). A click test the same day added: the results form names its dropdowns by internal key ("Status of step s4#1", "e1:s1"). The fourth capture added: the guided player's copy uses colons and a semicolon ("First: …", "Keep the app open: …", "2 km: tap Lap when done", "Next: …", "Timing goes on; set Auto-Lock"), its banner touches the step label at 320 px and its colour stops short of the screen bottom; the pool view's "Start send-off clock" text has no side padding at 320 px; the session page writes a repeat block out row by row (10 × 100 is ten rows); "Last session · 1m" can read as one metre; a "Manual" progression chip shows on run step lists; the week title wraps "Nov" alone at 320 px; and a lifter's home says "0 of 4" with one planned day.
 - **Why deferred:** The owner's rule: new findings during a change go to the backlog. These screens are older, several are strength screens the change must not alter, and the planned time is a rule of the compliance bands, not of the step model.
 - **Unblocked by:** Nothing for the layout and copy points (fix with a capture at 320 px, `pnpm journeys steps`). For the week planned time: an owner choice between showing the known part as "at least" and keeping it unknown.
-- **Touchpoints:** `src/components/features/ProgramDetailClient.tsx`, `src/components/features/WorkoutSessionClient.tsx`, `src/components/features/home/widgets/week/`, `src/app/week/page.tsx`, `src/lib/session-compliance.ts` (`withSteps`), `src/components/features/guided/PoolList.tsx`, `src/components/features/guided/StepResultsForm.tsx`, `src/app/planned/[id]/page.tsx`, `src/lib/utils/workout-steps.ts` (`describeWorkout`), `src/lib/utils/format.ts` (`buildRunSetSummary`), `src/lib/utils/set-mapping.ts` (`computeMapping`), `src/components/features/WorkoutSessionInitializer.tsx`, `src/components/features/guided/GuidedPlayer.tsx`.
+- **Touchpoints:** `src/components/features/ProgramDetailClient.tsx`, `src/components/features/WorkoutSessionClient.tsx`, `src/components/features/home/widgets/week/`, `src/app/week/page.tsx`, `src/lib/session-compliance.ts` (`withSteps`), `src/components/features/guided/PoolList.tsx`, `src/components/features/guided/StepResultsForm.tsx`, `src/app/planned/[id]/page.tsx`, `src/lib/utils/workout-steps.ts` (`describeWorkout`), `src/lib/utils/format.ts` (`buildRunSetSummary`), `src/components/features/guided/GuidedPlayer.tsx`.
+
+### A sign-in after an hour closes the open workout
+- **What:** `createWorkoutSession` now resumes the caller's open app session on the same program, so a fresh sign-in or a second phone no longer opens a second workout. But it first sweeps open sessions started over an hour ago. A workout that has run for more than an hour is closed by that sweep, and the new sign-in starts a new session beside it.
+- **Why deferred:** The one-hour sweep is an older rule ("avoid clobbering a legitimate concurrent start"), and the fix for the steps journey review point kept it.
+- **Unblocked by:** An owner choice: resume an open session of the same program up to the home sweep's 10 hours, or keep the one-hour bound.
+- **Touchpoints:** `src/lib/actions/workout-sessions.ts` (`createWorkoutSession`, `closeStaleSessions`).
 
 ### Brick and sick-period controls in the app
 - **What:** Controls from section 7 of `docs/plans/workouts-and-compliance.md` that the app does not show yet: "Link as brick" in the calendar day sheet; the list of the day's Garmin activities in the "Yes" sheet for admins (6.5; Pick on the planned session page, `SessionMatchBlock` with `pickSessionActivity`, now stores a pick, but the "Yes" sheet still offers only a typed time); and Recently deleted with Restore for sick periods. The server has all of them (`applySessionOp` ops `link_brick`, `unlink_brick`; `restoreDeletedAthleteRow` for a sick period), and the assistant can use them over MCP. The app's Server Action and validator accept none of the brick ops yet: add each op to `plannedSessionOpSchema` with its control.
@@ -277,12 +255,6 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** A morning entry of resting HR (and HRV if the user has it) in the app, or another wearable source. Then feed it to `readinessFlag` with the same two-signal rule.
 - **Touchpoints:** `src/lib/utils/training-limits.ts` (`readinessFlag`), `src/lib/training-limits.ts` (`limitContext`).
 
-### Discipline on the custom-exercise form inside a program
-- **What:** The custom-exercise form on `/exercises` shows the discipline field (swim, bike or run) when the endurance switch is on. The same form opened from a program's "Add exercise" picker does not, because the picker does not pass the switch.
-- **Why deferred:** The owner's decision 5 in `docs/plans/ai-coach.md` named the custom-exercise form; the picker is a second entry point that needs the switch read on the program page, and the assistant can set the discipline with `create_exercise` meanwhile.
-- **Unblocked by:** Reading `enduranceEnabledFor` on the program page and passing `enduranceEnabled` through `ProgramAddExerciseWrapper` to `ExercisesClient`.
-- **Touchpoints:** `src/components/features/ProgramAddExerciseWrapper.tsx`, `src/components/features/ExercisesClient.tsx`, `src/app/programs/[id]/page.tsx`.
-
 ### Sport-specific endurance fields (pool length, bike power/cadence, swim stroke)
 - **What:** The set editor captures distance/duration/incline/HR-zone only. Triathletes often want pool length, swim stroke, or bike power/cadence. Planned structured workouts now hold a pool length, a stroke per step and cadence targets (`poolLengthM`, `stroke`, `cadence` in `src/lib/utils/workout-steps.ts`), but logged sets have no columns for them.
 - **Why deferred:** Not needed to log and track the three disciplines; add when a concrete need appears.
@@ -306,12 +278,6 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Why deferred:** Not in the build order the owner asked for (steps 1 to 7 of the review); the build order was the agreed scope.
 - **Unblocked by:** The owner picking which to build. Pair 7 needs local session end times compared with the local sleep start; pair 10 needs steps in the daily series.
 - **Touchpoints:** `src/components/features/GarminTodayTab.tsx`, `src/components/features/GarminLoadTab.tsx`, `src/components/features/GarminSleepTab.tsx`, `src/components/features/GarminActivitiesTab.tsx`, `src/components/features/GarminActivityView.tsx`, `src/lib/garmin/analytics/correlations.ts` (`PAIRS`).
-
-### Garmin: plan-aware strength_before_key insight
-- **What:** The `strength_before_key` insight fires on any heavy strength load the day before. Plan 4.1 wants it only for a heavy leg session before a planned quality run or ride.
-- **Why deferred:** It needs which lifts were legs (muscle groups of the matched LogEveryLift session) and which of today's planned sessions is the key one (the cycle's slot for today).
-- **Unblocked by:** Reading today's planned session from the active cycle, and the muscle groups of yesterday's sets.
-- **Touchpoints:** `src/lib/garmin/analytics/session-insights.ts`, `getSessionInsights` in `src/lib/garmin/queries.ts`.
 
 ### iOS backgrounding — residual gaps after the resume-hardening pass
 - **What:** A Jun 2026 pass made the rest/exercise timers and completed-set toggles re-sync on resume (visibilitychange + pageshow + focus; rest timers rebuild from `restTimerEnds`, completed sets re-pull from the server). Two gaps remain: (1) the **exercise (timed-set) countdown** isn't persisted, so a *cold* eviction mid-timed-set loses it entirely (only warm resume recovers it); (2) **unsaved SetEditView edits** (typed but not Saved) live only in React state and are lost on eviction — only Saved overrides persist to localStorage.
@@ -391,29 +357,11 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** Nothing — pick an item off the doc. It lists a suggested order at the end.
 - **Touchpoints:** see the file:line references per finding in `docs/ui-polish-audit.md`.
 
-### SetEditView seeds its fields from overrides via `useState` initialisers
-- **What:** `SetEditView` reads `workoutSession.overrides[set.id]` in `useState(...)` initialisers (reps, weight, duration, notes, failed, rir). Those run once. Overrides are restored from localStorage in a mount effect on a provider above, so on a **cold load of the set-edit URL** the initialisers may run before the overrides exist, leaving the editor showing program values while the set list shows adjusted ones. Not observed in the audit — the case wasn't exercised — but the ordering that caused the hydration mismatch fixed in this pass (see `useRenderedOverrides`) is the same ordering that would cause it.
-- **Why deferred:** Unverified, and it is a correctness question about override initialisation rather than the layout-shift brief.
-- **Unblocked by:** Reproduce first: apply a suggestion to a set, then hard-reload that set's `/sets/[setId]` URL and check whether the editor shows the adjusted or the program value. If adjusted, there is nothing to fix.
-- **Touchpoints:** `src/components/features/SetEditView.tsx` (the `useState` block, ~lines 125–160), `src/contexts/workout-session-context.tsx` (`useRenderedOverrides` and the restore effect).
-
 ### One e2e worker started on the sign-in page in a main CI run
 - **What:** In CI run 40006288669 (the merge of #117, 2026-10-23), every spec in one WebKit worker of E2E shard 1 (`parallelIndex` 1, seven specs across ai-setup, consent, exercise-timer, page-transition, progression-suggestion and readiness) failed because the page was the sign-in form, as if that worker's saved session was invalid from its first spec on. Its `authenticate worker 1` setup had passed. The same commit passed on the PR, and a re-run of the failed jobs passed.
 - **Why deferred:** Found while shipping an unrelated illustration batch; the logs show no server error, and the cause was not found in the time spent.
 - **Unblocked by:** Reproduce by running the e2e suite repeatedly with two workers and checking whether a worker's storage state is ever rejected; look at what can end the e2e users' sessions between `e2e/auth.setup.ts` writing the file and the first spec (session expiry or rotation in the auth config, the consent redirect, a spec that signs out). The run's artifacts (`playwright-report-shard-1`) have the page snapshots.
 - **Touchpoints:** `e2e/auth.setup.ts`, `e2e/fixtures/test.ts` (`storageState`), `e2e/fixtures/env.ts`, `playwright.config.ts`.
-
-### WebKit e2e specs that fail now and then on CI
-- **What:** Three WebKit specs each failed once on CI on 2026-11-01 (runs on PRs #179 and #180) and passed on a re-run. (1) `e2e/exercise-timer-delay.spec.ts:44`: after Save in the timed set editor the screen stayed on Edit Set; the trace shows no request and `router.back()` did not navigate, so `+3s` never appeared on the list. (2) `e2e/warmups.spec.ts:31`: 4 set rows instead of 8 after "Generate warm-ups". (3) `e2e/drag-reorder.spec.ts:122` ("un-logging a moved set removes its own log"). All three passed in two full local runs. The setup-notes flake from the same days had a real cause (a controlled textarea reset by a re-render, fixed in #181), so these may hide user-facing bugs too.
-- **Why deferred:** Found while shipping #179 and #180; re-running got them through, and the cause was not looked for.
-- **Unblocked by:** The failing runs' `playwright-report-shard-1` artifacts have traces. For (1), check whether the Save handler ran at all (a tap before hydration, or a re-render swallowing it); for (2), whether the list re-rendered from a stale `sets` prop after the insert.
-- **Touchpoints:** `e2e/exercise-timer-delay.spec.ts`, `e2e/warmups.spec.ts`, `e2e/drag-reorder.spec.ts`, `src/components/features/SetEditView.tsx`, `src/components/features/WorkoutSetsList.tsx`.
-
-### `e2e/session-edit.spec.ts` fails on a developer Mac, also on main
-- **What:** "a set's weight edited in history is saved and becomes the record" fails locally on WebKit and Chromium, also on a clean `main` (checked 2026-11-01), and passes in CI. The current weight record comes back as 82.49 kg, from the Bench Press history the e2e reset seeds, instead of the 72.5 kg the spec writes.
-- **Why deferred:** Not caused by the work it was found during; CI is green, so it does not block merges, but it makes every local `make e2e` report two failures.
-- **Unblocked by:** Compare the seeded set dates and `rebuildPRsFrom`'s window under the Mac's UTC+1 against CI's UTC; if a timezone moves which seeded sets the rebuild sees, either the spec should pick an exercise with no seeded history or the rebuild has a real timezone bug.
-- **Touchpoints:** `e2e/session-edit.spec.ts`, `e2e/fixtures/reset.ts` (`seedDemoData`), `src/lib/actions/workout-sets.ts` (`rebuildPRsFrom`).
 
 ### Check prod for timed sets that carry a planned weight
 - **What:** Since #180 a timed set whose planned working sets carry a weight is a weighted hold and progresses its weight at a fixed time instead of its time (SI-29a in `docs/specs/smart-incrementation.md`). Before, the weight was ignored. Any existing timed set with an incidental weight (an import, an AI or MCP-built plan) switched silently. Dev data has none.
@@ -453,10 +401,10 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Touchpoints:** `src/lib/utils/picker-options.ts`, `src/components/features/SetEditView.tsx` (weight sheet ~line 921), `src/components/features/NewSetView.tsx` (weight sheet ~line 619), `src/components/features/AdminInsightsClient.tsx`.
 
 ### `make dev` cannot work against a remote Docker daemon
-- **What:** `docker-compose.dev.yml` bind-mounts `.:/app` for hot-reload. That path is resolved on the *daemon's* filesystem, so when `DOCKER_HOST` points at a remote/DinD daemon (e.g. `tcp://localhost:2375`) the mount lands empty and `logeverylift-app` crash-loops on `ERR_PNPM_NO_IMPORTER_MANIFEST_FOUND`. `make dev PROD=1` is unaffected — the runner stage ships the source in the image via the build context — but it's a production build, so it's a poor everyday dev loop. The Makefile also calls the `docker-compose` v1 binary, absent where only the `docker compose` v2 plugin is installed.
+- **What:** `docker-compose.dev.yml` bind-mounts `.:/app` for hot-reload. That path is resolved on the *daemon's* filesystem, so when `DOCKER_HOST` points at a remote/DinD daemon (e.g. `tcp://localhost:2375`) the mount lands empty and `logeverylift-app` crash-loops on `ERR_PNPM_NO_IMPORTER_MANIFEST_FOUND`. `make dev PROD=1` is unaffected — the runner stage ships the source in the image via the build context — but it's a production build, so it's a poor everyday dev loop.
 - **Why deferred:** Hit while setting up a smoke pass; unrelated to the change in flight, and the fix is an environment decision rather than a code one.
-- **Unblocked by:** Deciding how remote-daemon setups should develop — document `make dev PROD=1` as the fallback, or sync the tree to the daemon host (`docker context`, mutagen, or a named volume seeded from the build context). Separately: switch the Makefile's `COMPOSE` to `docker compose` with a v1 fallback.
-- **Touchpoints:** `docker-compose.dev.yml` (the `.:/app` mount), `Makefile` (`COMPOSE`, `dev` target), `CLAUDE.md` (Development + smoke-pass prereqs).
+- **Unblocked by:** Deciding how remote-daemon setups should develop — document `make dev PROD=1` as the fallback, or sync the tree to the daemon host (`docker context`, mutagen, or a named volume seeded from the build context).
+- **Touchpoints:** `docker-compose.dev.yml` (the `.:/app` mount), `Makefile` (`dev` target), `CLAUDE.md` (Development + smoke-pass prereqs).
 
 ### The rest of the app has no behaviour spec yet
 - **What:** `docs/specs/` holds the spec standard and two specs — [`smart-incrementation.md`](docs/specs/smart-incrementation.md) (40 rules `SI-1`…`SI-40`) and [`cycle-periodization.md`](docs/specs/cycle-periodization.md) (44 rules `PZ-1`…`PZ-44`). Every other feature is still described only by reference maps (`docs/workout-and-sets.md`, `docs/cycles-and-plans.md`, `docs/data-model.md`), which say where code lives but never what it is supposed to do. The candidates, roughly in order of how much a disagreement about intent would cost: the workout logging + rest/exercise timer flow, cycle **scheduling** and missed-workout catch-up (`src/lib/utils/cycle-position.ts` — explicitly out of scope for `PZ`), PR detection and rollback, the offline replay queue, and auth/session handling.
@@ -478,12 +426,6 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** A decision to widen the MCP surface. Mirror the existing pattern: add a `src/lib/mcp/tools/<domain>.ts` with a `register<Domain>Tools(server, userId)` and call it from the endpoint on the scoped `server`. Mark read tools `readOnlyHint: true`; any other tool needs read and change access (`src/lib/mcp/scopes.ts`). Reuse the action logic but scope by the MCP `userId` (never reuse the cookie-session actions directly).
 - **Touchpoints:** `src/lib/mcp/tools/`, `src/app/api/[transport]/route.ts`.
 
-### `.well-known` route files are outside the tsc program
-- **What:** `src/app/.well-known/**/route.ts` live under a dot-folder, which TypeScript's `**/*.ts` include glob skips, so `pnpm verify` does not type-check them (they use relative imports as a result). Next's bundler still builds them.
-- **Why deferred:** The files are trivial one-line re-exports; the type-check gap is low-risk.
-- **Unblocked by:** Wanting them covered — add an explicit `src/app/.well-known/**/*.ts` entry to `tsconfig.json` `include`.
-- **Touchpoints:** `tsconfig.json`, `src/app/.well-known/`.
-
 ### MCP rate limiting — move to a shared store if the app scales
 - **What:** MCP requests are rate-limited per `userId` (`src/lib/mcp/rate-limit.ts`), but the limiter is in-memory/process-local.
 - **Why deferred:** Correct as-is for a **single instance**. Across multiple instances each would track its own counter, so the effective limit would be N× the intended one.
@@ -495,12 +437,6 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Why deferred:** Deliberate performance tradeoff; the window is bounded at 5 min. Accepted for now.
 - **Unblocked by:** A need for immediate revocation — then call `auth.api.getSession({ query: { disableCookieCache: true } })` inside `requireAdmin()` / the ban check, or drop `cookieCache`.
 - **Touchpoints:** `src/lib/auth.ts`, `src/lib/utils/session.ts`.
-
-### Minor: weight float comparison logs redundant history entries
-- **What:** MCP `update_profile` / `manage_weight` and their Server-Action originals compare a JS double against a Postgres `real` weight with `!==`, so re-sending the same weight can log a duplicate `user_weight_entry`.
-- **Why deferred:** Low-harm data-quality issue, not data loss or a leak.
-- **Unblocked by:** Caring about history cleanliness (round/compare at 0.01).
-- **Touchpoints:** `src/lib/mcp/tools/profile.ts`, `src/lib/actions/profile.ts`.
 
 ### MCP OAuth dynamic client registration is open
 - **What:** The `mcp()` plugin in `src/lib/auth.ts` runs with `allowDynamicClientRegistration` and `allowUnauthenticatedClientRegistration`, so any client can self-register an OAuth client (RFC 7591). Access still requires the user to log in and consent, so this isn't a data-exposure hole, but it allows unbounded `oauth_client` rows. MCP 2026-07-28 deprecates this in favour of Client ID Metadata Documents (`@better-auth/cimd`), which the app does not offer yet; a client that only speaks CIMD cannot connect.
@@ -514,12 +450,6 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** Running `/security-review` (or `/code-review high`) over the current branch diff before/after merge, and optionally addressing the lower-severity residuals captured in the entries above (cookieCache revocation lag, weight float dedup, reaction privacy flag).
 - **Touchpoints:** whole MCP + auth surface — `src/lib/mcp/`, `src/app/api/[transport]/`, `src/lib/actions/`, `src/lib/auth.ts`, `src/middleware.ts`, `src/lib/env.ts`.
 
-
-### `eslint-config-next` held at 16.1.6 while `next` moves on
-- **What:** `eslint-config-next` 16.4.x pulls `eslint-plugin-react-hooks` 7.1.1, whose stricter rules report 18 errors in existing code (checked with 16.4.3): `react-hooks/set-state-in-effect` (14), `react-hooks/immutability` (2) and `react-hooks/purity` (2). `.github/dependabot.yml` ignores `eslint-config-next`, so the weekly npm group does not fail lint on it.
-- **Why deferred:** `next` was bumped to 16.4.2 to fix a router action-queue race that dropped taps and pulled users back a screen (`e2e/session-start-race.spec.ts`). Rewriting effects across the app to satisfy new lint rules is separate work and would have buried that fix. Most findings are in the workout screens, which are critical flows.
-- **Unblocked by:** Bumping `eslint-config-next` to match `next`, running `pnpm lint`, and fixing or deliberately suppressing each finding with a reason. Then remove the `eslint-config-next` ignore from `.github/dependabot.yml`.
-- **Touchpoints:** `package.json`, `eslint.config.mjs`, `.github/dependabot.yml`, the files `pnpm lint` reports after the bump.
 
 ### Two Dependabot alerts with no fix inside current ranges
 - **What:** minimatch 9.0.9 and 10.2.4 are in the GHSA-g3hv-75wg-m249 range (fixed in minimatch 11.0.1). They come in through `glob` (from `@serwist/build` and `@sentry/bundler-plugins`), `@ts-morph/common` (from `shadcn`) and `@typescript-eslint/typescript-estree`. deepmerge 4.3.1 (from `shadcn`) has a low advisory with no patched release. All of these run at build or lint time only, not in the server.

@@ -224,7 +224,8 @@ describe("athlete profile snapshots (docs/plans/athlete-profile.md, 2.2)", () =>
 
   it("names each type", () => {
     expect(snapshotName(t())).toBe("FTP");
-    expect(snapshotName(inj())).toBe("Injury: left lower back");
+    expect(snapshotName(inj())).toBe("Left lower back injury");
+    expect(snapshotName(inj({ side: null, area: "knee" }))).toBe("Knee injury");
     expect(snapshotName({ v: 1, athlete: { id: 3 } })).toBe("Athlete profile");
   });
 
@@ -235,7 +236,12 @@ describe("athlete profile snapshots (docs/plans/athlete-profile.md, 2.2)", () =>
   });
 
   it("reads injury and profile changes", () => {
+    expect(diffSnapshots(null, inj())).toEqual(["Added left lower back injury (active)"]);
     expect(diffSnapshots(inj(), inj({ status: "past" }))).toEqual(["status active → past"]);
+    expect(diffSnapshots(null, { v: 1, athlete: { id: 3, enduranceLevel: "novice", availableDays: [1, 3], strengthGoal: null } })).toEqual([
+      "Experience set to novice",
+      "Days set to Mon Wed",
+    ]);
     expect(
       diffSnapshots(
         { v: 1, athlete: { id: 3, availableDays: [1, 3], strengthGoal: null } },

@@ -93,7 +93,8 @@ export function snapshotName(s: PlanSnapshot): string {
   if (isThresholdSnapshot(s)) return THRESHOLD_LABEL[s.threshold.kind as ThresholdKind] ?? "Threshold";
   if (isInjurySnapshot(s)) {
     const side = s.injury.side ? `${s.injury.side} ` : "";
-    return `Injury: ${side}${INJURY_AREA_TEXT(s.injury.area)}`;
+    const what = `${side}${INJURY_AREA_TEXT(s.injury.area)}`;
+    return `${what.charAt(0).toUpperCase()}${what.slice(1)} injury`;
   }
   if (isSeasonSnapshot(s)) return String(s.season.name);
   if (isIllnessSnapshot(s)) return `Sick period from ${String(s.illness.startedOn)}`;
@@ -355,6 +356,7 @@ const ATHLETE_FIELDS: Record<string, string> = {
   longestDayMinutes: "Longest day",
   longDay: "Long day",
   strengthGoal: "Strength goal",
+  // Dropped in migration 0107; kept so older profile revisions still read.
   interviewCompletedAt: "Interview",
 };
 
@@ -436,7 +438,7 @@ export function diffSnapshots(before: PlanSnapshot | null, after: PlanSnapshot):
     for (const [field, label] of Object.entries(ATHLETE_FIELDS)) {
       const a = athleteValue(field, after.athlete[field]);
       if (!prev) {
-        if (after.athlete[field] != null) out.push(`${label}: ${a}`);
+        if (after.athlete[field] != null) out.push(`${label} set to ${a}`);
         continue;
       }
       const b = athleteValue(field, prev[field]);

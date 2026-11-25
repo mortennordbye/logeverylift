@@ -158,7 +158,7 @@ describe("remainingAfterOverride", () => {
 
   it("formats the line the user sees", () => {
     expect(overrideLine([cap], "Did a 1:40 h trail run on Sunday outside the app.")).toBe(
-      `Went past a training limit: ${cap.message} Assistant's reason: Did a 1:40 h trail run on Sunday outside the app.`,
+      `Went past a training limit · ${cap.message} · The assistant's reason was Did a 1:40 h trail run on Sunday outside the app.`,
     );
   });
 });

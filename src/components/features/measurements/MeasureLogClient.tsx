@@ -82,6 +82,7 @@ export function MeasureLogClient({ rows, today }: { rows: MeasurementRow[]; toda
   useEffect(() => {
     if (done) return;
     const start = onDate(step) ?? last?.valueCm ?? null;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- each step starts with its last value, then selects it; the select must run after the new value is in the input
     setText(start === null ? "" : start.toFixed(1));
     setError(null);
     requestAnimationFrame(() => input.current?.select());

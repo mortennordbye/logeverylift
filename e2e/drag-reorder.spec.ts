@@ -1,9 +1,16 @@
 import type { Locator, Page } from "@playwright/test";
-import { eq } from "drizzle-orm";
-import { workoutSets } from "../src/db/schema";
+import { eq, inArray } from "drizzle-orm";
+import { programSets, workoutSets } from "../src/db/schema";
 import { expect, test } from "./fixtures/test";
 import { testDb } from "./fixtures/reset";
-import { openFirstExercise, openWorkout, stableBox, trackActions, waitForLiveSession } from "./helpers";
+import {
+  openFirstExercise,
+  openWorkout,
+  programWorkoutHrefs,
+  stableBox,
+  trackActions,
+  waitForLiveSession,
+} from "./helpers";
 
 /**
  * Drag-to-reorder, mid-workout, with real pointer drags.
@@ -152,6 +159,71 @@ test("un-logging a moved set removes its own log", async ({ page }) => {
     .from(workoutSets)
     .where(eq(workoutSets.sessionId, sessionId));
   expect(logged).toEqual([{ programSetId: s2 }]);
+});
+
+/** The program editor's URL for the first program's Bench Press. */
+async function benchEditorHref(page: Page): Promise<string> {
+  const [workoutHref] = await programWorkoutHrefs(page);
+  await page.goto(workoutHref);
+  const exerciseHref = await page
+    .locator('a[href*="/exercises/"]', { hasText: "Bench Press" })
+    .first()
+    .getAttribute("href");
+  if (!exerciseHref) throw new Error("No Bench Press on the first program");
+  return exerciseHref.replace("/workout/", "/");
+}
+
+test("in the program editor, a set dragged below another keeps its rest and leaves no set at 0", async ({ page }) => {
+  // The steps journey review (2026-11-16): set 1 dragged below set 3 left
+  // set 3 with no rest, because set 1 moved without its rest.
+  await page.goto(await benchEditorHref(page));
+  // Tracked from the editor on: the workout page's session start, cut off by
+  // the goto above, would never report finished.
+  const settle = trackActions(page);
+
+  const before = await setIds(page);
+  const [s1, s2, s3, ...rest] = before;
+  const rests = async () =>
+    Object.fromEntries(
+      (
+        await testDb()
+          .select({ id: programSets.id, rest: programSets.restTimeSeconds })
+          .from(programSets)
+          .where(inArray(programSets.id, before))
+      ).map((r) => [r.id, r.rest]),
+    );
+  const restsBefore = await rests();
+  expect(Object.values(restsBefore).every((s) => Number(s) > 0)).toBe(true);
+
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
+  await drag(
+    page,
+    page.getByRole("button", { name: "Reorder set 1", exact: true }),
+    page.locator(`[data-testid="set-row"][data-set-id="${s3}"]`),
+  );
+  await expect.poll(() => setIds(page)).toEqual([s2, s3, s1, ...rest]);
+  await leaveEditMode(page);
+  await settle();
+
+  // Every set keeps the rest it had.
+  expect(await rests()).toEqual(restsBefore);
+  await page.reload();
+  await expect.poll(() => setIds(page)).toEqual([s2, s3, s1, ...rest]);
+});
+
+test("the editor opened in edit mode hydrates its drag handles with ids that exist", async ({ page }) => {
+  // The steps journey review (2026-11-16) saw a hydration mismatch here. The
+  // server numbered dnd-kit's description id across requests, so after the
+  // first request the handles pointed at an id the page does not have.
+  const editor = `${await benchEditorHref(page)}?edit=true`;
+  for (let load = 0; load < 2; load++) {
+    await page.goto(editor);
+    const handle = page.getByRole("button", { name: "Reorder set 1", exact: true });
+    await expect(handle).toBeVisible();
+    const describedBy = await handle.getAttribute("aria-describedby");
+    expect(describedBy).toBeTruthy();
+    await expect(page.locator(`[id="${describedBy}"]`)).toHaveCount(1);
+  }
 });
 
 test("exercises can be dragged into a new order that survives a reload", async ({ page }) => {

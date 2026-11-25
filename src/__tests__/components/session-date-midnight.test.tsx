@@ -37,7 +37,7 @@ beforeEach(() => {
   vi.setSystemTime(NOW);
   localStorage.clear();
   createWorkoutSession.mockReset();
-  createWorkoutSession.mockResolvedValue({ success: true, data: { id: 1 } });
+  createWorkoutSession.mockResolvedValue({ success: true, data: { id: 1, startTime: new Date() } });
 });
 
 afterEach(() => {

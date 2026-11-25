@@ -7,7 +7,14 @@ import {
   type SeasonSnapshot,
   type SlotSnap,
 } from "@/lib/utils/plan-revisions";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
+
+// The fixed 2026 dates here read without a year only while the clock is in
+// 2026 (yearSuffix in src/lib/utils/date-label.ts). Pinned at load, before any
+// fixture below is built.
+vi.useFakeTimers({ toFake: ["Date"] });
+vi.setSystemTime(new Date("2026-11-25T12:00:00Z"));
+afterAll(() => vi.useRealTimers());
 
 /**
  * The words of a cycle's and a season's history page (docs/design/plan-redesign/spec.md):

@@ -165,7 +165,7 @@ revision layer can lock, version and restore them.
 | `longest_day_minutes` | integer, null | The most time one day can hold, 30-720 |
 | `long_day` | integer, null | The day that can hold it (1-7) |
 | `strength_goal` | text enum `keep_muscle`, `stronger`, `minimal`, null | D10 |
-| `interview_completed_at` | timestamp, null | When the user (or the assistant) finished the interview |
+| `interview_completed_at` | timestamp, null | When the user (or the assistant) finished the interview. Dropped in migration 0107, with `completeInterview` |
 
 **`athlete_thresholds`**: one row per value, so the history is the rows.
 

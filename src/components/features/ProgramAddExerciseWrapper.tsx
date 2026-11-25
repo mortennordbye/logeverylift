@@ -9,9 +9,10 @@ import { useRouter } from "next/navigation";
 type Props = {
   programId: number;
   exercises: Exercise[];
+  enduranceEnabled: boolean;
 };
 
-export function ProgramAddExerciseWrapper({ programId, exercises }: Props) {
+export function ProgramAddExerciseWrapper({ programId, exercises, enduranceEnabled }: Props) {
   const router = useRouter();
 
   async function handleSelect(exercise: Exercise) {
@@ -26,6 +27,7 @@ export function ProgramAddExerciseWrapper({ programId, exercises }: Props) {
         exercises={exercises}
         onSelectExercise={handleSelect}
         onBack={() => router.push(`/programs/${programId}`)}
+        enduranceEnabled={enduranceEnabled}
       />
     </div>
   );

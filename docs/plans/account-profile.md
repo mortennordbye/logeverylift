@@ -156,7 +156,7 @@ This replaces decision 2.1 ("one page, no sub-pages"). The design is
    "Make a triathlon plan" option in the season form needs the endurance level and training days,
    which are what the plan reads, and links to Goals and training when one is missing. The
    assistant's `intake_interview` prompt stays. The `interview_completed_at` column is no longer
-   read; a later migration removes it.
+   read; migration 0107 removes it.
 5. Goals is a row that opens its chips in the sheet, like every other row (this replaces "the goal
    chips on the page" in 8.2). The inline-editor option on rows is gone.
 

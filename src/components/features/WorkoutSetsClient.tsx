@@ -283,6 +283,7 @@ export function WorkoutSetsClient({
   const renderedOverrides = useRenderedOverrides();
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- server refresh replaces the local sets; render-time sync would change when the set list updates during a workout
     setSets(initial);
   }, [initial]);
 

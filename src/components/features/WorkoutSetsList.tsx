@@ -16,7 +16,7 @@ import { formatPlates } from "@/lib/utils/plates";
 import { disciplineConfig, type Discipline } from "@/lib/utils/discipline";
 import { haptics } from "@/lib/utils/haptics";
 import { buildSetLog } from "@/lib/utils/set-log";
-import { computeMapping, toFlatItems } from "@/lib/utils/set-mapping";
+import { computeMapping, moveFlatItem, toFlatItems } from "@/lib/utils/set-mapping";
 import type { FlatItem, RestFlatItem, SetFlatItem } from "@/lib/utils/set-mapping";
 import type { PRResult, ProgramSet } from "@/types/workout";
 import {
@@ -45,7 +45,6 @@ import {
 } from "@dnd-kit/core";
 import {
   SortableContext,
-  arrayMove,
   sortableKeyboardCoordinates,
   useSortable,
   verticalListSortingStrategy,
@@ -221,6 +220,7 @@ export function WorkoutSetsList({
   }, [editingRestItemId, restDraft]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- rebuilds the drag-reorder list when sets change; render-time sync would change when the reorder state resets
     setFlatItems(toFlatItems(sets));
   }, [sets]);
 
@@ -237,6 +237,7 @@ export function WorkoutSetsList({
         workoutSession.clearRestTimerEnd(Number(id));
       }
     });
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- restores rest timers from saved end times, which needs Date.now after mount
     if (initial.size > 0) setRestTimers(initial);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -245,6 +246,7 @@ export function WorkoutSetsList({
   // rest timers as already finished (0) rather than showing the configured duration.
   useEffect(() => {
     if (!isWorkout) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- marks rest timers of pre-completed sets as done; keep the rest timer update where it is
     setRestTimers((prev) => {
       const next = new Map(prev);
       let changed = false;
@@ -668,6 +670,7 @@ export function WorkoutSetsList({
     if (restSeconds > 0) {
       setRestTimers((timers) => { const t = new Map(timers); t.set(setId, restSeconds); return t; });
       if (isWorkout && workoutSession) {
+        // eslint-disable-next-line react-hooks/purity -- runs in the log-run handler, not during render
         workoutSession.setRestTimerEnd(setId, Date.now() + restSeconds * 1000);
       }
     }
@@ -857,6 +860,7 @@ export function WorkoutSetsList({
       if (precedingSet) {
         const setId = precedingSet.set.id;
         const currentEndMs = workoutSession.restTimerEnds[setId];
+        // eslint-disable-next-line react-hooks/purity -- runs in the save-rest handler, not during render
         if (currentEndMs && currentEndMs > Date.now()) {
           const newEndMs = currentEndMs + (restDraft - oldDuration) * 1000;
           workoutSession.setRestTimerEnd(setId, newEndMs);
@@ -890,11 +894,9 @@ export function WorkoutSetsList({
   async function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    const oldIndex = flatItems.findIndex((i) => i.id === active.id);
-    const newIndex = flatItems.findIndex((i) => i.id === over.id);
-    if (oldIndex === -1 || newIndex === -1) return;
+    const reordered = moveFlatItem(flatItems, String(active.id), String(over.id));
+    if (reordered === flatItems) return;
     haptics.tick();
-    const reordered = arrayMove(flatItems, oldIndex, newIndex);
     setFlatItems(reordered);
     await saveCurrentState(reordered);
   }
@@ -994,6 +996,9 @@ export function WorkoutSetsList({
   return (
     <>
       <DndContext
+        // A fixed id: dnd-kit's own counts up on the server across requests,
+        // so the handles' aria-describedby did not match on hydration.
+        id="set-list"
         sensors={sensors}
         collisionDetection={closestCenter}
         onDragEnd={handleDragEnd}

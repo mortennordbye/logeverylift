@@ -7,7 +7,7 @@ import {
   loggedSetLabel,
 } from "@/lib/utils/format";
 import { disciplineConfig } from "@/lib/utils/discipline";
-import { fieldToMeters, fieldUnit, metersToField, type Units } from "@/lib/utils/units";
+import { fieldToMeters, fieldUnit, metersToField, sameWeightKg, type Units } from "@/lib/utils/units";
 import type { ProgramSet } from "@/types/workout";
 import { describe, expect, it } from "vitest";
 
@@ -103,5 +103,19 @@ describe("formatting in the user's units", () => {
     expect(buildRunSetSummary([set], "run", imperial)).toBe("3.1 mi · 25:00 · 8:03 /mi");
     expect(loggedSetLabel({ ...set, weightKg: "0", actualReps: 0 }, true, imperial)).toBe("3.1 mi · 25:00 · 8:03 /mi");
     expect(buildRunSetSummary([set], "run")).toBe("5 km · 25:00 · 5:00 /km");
+  });
+});
+
+describe("sameWeightKg", () => {
+  it("matches a weight to its Postgres real copy, so re-sending it logs no new entry", () => {
+    expect(sameWeightKg(80.3, Math.fround(80.3))).toBe(true);
+    expect(sameWeightKg(80, 80)).toBe(true);
+  });
+
+  it("tells weights 0.01 kg or more apart, and any weight from none", () => {
+    expect(sameWeightKg(80.3, 80.31)).toBe(false);
+    expect(sameWeightKg(80, 79.9)).toBe(false);
+    expect(sameWeightKg(80, null)).toBe(false);
+    expect(sameWeightKg(80, undefined)).toBe(false);
   });
 });

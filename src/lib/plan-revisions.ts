@@ -1621,8 +1621,8 @@ async function restoreRowTo(
   if (row?.deletedAt && type !== "athlete" && type !== "race_plan") await assertAthleteRoom(w.tx, w.ctx.userId, type, String(set.kind ?? ""));
   // Sick periods never overlap (docs/plans/workouts-and-compliance.md, 4.4).
   if (type === "illness") await assertNoIllnessOverlap(w.tx, w.ctx.userId, String(set.startedOn), (set.endedOn as string | null) ?? null, id);
-  // jsonb gives timestamps back as strings.
-  if (typeof set.interviewCompletedAt === "string") set.interviewCompletedAt = new Date(set.interviewCompletedAt);
+  // Profile revisions from before migration 0107 still hold the dropped interview column.
+  delete set.interviewCompletedAt;
   await w.tx
     .update(table)
     .set({ ...(set as Record<string, never>), deletedAt: null, updatedAt: new Date() })

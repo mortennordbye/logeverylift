@@ -32,7 +32,7 @@ beforeEach(() => {
   setActiveWorkout.mockReset();
   clearActiveWorkout.mockReset();
   createWorkoutSession.mockReset();
-  createWorkoutSession.mockResolvedValue({ success: true, data: { id: 12 } });
+  createWorkoutSession.mockResolvedValue({ success: true, data: { id: 12, startTime: new Date() } });
   isSessionResumable.mockReset();
 });
 
@@ -84,7 +84,7 @@ describe("WorkoutSessionInitializer on each workout page", () => {
     const first = render(<WorkoutSessionInitializer programId={8} timeZone={null} planVersion={1} />);
     first.unmount();
     render(<WorkoutSessionInitializer programId={8} timeZone={null} planVersion={1} />);
-    await act(async () => answer({ success: true, data: { id: 13 } }));
+    await act(async () => answer({ success: true, data: { id: 13, startTime: new Date() } }));
     expect(createWorkoutSession.mock.calls.filter(([p]) => (p as { programId: number }).programId === 8)).toHaveLength(1);
   });
 });

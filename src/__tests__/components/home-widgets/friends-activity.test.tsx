@@ -1,6 +1,13 @@
 // @vitest-environment jsdom
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
+
+// The fixed 2026 dates here read without a year only while the clock is in
+// 2026 (yearSuffix in src/lib/utils/date-label.ts). Pinned at load, before any
+// fixture below is built.
+vi.useFakeTimers({ toFake: ["Date"] });
+vi.setSystemTime(new Date("2026-11-25T12:00:00Z"));
+afterAll(() => vi.useRealTimers());
 
 /** C3: Friends' activity at each size, empty and failing (docs/home-widgets-audit.md, section 7). */
 

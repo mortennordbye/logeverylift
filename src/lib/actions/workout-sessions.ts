@@ -11,6 +11,7 @@ import {
 } from "@/lib/validators/workout";
 import type { ActionResult, ExportedSessions, WorkoutSession } from "@/types/workout";
 import { and, asc, desc, eq, inArray, lt, or, sql } from "drizzle-orm";
+import { livePrograms } from "@/lib/plan-live";
 import { startablePlannedId } from "@/lib/planned-sessions";
 import { endRidesOfFinishedSession } from "@/lib/ride-settle";
 import { revalidatePath } from "next/cache";
@@ -65,6 +66,13 @@ export async function createWorkoutSession(
 
   try {
     const { date, startTime, notes, programId, intendedDate } = validation.data;
+    if (programId != null) {
+      const [program] = await db
+        .select({ id: programs.id })
+        .from(programs)
+        .where(and(eq(programs.id, programId), eq(programs.userId, auth.user.id), livePrograms));
+      if (!program) return { success: false, error: "Program not found" };
+    }
     const plannedSessionId = await startablePlannedId(auth.user.id, validation.data.plannedSessionId, programId);
 
     // Sweep orphaned open sessions for this user. Without this, a user who
@@ -74,6 +82,26 @@ export async function createWorkoutSession(
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
     const swept = await closeStaleSessions(auth.user.id, oneHourAgo);
     for (const id of swept) await learnWeightStacks(id, auth.user.id);
+
+    // A workout already open on this program is resumed, not doubled. A
+    // fresh sign-in (or a second phone) has no stored session, so its workout
+    // page asks for a new one while the open one is still going.
+    if (programId != null) {
+      const [open] = await db
+        .select()
+        .from(workoutSessions)
+        .where(
+          and(
+            eq(workoutSessions.userId, auth.user.id),
+            eq(workoutSessions.programId, programId),
+            eq(workoutSessions.isCompleted, false),
+            eq(workoutSessions.source, "app"),
+          ),
+        )
+        .orderBy(desc(workoutSessions.startTime))
+        .limit(1);
+      if (open) return { success: true, data: open };
+    }
 
     const [session] = await db
       .insert(workoutSessions)

@@ -6,13 +6,16 @@
  *
  * A name is unique among system exercises, and per user among custom ones
  * (the indexes on `exercises`). A custom exercise may not take a system name.
+ *
+ * Also the rule for which exercises a user may see and log.
  */
 
 import { db } from "@/db";
-import { exercises } from "@/db/schema";
+import { exercises, programExercises, programs } from "@/db/schema";
+import { liveProgramExercises, livePrograms } from "@/lib/plan-live";
 import type { CreateExerciseInput } from "@/lib/validators/workout";
 import type { ActionResult, Exercise } from "@/types/workout";
-import { and, eq, isNull, or } from "drizzle-orm";
+import { and, eq, exists, isNull, or } from "drizzle-orm";
 
 export const NAME_TAKEN = "An exercise with this name already exists";
 
@@ -57,4 +60,31 @@ export async function createCustomExerciseFor(
     if (isUniqueViolation(e)) return { success: false, error: NAME_TAKEN };
     throw e;
   }
+}
+
+/**
+ * The exercise if this user can see it: a built-in one, their own custom one,
+ * or another user's custom one that a program they copied still uses.
+ */
+export async function findVisibleExercise(exerciseId: number, userId: string) {
+  const [row] = await db
+    .select()
+    .from(exercises)
+    .where(
+      and(
+        eq(exercises.id, exerciseId),
+        or(
+          isNull(exercises.userId),
+          eq(exercises.userId, userId),
+          exists(
+            db
+              .select({ id: programExercises.id })
+              .from(programExercises)
+              .innerJoin(programs, eq(programs.id, programExercises.programId))
+              .where(and(eq(programExercises.exerciseId, exercises.id), eq(programs.userId, userId), liveProgramExercises, livePrograms)),
+          ),
+        ),
+      ),
+    );
+  return row ?? null;
 }

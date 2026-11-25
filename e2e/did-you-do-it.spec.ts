@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { illnessPeriods, plannedSessions, trainingCycles, users, workoutSessions } from "../src/db/schema";
+import { shortDay } from "../src/lib/utils/seasons";
 import { RETURN_RULE } from "../src/lib/utils/session-compliance";
 import { e2eUser } from "./fixtures/env";
 import { testDb } from "./fixtures/reset";
@@ -20,9 +21,6 @@ function dayStr(offset: number): string {
   d.setDate(d.getDate() + offset);
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
-/** As the app shows a day: "Thu 14 Nov". */
-const shortDay = (day: string) =>
-  new Date(`${day}T00:00:00Z`).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
 
 const runWorkout = (name: string, minutes: number) => ({
   v: 1,

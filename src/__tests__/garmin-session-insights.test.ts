@@ -1,6 +1,6 @@
 import type { DemandRow } from "@/lib/garmin/analytics/demands";
 import type { Efforts } from "@/lib/garmin/analytics/efforts";
-import { sessionInsights, type SessionInsightInput } from "@/lib/garmin/analytics/session-insights";
+import { sessionInsights, strengthBeforeKey, type PlannedToday, type SessionInsightInput } from "@/lib/garmin/analytics/session-insights";
 import type { TrendActivity } from "@/lib/garmin/analytics/trends";
 import { describe, expect, it } from "vitest";
 
@@ -19,7 +19,8 @@ const act = (day: string, sport: TrendActivity["sport"], over: Partial<TrendActi
   ...over,
 });
 const steady = (minutes: number, pct: number) => ({ valid: true as const, efFirst: 1.5, efSecond: 1.5, pct, ef: 1.5, minutes, temperature: 20 });
-const base: SessionInsightInput = { today, acts: [], lthrEstimate: null, watchLthr: null, strengthYesterday: null, checklist: null, daysToRace: null, projection: null };
+const base: SessionInsightInput = { today, acts: [], lthrEstimate: null, watchLthr: null, heavyLegSetsYesterday: 0, plannedToday: [], checklist: null, daysToRace: null, projection: null };
+const planned = (over: Partial<PlannedToday> = {}): PlannedToday => ({ label: "Threshold run", sport: "run", priority: "key", open: true, ...over });
 const ids = (i: SessionInsightInput) => sessionInsights(i).map((x) => x.id);
 
 describe("sessionInsights", () => {
@@ -46,11 +47,37 @@ describe("sessionInsights", () => {
     expect(ids({ ...base, acts: [...acts, act("2026-10-01", "bike", {}, { power: { 1200: 250 } })] })).not.toContain("ftp_stale");
   });
 
-  it("raises the LTHR gap over 4 bpm, and heavy strength from load 40", () => {
+  it("raises the LTHR gap over 4 bpm", () => {
     expect(ids({ ...base, lthrEstimate: 165, watchLthr: 170 })).toEqual(["lthr_gap"]);
     expect(ids({ ...base, lthrEstimate: 166, watchLthr: 170 })).toEqual([]);
-    expect(ids({ ...base, strengthYesterday: 40 })).toEqual(["strength_before_key"]);
-    expect(ids({ ...base, strengthYesterday: 39 })).toEqual([]);
+  });
+
+  describe("strength_before_key (heavy legs yesterday, key run or ride today)", () => {
+    it("fires for heavy legs before a key run, and names the session", () => {
+      const out = sessionInsights({ ...base, heavyLegSetsYesterday: 3, plannedToday: [planned()] });
+      expect(out.map((x) => x.id)).toEqual(["strength_before_key"]);
+      expect(out[0].text).toBe("Heavy legs yesterday (3 heavy leg sets). Expect lower pace in Threshold run today.");
+      expect(sessionInsights({ ...base, heavyLegSetsYesterday: 4, plannedToday: [planned({ sport: "bike", label: "Long ride" })] })[0].text).toMatch(/lower power in Long ride/);
+    });
+
+    it("stays silent after upper body only (no heavy leg sets) or under 3 heavy leg sets", () => {
+      expect(strengthBeforeKey(0, [planned()])).toBeNull();
+      expect(strengthBeforeKey(2, [planned()])).toBeNull();
+    });
+
+    it("stays silent before an easy run, a key swim, or a key session already done or skipped", () => {
+      expect(strengthBeforeKey(5, [planned({ priority: "support" })])).toBeNull();
+      expect(strengthBeforeKey(5, [planned({ sport: "swim" })])).toBeNull();
+      expect(strengthBeforeKey(5, [planned({ open: false })])).toBeNull();
+    });
+
+    it("stays silent with no plan for today: nothing is planned as quality", () => {
+      expect(ids({ ...base, heavyLegSetsYesterday: 6, plannedToday: [] })).toEqual([]);
+    });
+
+    it("finds the key run among today's other sessions", () => {
+      expect(strengthBeforeKey(3, [planned({ sport: null, label: "Upper body", priority: "support" }), planned({ label: "Intervals" })])?.label).toBe("Intervals");
+    });
   });
 
   it("warns about a missing long session inside 8 weeks of the race, and not before", () => {

@@ -23,11 +23,6 @@ export class StepRowsError extends Error {
     super(message);
     this.name = "StepRowsError";
   }
-
-  // Actions report String(err); the user reads the message alone.
-  override toString(): string {
-    return this.message;
-  }
 }
 
 /** Throws StepRowsError when the exercise holds steps that break a rule. */
@@ -125,7 +120,8 @@ export async function assertNewWorkSteps(ex: Executor, programExerciseId: number
 
 /**
  * The plan of one step row as a logged step keeps it, with the user's
- * threshold values now. Null when the row is not a step.
+ * threshold values now. Null when the row is not a step, or not in a program
+ * of `userId`.
  */
 export async function plannedStepSnapshot(ex: Executor, programSetId: number, userId: string): Promise<PlannedStepSnapshot | null> {
   const [row] = await ex
@@ -133,6 +129,7 @@ export async function plannedStepSnapshot(ex: Executor, programSetId: number, us
     // plan-read: includes deleted (a step removed mid-workout still logs with its plan)
     .from(programSets)
     .innerJoin(programExercises, eq(programExercises.id, programSets.programExerciseId))
+    .innerJoin(programs, and(eq(programs.id, programExercises.programId), eq(programs.userId, userId)))
     .innerJoin(exercises, eq(exercises.id, programExercises.exerciseId))
     .where(eq(programSets.id, programSetId));
   if (!row?.discipline) return null;

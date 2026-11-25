@@ -61,6 +61,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const storedGoal = localStorage.getItem("weeklyGoal");
     const storedUiScale = localStorage.getItem("uiScale");
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- preferences live in localStorage, readable only after hydration
     setTheme(storedTheme);
     setAccentColorState(storedAccent);
     setCustomAccentHexState(storedCustomHex);

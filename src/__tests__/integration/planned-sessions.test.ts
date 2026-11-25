@@ -146,8 +146,9 @@ describe("several sessions a day", () => {
     const wrongProgram = await createWorkoutSession({ date: TODAY, programId: lift, plannedSessionId: runRow.id });
     expect(wrongProgram.success && wrongProgram.data.plannedSessionId).toBeNull();
     asUser((await createUser()).id);
+    // Another user's program is refused outright, so the planned id never attaches.
     const other = await createWorkoutSession({ date: TODAY, programId: run, plannedSessionId: runRow.id });
-    expect(other.success && other.data.plannedSessionId).toBeNull();
+    expect(other.success).toBe(false);
   });
 
   it("finishing a workout replaces the auto row of its planned session", async () => {

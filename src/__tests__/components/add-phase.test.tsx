@@ -1,7 +1,14 @@
 // @vitest-environment jsdom
 import { AddPhaseCancel, AddPhaseFinish, AddPhaseForm } from "@/components/features/AddPhaseForm";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+
+// The fixed 2026 dates here read without a year only while the clock is in
+// 2026 (yearSuffix in src/lib/utils/date-label.ts). Pinned at load, before any
+// fixture below is built.
+vi.useFakeTimers({ toFake: ["Date"] });
+vi.setSystemTime(new Date("2026-11-25T12:00:00Z"));
+afterAll(() => vi.useRealTimers());
 
 /** Add a phase (J4_AddPhase, J4_WeekBuilder): step 1 goes on to the season's own step 2, which returns to the season. */
 

@@ -172,7 +172,7 @@ export function ProgramDetailClient({
   const [exporting, setExporting] = useState(false);
   const [exercises, setExercises] = useState(initial);
   // Snapshot of exercise order when entering edit mode — used for Cancel
-  const [preEditExercises, setPreEditExercises] = useState<ProgramExItem[]>([]);
+  const [preEditExercises, setPreEditExercises] = useState<ProgramExItem[]>(initialEditing ? initial : []);
   const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<number>>(new Set());
   const [name, setName] = useState(programName);
   const [preEditName, setPreEditName] = useState(programName);
@@ -180,6 +180,7 @@ export function ProgramDetailClient({
   // Sync when server data refreshes (e.g. after AddExerciseForm adds a new exercise)
   useEffect(() => {
     if (!isEditing) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- server refresh and leaving edit mode both reset the list; render-time sync would change the drag-reorder edit flow
       setExercises(initial);
     }
   }, [initial, isEditing]);
@@ -187,8 +188,6 @@ export function ProgramDetailClient({
   // Strip ?editing=true from URL after mounting so refresh doesn't re-trigger edit mode
   useEffect(() => {
     if (initialEditing) {
-      setPreEditExercises(initial);
-      setPreEditName(programName);
       router.replace(`/programs/${programId}`);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -391,6 +390,9 @@ export function ProgramDetailClient({
 
         {exercises.length > 0 && (
           <DndContext
+            // A fixed id: dnd-kit's own counts up on the server across
+            // requests, so the handles' aria-describedby did not match on hydration.
+            id="program-exercises"
             sensors={sensors}
             collisionDetection={closestCenter}
             onDragEnd={handleDragEnd}
