@@ -221,6 +221,7 @@ export function WorkoutSetsList({
   }, [editingRestItemId, restDraft]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- rebuilds the drag-reorder list when sets change; render-time sync would change when the reorder state resets
     setFlatItems(toFlatItems(sets));
   }, [sets]);
 
@@ -237,6 +238,7 @@ export function WorkoutSetsList({
         workoutSession.clearRestTimerEnd(Number(id));
       }
     });
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- restores rest timers from saved end times, which needs Date.now after mount
     if (initial.size > 0) setRestTimers(initial);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -245,6 +247,7 @@ export function WorkoutSetsList({
   // rest timers as already finished (0) rather than showing the configured duration.
   useEffect(() => {
     if (!isWorkout) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- marks rest timers of pre-completed sets as done; keep the rest timer update where it is
     setRestTimers((prev) => {
       const next = new Map(prev);
       let changed = false;
@@ -668,6 +671,7 @@ export function WorkoutSetsList({
     if (restSeconds > 0) {
       setRestTimers((timers) => { const t = new Map(timers); t.set(setId, restSeconds); return t; });
       if (isWorkout && workoutSession) {
+        // eslint-disable-next-line react-hooks/purity -- runs in the log-run handler, not during render
         workoutSession.setRestTimerEnd(setId, Date.now() + restSeconds * 1000);
       }
     }
@@ -857,6 +861,7 @@ export function WorkoutSetsList({
       if (precedingSet) {
         const setId = precedingSet.set.id;
         const currentEndMs = workoutSession.restTimerEnds[setId];
+        // eslint-disable-next-line react-hooks/purity -- runs in the save-rest handler, not during render
         if (currentEndMs && currentEndMs > Date.now()) {
           const newEndMs = currentEndMs + (restDraft - oldDuration) * 1000;
           workoutSession.setRestTimerEnd(setId, newEndMs);

@@ -76,6 +76,7 @@ export function LogRunModal({
     if (!open) return;
     const dist = targetDistanceMeters ?? cfg.defaultDistanceM;
     const dur = targetDurationSeconds ?? 0;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- resets the form each time the sheet opens; moving the reset into render changes when the logging sheet updates
     setDistanceMeters(dist ?? 0);
     setDurationSeconds(dur);
     setDistanceStr(dist != null ? metersToInput(dist) : "");
