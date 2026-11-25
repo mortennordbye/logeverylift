@@ -1,6 +1,13 @@
 import { showGarminSays, sourceLine } from "@/lib/utils/field-sources";
 import { fieldSyncLines, garminAvailability, garminTimeZone, garminUnits } from "@/lib/utils/garmin-profile";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
+
+// The fixed 2026 dates here read without a year only while the clock is in
+// 2026 (yearSuffix in src/lib/utils/date-label.ts). Pinned at load, before any
+// fixture below is built.
+vi.useFakeTimers({ toFake: ["Date"] });
+vi.setSystemTime(new Date("2026-11-25T12:00:00Z"));
+afterAll(() => vi.useRealTimers());
 
 describe("the Garmin profile fields the sync reads", () => {
   it("turns training days into 1 (Monday) to 7, with the first long day", () => {

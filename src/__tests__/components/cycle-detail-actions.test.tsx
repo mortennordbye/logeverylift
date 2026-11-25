@@ -4,7 +4,14 @@ import { CycleScheduleBuilder } from "@/components/features/CycleScheduleBuilder
 import { deleteTrainingCycle, removeCycleSlot, restartTrainingCycle, startTrainingCycle } from "@/lib/actions/training-cycles";
 import type { TrainingCycle, TrainingCycleWithSlots } from "@/types/workout";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+
+// The fixed 2026 dates here read without a year only while the clock is in
+// 2026 (yearSuffix in src/lib/utils/date-label.ts). Pinned at load, before any
+// fixture below is built.
+vi.useFakeTimers({ toFake: ["Date"] });
+vi.setSystemTime(new Date("2026-11-25T12:00:00Z"));
+afterAll(() => vi.useRealTimers());
 
 /** The cycle page's actions show a refused write, and starting a later season phase asks first. */
 

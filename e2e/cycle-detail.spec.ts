@@ -1,5 +1,6 @@
 import { and, asc, eq, isNull } from "drizzle-orm";
 import { planRevisions, plannedSessions, programs, trainingCycleSlots, trainingCycles, users, workoutSessions } from "../src/db/schema";
+import { shortDay } from "../src/lib/utils/seasons";
 import { e2eUser } from "./fixtures/env";
 import { testDb } from "./fixtures/reset";
 import { expect, test } from "./fixtures/test";
@@ -22,13 +23,8 @@ function dow(offset: number): number {
   d.setDate(d.getDate() + offset);
   return d.getDay() === 0 ? 7 : d.getDay();
 }
-const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-/** "Mon 16 Nov", as the app writes a day. */
-function label(day: string): string {
-  const d = new Date(`${day}T00:00:00Z`);
-  return `${WEEKDAYS[d.getUTCDay()]} ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
-}
+/** "Mon 16 Nov", or "Fri 1 Jan 2027" outside this year: the app's own label. */
+const label = shortDay;
 
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 

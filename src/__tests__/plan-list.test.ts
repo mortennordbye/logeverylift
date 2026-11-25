@@ -15,14 +15,13 @@ import {
   type WeekSession,
 } from "@/lib/utils/plan-list";
 import type { PhaseLike } from "@/lib/utils/seasons";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 
 // A label shows the year of a date outside the current one (round 11 I2):
-// the clock stays in the year of the dates these tests use.
-beforeAll(() => {
-  vi.useFakeTimers({ toFake: ["Date"] });
-  vi.setSystemTime(new Date("2026-11-14T12:00:00Z"));
-});
+// the clock stays in the year of the dates these tests use. Pinned at load,
+// not in beforeAll: the season cards below are built when the file loads.
+vi.useFakeTimers({ toFake: ["Date"] });
+vi.setSystemTime(new Date("2026-11-14T12:00:00Z"));
 afterAll(() => vi.useRealTimers());
 
 const TODAY = "2026-11-14"; // a Saturday

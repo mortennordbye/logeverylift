@@ -12,7 +12,14 @@ import {
   type GeneratedSession,
   type TemplateSlot,
 } from "@/lib/utils/planned-sessions";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
+
+// The fixed 2026 dates here read without a year only while the clock is in
+// 2026 (yearSuffix in src/lib/utils/date-label.ts). Pinned at load, before any
+// fixture below is built.
+vi.useFakeTimers({ toFake: ["Date"] });
+vi.setSystemTime(new Date("2026-11-25T12:00:00Z"));
+afterAll(() => vi.useRealTimers());
 
 /** Dated sessions (docs/plans/sessions.md, 3.4 and 4.1), as pure functions. */
 

@@ -9,7 +9,14 @@ import { restorePlanRevision } from "@/lib/actions/plan-revisions";
 import type { PlanListData } from "@/lib/plan-list";
 import type { TrainingCycle } from "@/types/workout";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+// The fixed 2026 dates here read without a year only while the clock is in
+// 2026 (yearSuffix in src/lib/utils/date-label.ts). Pinned at load, before any
+// fixture below is built.
+vi.useFakeTimers({ toFake: ["Date"] });
+vi.setSystemTime(new Date("2026-11-25T12:00:00Z"));
+afterAll(() => vi.useRealTimers());
 
 /**
  * Layout rules of the Plan screens at 320 px (round 6 capture): sheets scroll
