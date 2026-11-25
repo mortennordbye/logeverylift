@@ -95,6 +95,7 @@ export function PendingQueueProvider({ children }: { children: React.ReactNode }
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- the queue lives in localStorage, readable only after mount
         setQueue(JSON.parse(raw) as QueuedMutation[]);
       }
     } catch {

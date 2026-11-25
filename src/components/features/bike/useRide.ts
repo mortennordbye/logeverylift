@@ -335,6 +335,7 @@ export function useRide(opts: { initial: RideView; saveStep: (r: RideStepResult)
     savedRef.current = readMap<Record<string, string>>(RIDE_SAVED_KEY)[rideId] ?? {};
     const off = initial.serverNow - Date.now();
     offsetRef.current = off;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- loads the queue saved on this phone, which is readable only after mount
     setQueue(queued);
     tickNow();
     setOnline(typeof navigator === "undefined" || navigator.onLine !== false);

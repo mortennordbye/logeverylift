@@ -29,6 +29,7 @@ export function SavedRunLink({ plannedSessionId, compact = false }: { plannedSes
   const [saved, setSaved] = useState<"running" | "finished" | null>(null);
   useEffect(() => {
     // Read after mount: localStorage is not readable on the server.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage is readable only after mount, so server and first client render agree
     setSaved(savedRunFor(plannedSessionId));
   }, [plannedSessionId]);
   if (!saved) return null;

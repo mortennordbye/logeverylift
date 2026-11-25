@@ -95,6 +95,7 @@ export function WorkoutSessionClient({
   // Show readiness check-in once the session is live and readiness is unknown
   useEffect(() => {
     if (workoutSession?.sessionId != null && workoutSession.readiness === null) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- opens the check-in once the session from the context has an id; keep the timing of the workout screen as it is
       setShowReadiness(true);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -107,6 +108,7 @@ export function WorkoutSessionClient({
     const origin = workoutSession?.startTime
       ? new Date(workoutSession.startTime)
       : startTime;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the clock reads Date.now, so the first value is set after mount like each tick
     setElapsed(Math.floor((Date.now() - origin.getTime()) / 1000));
     const id = setInterval(() => {
       setElapsed(Math.floor((Date.now() - origin.getTime()) / 1000));
