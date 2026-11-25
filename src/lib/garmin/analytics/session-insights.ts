@@ -6,6 +6,7 @@
  * units, training framing only.
  */
 
+import { HEAVY_LEG_SETS } from "@/lib/utils/training-limits";
 import { addDays } from "../dates";
 import type { DemandRow } from "./demands";
 import type { Insight } from "./insights";
@@ -25,8 +26,6 @@ const BEST_DAYS = 90;
 const NEAR_BEST = 0.95;
 /** Our LTHR against the watch's: a gap above this raises an insight (plan 2.8). */
 const LTHR_GAP_BPM = 4;
-/** Strength load the day before that counts as heavy. 40 is about an hour of hard lifting. */
-const HEAVY_STRENGTH_LOAD = 40;
 /** Weeks to the race inside which a missing long session is a warning. */
 const LONG_GAP_WEEKS = 8;
 
@@ -39,12 +38,34 @@ export type SessionInsightInput = {
   /** Run LTHR from hard 30 minute efforts (trends.ts) and the watch's. */
   lthrEstimate: number | null;
   watchLthr: number | null;
-  /** Total strength load yesterday. */
-  strengthYesterday: number | null;
+  /** Heavy leg sets logged yesterday (isHeavyLegSet in src/lib/utils/training-limits.ts). */
+  heavyLegSetsYesterday: number;
+  /** Today's planned sessions, with the priority the plan gives them. */
+  plannedToday: PlannedToday[];
   checklist: DemandRow[] | null;
   daysToRace: number | null;
   projection: Projection | null;
 };
+
+/** A planned session of today, as session compliance reads it. */
+export type PlannedToday = {
+  label: string;
+  sport: "swim" | "bike" | "run" | null;
+  priority: "key" | "support" | "optional";
+  /** Still to do: not done, skipped or missed. */
+  open: boolean;
+};
+
+/**
+ * Plan 4.1 strength_before_key: a heavy leg session yesterday (HEAVY_LEG_SETS
+ * heavy leg sets or more, the test the heavy-legs plan limit uses) and a key
+ * run or ride still to do today. Returns that key session, else null. With no
+ * plan for today there is no planned quality session, so the rule is silent.
+ */
+export function strengthBeforeKey(heavyLegSets: number, plannedToday: PlannedToday[]): PlannedToday | null {
+  if (heavyLegSets < HEAVY_LEG_SETS) return null;
+  return plannedToday.find((s) => s.open && s.priority === "key" && (s.sport === "bike" || s.sport === "run")) ?? null;
+}
 
 export function sessionInsights(input: SessionInsightInput): Insight[] {
   const { today, acts } = input;
@@ -132,13 +153,14 @@ export function sessionInsights(input: SessionInsightInput): Insight[] {
     });
   }
 
-  // Heavy strength yesterday: today's quality session will feel it.
-  if (input.strengthYesterday !== null && input.strengthYesterday >= HEAVY_STRENGTH_LOAD) {
+  // Heavy legs yesterday: today's key run or ride will feel it.
+  const key = strengthBeforeKey(input.heavyLegSetsYesterday, input.plannedToday);
+  if (key) {
     out.push({
       id: "strength_before_key",
       severity: "info",
-      text: `Heavy strength session yesterday (load ${Math.round(input.strengthYesterday)}). Expect lower power and pace today; keep hard intervals for tomorrow.`,
-      numbers: { load: Math.round(input.strengthYesterday) },
+      text: `Heavy legs yesterday (${input.heavyLegSetsYesterday} heavy leg sets). Expect lower ${key.sport === "bike" ? "power" : "pace"} in ${key.label} today.`,
+      numbers: { heavyLegSets: input.heavyLegSetsYesterday },
       target: "training",
     });
   }

@@ -1,6 +1,8 @@
 import { db } from "@/db";
 import { liveCycles, livePlannedSessions, liveProgramExercises, liveProgramSets, livePrograms } from "@/lib/plan-live";
-import { exercises, garminActivities, garminActivityMetrics, garminActivityStreams, garminConnections, garminDailyMetrics, garminDays, fuelLogs, plannedSessions, programExercises, programSets, programs, trainingCycleSlots, trainingCycles, users } from "@/db/schema";
+import { exercises, garminActivities, garminActivityMetrics, garminActivityStreams, garminConnections, garminDailyMetrics, garminDays, fuelLogs, plannedSessions, programExercises, programSets, programs, trainingCycleSlots, trainingCycles, users, workoutSessions, workoutSets } from "@/db/schema";
+import { sessionCompliance } from "@/lib/session-compliance";
+import { isHeavyLegSet } from "@/lib/utils/training-limits";
 import { and, asc, desc, eq, gte, inArray, lt, lte, sql } from "drizzle-orm";
 import type { ActivityMetrics } from "./analytics/activity";
 import { sessionZoneMessage } from "./analytics/thresholds";
@@ -8,7 +10,7 @@ import { lttbIndices, takeIndices } from "./charts/downsample";
 import { summaryCadence } from "./cadence";
 import { bodyBatteryDay, type BodyBatteryDay, type DailyMetrics } from "./analytics/daily";
 import { insightsFor, type Insight } from "./analytics/insights";
-import { sessionInsights } from "./analytics/session-insights";
+import { sessionInsights, type PlannedToday } from "./analytics/session-insights";
 import type { CorrelationDay } from "./analytics/correlations";
 import { addDays, isoDate, mondayOf } from "./dates";
 import { garminToday } from "./today";
@@ -1283,19 +1285,52 @@ export async function getRaceData(userId: string, todayArg?: string): Promise<Ra
 
 // ── Session insights and correlations ───────────────────────────────────────
 
+/** Heavy leg sets (isHeavyLegSet) in the user's completed LogEveryLift workouts dated `day`. */
+async function heavyLegSetsOn(userId: string, day: string): Promise<number> {
+  const rows = await db
+    .select({
+      category: exercises.category,
+      discipline: exercises.discipline,
+      bodyArea: exercises.bodyArea,
+      movementPattern: exercises.movementPattern,
+      equipment: exercises.equipment,
+      exerciseType: exercises.exerciseType,
+      typeOverride: programExercises.exerciseType,
+      setType: workoutSets.setType,
+      actualReps: workoutSets.actualReps,
+    })
+    .from(workoutSets)
+    .innerJoin(workoutSessions, eq(workoutSessions.id, workoutSets.sessionId))
+    .innerJoin(exercises, eq(exercises.id, workoutSets.exerciseId))
+    // plan-read: includes deleted (logged sets keep the type override of an exercise the program may have dropped since)
+    .leftJoin(programExercises, eq(programExercises.id, workoutSets.programExerciseId))
+    .where(and(eq(workoutSessions.userId, userId), eq(workoutSessions.date, day), eq(workoutSessions.isCompleted, true), eq(workoutSets.isCompleted, true)));
+  // A logged set has the reps done, not a range: they stand in for the planned reps.
+  return rows.filter((r) => isHeavyLegSet({ ...r, exerciseType: r.typeOverride ?? r.exerciseType, targetReps: r.actualReps, repRangeMax: null })).length;
+}
+
+/** Today's planned sessions with their priority, read for the whole week so a long ride or run can read as key. */
+async function plannedToday(userId: string, today: string): Promise<PlannedToday[]> {
+  const monday = mondayOf(today);
+  const week = await sessionCompliance(userId, monday, addDays(monday, 6));
+  return week
+    .filter((s) => s.date === today)
+    .map((s) => ({ label: s.label ?? s.programName ?? "Session", sport: s.sport, priority: s.priority, open: s.state === "planned" }));
+}
+
 /** The session, threshold and race insights for today (session-insights.ts). */
 export async function getSessionInsights(userId: string, volume: VolumeData, todayArg?: string): Promise<Insight[]> {
   const today = todayArg ?? (await garminToday(userId));
-  const [trends, { series }] = await Promise.all([getTrendsData(userId, today), getLoadSeries(userId)]);
+  const [trends, { series }, legSets, planned] = await Promise.all([getTrendsData(userId, today), getLoadSeries(userId), heavyLegSetsOn(userId, addDays(today, -1)), plannedToday(userId, today)]);
   const rp = await getRaceProjection(userId, series, today);
   const th = thresholdHistory(trends.acts, addDays(today, -6), today).at(-1);
-  const yesterday = series.dates.indexOf(addDays(today, -1));
   return sessionInsights({
     today,
     acts: trends.acts,
     lthrEstimate: th?.lthrRun ?? null,
     watchLthr: [...trends.acts].reverse().find((a) => a.sport === "run" && a.watchLthr)?.watchLthr ?? null,
-    strengthYesterday: yesterday >= 0 ? series.loads.strength[yesterday] : null,
+    heavyLegSetsYesterday: legSets,
+    plannedToday: planned,
     checklist: volume.checklist,
     daysToRace: rp?.race.raceSet ? rp.race.daysToRace : null,
     projection: rp?.projection ?? null,
