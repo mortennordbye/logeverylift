@@ -57,7 +57,7 @@ import type {
   ProgramSet,
   ProgramWithExercises,
 } from "@/types/workout";
-import { settleStepRows } from "@/lib/program-steps-db";
+import { StepRowsError, settleStepRows } from "@/lib/program-steps-db";
 import { stepFieldsOf } from "@/lib/utils/program-steps";
 import { and, asc, desc, eq, inArray, isNull, or } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
@@ -120,7 +120,8 @@ export async function getPrograms(): Promise<ActionResult<Program[]>> {
       .orderBy(asc(programs.name));
     return { success: true, data: rows };
   } catch (err) {
-    return { success: false, error: String(err) };
+    console.error("[getPrograms] failed", err);
+    return { success: false, error: "Failed to load programs" };
   }
 }
 
@@ -156,7 +157,8 @@ export async function getProgramWithExercises(
 
     return { success: true, data: program as ProgramWithExercises };
   } catch (err) {
-    return { success: false, error: String(err) };
+    console.error("[getProgramWithExercises] failed", err);
+    return { success: false, error: "Failed to load program" };
   }
 }
 
@@ -215,7 +217,8 @@ export async function createProgram(
     revalidatePath("/programs");
     return { success: true, data: program };
   } catch (err) {
-    return { success: false, error: String(err) };
+    console.error("[createProgram] failed", err);
+    return { success: false, error: "Failed to create program" };
   }
 }
 
@@ -238,7 +241,8 @@ export async function updateProgram(
     revalidatePath("/programs");
     return { success: true, data: undefined };
   } catch (err) {
-    return { success: false, error: String(err) };
+    console.error("[updateProgram] failed", err);
+    return { success: false, error: "Failed to update program" };
   }
 }
 
@@ -305,7 +309,8 @@ export async function addExerciseToProgram(
     revalidatePath(`/programs/${programId}/workout`);
     return { success: true, data: done.result };
   } catch (err) {
-    return { success: false, error: String(err) };
+    console.error("[addExerciseToProgram] failed", err);
+    return { success: false, error: "Failed to add exercise" };
   }
 }
 
@@ -339,7 +344,8 @@ export async function removeExerciseFromProgram(
     revalidatePath(`/programs/${validation.data.programId}`);
     return { success: true, data: undefined };
   } catch (err) {
-    return { success: false, error: String(err) };
+    console.error("[removeExerciseFromProgram] failed", err);
+    return { success: false, error: "Failed to remove exercise" };
   }
 }
 
@@ -364,7 +370,9 @@ export async function updateProgramExerciseIncrement(
     revalidatePath(`/programs/${done.programId}/exercises/${programExerciseId}`);
     return { success: true, data: undefined };
   } catch (err) {
-    return { success: false, error: String(err) };
+    if (err instanceof StepRowsError) return { success: false, error: err.message };
+    console.error("[updateProgramExerciseIncrement] failed", err);
+    return { success: false, error: "Failed to update increment" };
   }
 }
 
@@ -672,7 +680,9 @@ export async function updateProgramExerciseIncrementReps(
     revalidatePath(`/programs/${done.programId}/exercises/${programExerciseId}`);
     return { success: true, data: undefined };
   } catch (err) {
-    return { success: false, error: String(err) };
+    if (err instanceof StepRowsError) return { success: false, error: err.message };
+    console.error("[updateProgramExerciseIncrementReps] failed", err);
+    return { success: false, error: "Failed to update increment" };
   }
 }
 
@@ -1006,7 +1016,9 @@ export async function addProgramSet(
 
     return { success: true, data: done.result };
   } catch (err) {
-    return { success: false, error: String(err) };
+    if (err instanceof StepRowsError) return { success: false, error: err.message };
+    console.error("[addProgramSet] failed", err);
+    return { success: false, error: "Failed to add set" };
   }
 }
 
@@ -1111,7 +1123,9 @@ export async function updateProgramSet(
 
     return { success: true, data: result.ps };
   } catch (err) {
-    return { success: false, error: String(err) };
+    if (err instanceof StepRowsError) return { success: false, error: err.message };
+    console.error("[updateProgramSet] failed", err);
+    return { success: false, error: "Failed to update set" };
   }
 }
 
@@ -1203,7 +1217,9 @@ export async function deleteProgramSet(
     revalidatePath(`/programs/${programId}/workout`);
     return { success: true, data: undefined };
   } catch (err) {
-    return { success: false, error: String(err) };
+    if (err instanceof StepRowsError) return { success: false, error: err.message };
+    console.error("[deleteProgramSet] failed", err);
+    return { success: false, error: "Failed to delete set" };
   }
 }
 
@@ -1679,6 +1695,8 @@ export async function importProgram(
     revalidatePath("/programs");
     return { success: true, data: { count: programNames.length, programNames, skippedExercises } };
   } catch (err) {
-    return { success: false, error: String(err) };
+    if (err instanceof StepRowsError) return { success: false, error: err.message };
+    console.error("[importProgram] failed", err);
+    return { success: false, error: "Failed to import program" };
   }
 }

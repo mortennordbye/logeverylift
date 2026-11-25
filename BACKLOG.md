@@ -113,12 +113,10 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Touchpoints:** `src/lib/garmin/analytics/projection.ts`, `src/lib/garmin/queries.ts` (`getRaceProjection`).
 
 ### Plan redesign: what the four packages left for later
-- **What:** Two gaps found while building the Plan tab (`docs/plans/plan-tab-redesign.md`):
-  - The triathlon plan gives every phase its own copy of the generator's programs, so Programs lists names like "Long Run" once per phase.
-  - Server Actions outside `src/lib/actions/training-cycles.ts` can still return `String(err)` to the client (the bug pass fixed only that file).
-- **Why deferred:** Out of the packages' scope; each needs its own decision (shared programs across phases) or a sweep of every action file.
-- **Unblocked by:** An owner choice on shared vs per-phase programs; a grep for `String(err)` and `String(e)` in `src/lib/actions/` with the canonical error pattern from `CLAUDE.md`.
-- **Touchpoints:** `src/lib/actions/triathlon-plan.ts`, `src/lib/utils/triathlon-phases.ts`, `src/lib/actions/`.
+- **What:** A gap found while building the Plan tab (`docs/plans/plan-tab-redesign.md`): the triathlon plan gives every phase its own copy of the generator's programs, so Programs lists names like "Long Run" once per phase.
+- **Why deferred:** Out of the packages' scope; it needs its own decision (shared programs across phases).
+- **Unblocked by:** An owner choice on shared vs per-phase programs.
+- **Touchpoints:** `src/lib/actions/triathlon-plan.ts`, `src/lib/utils/triathlon-phases.ts`.
 
 ### Tests that build date labels without a year
 - **What:** Plan date labels now show the year when a date is not in the current year (`dayMonth`, `shortDay`, `rangeLabel`, with `thisYear()` in `src/lib/utils/date-label.ts`). Some tests still build the label they expect from the real clock with no year, for example `shortDay` in `e2e/did-you-do-it.spec.ts` and the date helpers in `e2e/cycle-detail.spec.ts`. When a run's dates cross into the next year (late December), these tests expect "Fri 1 Jan" and the app shows "Fri 1 Jan 2027".
