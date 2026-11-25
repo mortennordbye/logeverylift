@@ -375,12 +375,6 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** Reproduce by running the e2e suite repeatedly with two workers and checking whether a worker's storage state is ever rejected; look at what can end the e2e users' sessions between `e2e/auth.setup.ts` writing the file and the first spec (session expiry or rotation in the auth config, the consent redirect, a spec that signs out). The run's artifacts (`playwright-report-shard-1`) have the page snapshots.
 - **Touchpoints:** `e2e/auth.setup.ts`, `e2e/fixtures/test.ts` (`storageState`), `e2e/fixtures/env.ts`, `playwright.config.ts`.
 
-### WebKit e2e specs that fail now and then on CI
-- **What:** Three WebKit specs each failed once on CI on 2026-11-01 (runs on PRs #179 and #180) and passed on a re-run. (1) `e2e/exercise-timer-delay.spec.ts:44`: after Save in the timed set editor the screen stayed on Edit Set; the trace shows no request and `router.back()` did not navigate, so `+3s` never appeared on the list. (2) `e2e/warmups.spec.ts:31`: 4 set rows instead of 8 after "Generate warm-ups". (3) `e2e/drag-reorder.spec.ts:122` ("un-logging a moved set removes its own log"). All three passed in two full local runs. The setup-notes flake from the same days had a real cause (a controlled textarea reset by a re-render, fixed in #181), so these may hide user-facing bugs too.
-- **Why deferred:** Found while shipping #179 and #180; re-running got them through, and the cause was not looked for.
-- **Unblocked by:** The failing runs' `playwright-report-shard-1` artifacts have traces. For (1), check whether the Save handler ran at all (a tap before hydration, or a re-render swallowing it); for (2), whether the list re-rendered from a stale `sets` prop after the insert.
-- **Touchpoints:** `e2e/exercise-timer-delay.spec.ts`, `e2e/warmups.spec.ts`, `e2e/drag-reorder.spec.ts`, `src/components/features/SetEditView.tsx`, `src/components/features/WorkoutSetsList.tsx`.
-
 ### Check prod for timed sets that carry a planned weight
 - **What:** Since #180 a timed set whose planned working sets carry a weight is a weighted hold and progresses its weight at a fixed time instead of its time (SI-29a in `docs/specs/smart-incrementation.md`). Before, the weight was ignored. Any existing timed set with an incidental weight (an import, an AI or MCP-built plan) switched silently. Dev data has none.
 - **Why deferred:** Answering it means querying the production database, which was out of scope for that change.
