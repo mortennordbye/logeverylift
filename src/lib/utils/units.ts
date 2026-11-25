@@ -59,3 +59,12 @@ export function fieldToMeters(value: number, unit: FieldUnit, previousMeters?: n
   if (previousMeters != null && metersToField(previousMeters, unit) === value) return previousMeters;
   return Math.round(value * METERS_PER[unit]);
 }
+
+/**
+ * Whether a typed weight is the stored one, to 0.01 kg. Postgres keeps weight
+ * as `real` (float4), so 80.3 comes back as 80.30000305 and `!==` would log a
+ * second history entry for the same weight.
+ */
+export function sameWeightKg(a: number, b: number | null | undefined): boolean {
+  return b != null && Math.abs(a - b) < 0.005;
+}

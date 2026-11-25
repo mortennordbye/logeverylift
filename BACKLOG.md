@@ -496,12 +496,6 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** A need for immediate revocation — then call `auth.api.getSession({ query: { disableCookieCache: true } })` inside `requireAdmin()` / the ban check, or drop `cookieCache`.
 - **Touchpoints:** `src/lib/auth.ts`, `src/lib/utils/session.ts`.
 
-### Minor: weight float comparison logs redundant history entries
-- **What:** MCP `update_profile` / `manage_weight` and their Server-Action originals compare a JS double against a Postgres `real` weight with `!==`, so re-sending the same weight can log a duplicate `user_weight_entry`.
-- **Why deferred:** Low-harm data-quality issue, not data loss or a leak.
-- **Unblocked by:** Caring about history cleanliness (round/compare at 0.01).
-- **Touchpoints:** `src/lib/mcp/tools/profile.ts`, `src/lib/actions/profile.ts`.
-
 ### MCP OAuth dynamic client registration is open
 - **What:** The `mcp()` plugin in `src/lib/auth.ts` runs with `allowDynamicClientRegistration` and `allowUnauthenticatedClientRegistration`, so any client can self-register an OAuth client (RFC 7591). Access still requires the user to log in and consent, so this isn't a data-exposure hole, but it allows unbounded `oauth_client` rows. MCP 2026-07-28 deprecates this in favour of Client ID Metadata Documents (`@better-auth/cimd`), which the app does not offer yet; a client that only speaks CIMD cannot connect.
 - **Why deferred:** Registration is what today's MCP clients use, and the gate that matters (user login + consent) is in place. CIMD makes the server fetch client-supplied URLs, which needs its own SSRF-safe transport and review.

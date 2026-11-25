@@ -36,6 +36,13 @@ describe("update_profile", () => {
     expect(await weights(other)).toEqual([]);
   });
 
+  it("logs no second entry when the same decimal weight comes again", async () => {
+    const call = mcpTools(registerProfileTools, me);
+    expect((await call("update_profile", { weightKg: 80.3 })).isError).toBe(false);
+    expect((await call("update_profile", { weightKg: 80.3 })).isError).toBe(false);
+    expect(await weights(me)).toHaveLength(1);
+  });
+
   it("locks a time zone or units the assistant sets against the Garmin sync, and nothing else", async () => {
     const call = mcpTools(registerProfileTools, me);
     await call("update_profile", { heightCm: 180 });

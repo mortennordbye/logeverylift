@@ -16,6 +16,7 @@ import { userToday } from "@/lib/user-settings";
 import { toDateStr } from "@/lib/utils/cycle-position";
 import type { FieldSources } from "@/lib/utils/field-sources";
 import { GOAL_VALUES, parseUserGoals } from "@/lib/utils/goals";
+import { sameWeightKg } from "@/lib/utils/units";
 import { distanceUnitSchema, swimUnitSchema, timeZoneSchema } from "@/lib/validators/user-settings";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { and, desc, eq, sql } from "drizzle-orm";
@@ -134,7 +135,7 @@ export function registerProfileTools(server: McpServer, userId: string) {
           .where(eq(users.id, userId));
 
         const newWeight = rest.weightKg;
-        if (newWeight != null && newWeight !== current.weightKg) {
+        if (newWeight != null && !sameWeightKg(newWeight, current.weightKg)) {
           await db.insert(userWeightEntries).values({
             id: crypto.randomUUID(),
             userId,
