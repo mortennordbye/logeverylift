@@ -4,7 +4,7 @@
  * the exercise, and carried by every path that copies sets.
  */
 import { db } from "@/db";
-import { programExercises, programSets, programShares } from "@/db/schema";
+import { programExercises, programSets, friendships, programShares } from "@/db/schema";
 import { exportProgram, importProgram, updateProgramSet } from "@/lib/actions/programs";
 import { copySharedProgram } from "@/lib/actions/program-shares";
 import { registerProgramTools } from "@/lib/mcp/tools/programs";
@@ -201,6 +201,7 @@ describe("copy paths keep the steps", () => {
   it("a shared program arrives with its steps", async () => {
     const { program, pe } = await runSlot();
     const friend = (await createUser()).id;
+    await db.insert(friendships).values({ requesterId: me, addresseeId: friend, status: "accepted" });
     const [share] = await db.insert(programShares).values({ programId: program.id, sharedByUserId: me, sharedWithUserId: friend }).returning();
     asUser(friend);
     const copied = await copySharedProgram({ shareId: share.id });

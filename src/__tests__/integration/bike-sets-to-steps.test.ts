@@ -4,7 +4,7 @@
  * plain bike set for a user with endurance features on.
  */
 import { db } from "@/db";
-import { athleteProfiles, exercises, planRevisions, programExercises, programSets, programShares, programs, trainingCycleSlots, trainingCycles, workoutSessions } from "@/db/schema";
+import { athleteProfiles, exercises, planRevisions, programExercises, programSets, friendships, programShares, programs, trainingCycleSlots, trainingCycles, workoutSessions } from "@/db/schema";
 import { addProgramSet, exportProgram, importProgram, reorderProgramSets, updateProgramSet } from "@/lib/actions/programs";
 import { copySharedProgram } from "@/lib/actions/program-shares";
 import { setUserEndurance } from "@/lib/actions/admin";
@@ -308,6 +308,7 @@ describe("no writer stores a plain bike set for an endurance user", () => {
     asUser(me);
     const imported = await importProgram(exported.data);
     expect(imported.success, !imported.success ? imported.error : "").toBe(true);
+    await db.insert(friendships).values({ requesterId: friend, addresseeId: me, status: "accepted" });
     const [share] = await db.insert(programShares).values({ programId: program.id, sharedByUserId: friend, sharedWithUserId: me }).returning();
     const copied = await copySharedProgram({ shareId: share.id });
     expect(copied.success, !copied.success ? copied.error : "").toBe(true);
