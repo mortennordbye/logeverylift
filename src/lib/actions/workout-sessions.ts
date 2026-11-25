@@ -83,6 +83,26 @@ export async function createWorkoutSession(
     const swept = await closeStaleSessions(auth.user.id, oneHourAgo);
     for (const id of swept) await learnWeightStacks(id, auth.user.id);
 
+    // A workout already open on this program is resumed, not doubled. A
+    // fresh sign-in (or a second phone) has no stored session, so its workout
+    // page asks for a new one while the open one is still going.
+    if (programId != null) {
+      const [open] = await db
+        .select()
+        .from(workoutSessions)
+        .where(
+          and(
+            eq(workoutSessions.userId, auth.user.id),
+            eq(workoutSessions.programId, programId),
+            eq(workoutSessions.isCompleted, false),
+            eq(workoutSessions.source, "app"),
+          ),
+        )
+        .orderBy(desc(workoutSessions.startTime))
+        .limit(1);
+      if (open) return { success: true, data: open };
+    }
+
     const [session] = await db
       .insert(workoutSessions)
       .values({

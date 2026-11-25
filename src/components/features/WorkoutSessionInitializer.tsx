@@ -153,7 +153,8 @@ export function WorkoutSessionInitializer({
         checkedSessionId = result.data.id;
         workoutSession?.setActiveWorkout(
           programId,
-          startTime.toISOString(),
+          // The server's start: an open workout it resumed started earlier.
+          new Date(result.data.startTime).toISOString(),
           result.data.id,
           planVersion,
         );

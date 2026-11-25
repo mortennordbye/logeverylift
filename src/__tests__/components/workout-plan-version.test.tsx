@@ -35,7 +35,7 @@ beforeEach(() => {
   localStorage.clear();
   setActiveWorkout.mockReset();
   createWorkoutSession.mockReset();
-  createWorkoutSession.mockResolvedValue({ success: true, data: { id: 11 } });
+  createWorkoutSession.mockResolvedValue({ success: true, data: { id: 11, startTime: new Date() } });
   isSessionResumable.mockReset();
   isSessionResumable.mockResolvedValue({ success: true, data: true });
 });
@@ -46,6 +46,17 @@ describe("WorkoutSessionInitializer and the plan version", () => {
       render(<WorkoutSessionInitializer programId={7} timeZone={null} planVersion={4} />);
     });
     expect(setActiveWorkout).toHaveBeenCalledWith(7, expect.any(String), 11, 4);
+  });
+
+  it("keeps the start time of an open workout the server resumed", async () => {
+    // A fresh sign-in has no stored workout; the server answers with the one
+    // already open, and its clock must not restart at zero.
+    const started = new Date(Date.now() - 20 * 60_000);
+    createWorkoutSession.mockResolvedValue({ success: true, data: { id: 11, startTime: started } });
+    await act(async () => {
+      render(<WorkoutSessionInitializer programId={7} timeZone={null} planVersion={4} />);
+    });
+    expect(setActiveWorkout).toHaveBeenCalledWith(7, started.toISOString(), 11, 4);
   });
 
   it("resumes a workout on the version it started on, not today's", async () => {
