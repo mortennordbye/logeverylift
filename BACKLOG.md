@@ -132,14 +132,6 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** A way to keep replies out of a clock jump: for example, `advance` that waits until no Server Action is in flight both before and after each `runFor`, run in short steps, or a page hook that sets the offset straight from the server time.
 - **Touchpoints:** `e2e/run-mode.spec.ts` (`startRun`, `advance`), `e2e/bike-ride.spec.ts` (`advance`), `src/components/features/bike/useRide.ts` (`applyView`, `tickNow`), `e2e/helpers.ts` (`trackActions`, `freezeClock`).
 
-### UI text outside the Plan tab that still uses colons
-- **What:** The owner's copy rule (no colons and no em dashes in user-facing text) is met in the Plan tab, but the change history and the assistant changes page still show names and lines with a colon:
-  - `snapshotName` names a library workout "Workout: Tempo" (`src/lib/utils/plan-revisions.ts:96`) and an injury "Injury: left knee" (`src/lib/utils/plan-revisions.ts:93`). The names show on `/more/assistants/changes` (`getAssistantChanges` through `listAssistantChangeSets` in `src/lib/plan-revisions.ts`), and the injury name also goes into "Added injury: …" lines in `diffSnapshots`.
-  - The first entry of the athlete profile lists each field as "Experience: novice", "Days: …" (`diffSnapshots`, `src/lib/utils/plan-revisions.ts:419`), shown as the change lines of an assistant change set on the same page.
-- **Why deferred:** Out of the Plan tab fix rounds' scope. The same lines also go to the assistant over MCP (`diffSnapshots` in `src/lib/mcp/revisions.ts`), so a change needs a check of the MCP texts and their tests too.
-- **Unblocked by:** Nothing. Pick plain words ("Tempo workout", "Left knee injury", "Experience novice" or "Experience set to novice"), change `snapshotName` and `diffSnapshots`, and update the tests that read those strings (`grep -rn "Workout: \|Injury: " src/__tests__`).
-- **Touchpoints:** `src/lib/utils/plan-revisions.ts` (`snapshotName`, `diffSnapshots`), `src/lib/plan-revisions.ts`, `src/lib/mcp/revisions.ts`, `src/app/more/assistants/changes/page.tsx`.
-
 ### Dated sessions: what C2 left for later
 - **What:** Two gaps left by the session model (C2, `docs/plans/sessions.md`):
   - `dismissed_makeups` is still written when a whole day is declined, so an app from before C2 keeps hiding the day after a rollback (hub decision 13). Reads use the session's status only. Drop the writes and the table one release after C2.
