@@ -172,11 +172,15 @@ export function trackActions(page: Page, quietMs = 500): () => Promise<void> {
   // Only requests seen starting count. One already in flight when tracking
   // began would otherwise finish as a decrement, leave the count at -1, and
   // the wait below would never see zero.
-  const tracked = new Set<Request>();
+  // Each tracked request with the number of the event that started it.
+  const tracked = new Map<Request, number>();
+  let events = 0;
+  let lastDocument = 0;
   const isAction = (r: Request) => r.method() === "POST" && Boolean(r.headers()["next-action"]);
   page.on("request", (r) => {
+    events++;
     if (!isAction(r)) return;
-    tracked.add(r);
+    tracked.set(r, events);
     inFlight++;
     lastActivity = Date.now();
   });
@@ -189,9 +193,21 @@ export function trackActions(page: Page, quietMs = 500): () => Promise<void> {
   // run, so the write is in. Waiting for the body is not safe: a client
   // navigation can drop it mid-stream, and on Playwright 1.64 that request
   // then reports neither finished nor failed.
-  page.on("response", (res) => done(res.request()));
+  page.on("response", (res) => {
+    events++;
+    const r = res.request();
+    if (r.isNavigationRequest() && r.frame() === page.mainFrame()) lastDocument = events;
+    done(r);
+  });
   page.on("requestfinished", done);
   page.on("requestfailed", done);
+  // A page load (goto, reload) cancels the old page's actions, and Chromium
+  // reports one cancelled before its response as neither finished nor failed
+  // (e2e/track-actions.spec.ts). Once the new page has loaded, every action
+  // started before its document arrived is gone.
+  page.on("domcontentloaded", () => {
+    for (const [r, started] of tracked) if (started < lastDocument) done(r);
+  });
   return async () => {
     await expect
       .poll(() => inFlight === 0 && Date.now() - lastActivity >= quietMs, { timeout: 20_000, intervals: [100] })
