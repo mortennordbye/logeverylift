@@ -478,12 +478,6 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** A decision to widen the MCP surface. Mirror the existing pattern: add a `src/lib/mcp/tools/<domain>.ts` with a `register<Domain>Tools(server, userId)` and call it from the endpoint on the scoped `server`. Mark read tools `readOnlyHint: true`; any other tool needs read and change access (`src/lib/mcp/scopes.ts`). Reuse the action logic but scope by the MCP `userId` (never reuse the cookie-session actions directly).
 - **Touchpoints:** `src/lib/mcp/tools/`, `src/app/api/[transport]/route.ts`.
 
-### `.well-known` route files are outside the tsc program
-- **What:** `src/app/.well-known/**/route.ts` live under a dot-folder, which TypeScript's `**/*.ts` include glob skips, so `pnpm verify` does not type-check them (they use relative imports as a result). Next's bundler still builds them.
-- **Why deferred:** The files are trivial one-line re-exports; the type-check gap is low-risk.
-- **Unblocked by:** Wanting them covered — add an explicit `src/app/.well-known/**/*.ts` entry to `tsconfig.json` `include`.
-- **Touchpoints:** `tsconfig.json`, `src/app/.well-known/`.
-
 ### MCP rate limiting — move to a shared store if the app scales
 - **What:** MCP requests are rate-limited per `userId` (`src/lib/mcp/rate-limit.ts`), but the limiter is in-memory/process-local.
 - **Why deferred:** Correct as-is for a **single instance**. Across multiple instances each would track its own counter, so the effective limit would be N× the intended one.
