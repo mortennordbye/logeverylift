@@ -1,10 +1,10 @@
 import { db } from "@/db";
-import { customWeightUsage, friendships, programShares, programs, workoutSessions, workoutSets } from "@/db/schema";
+import { customWeightUsage, friendships, programExercises, programSets, programShares, programs, workoutSessions, workoutSets } from "@/db/schema";
 import { logCustomWeight } from "@/lib/actions/custom-weights";
 import { copySharedProgram, shareProgram } from "@/lib/actions/program-shares";
 import { createWorkoutSession } from "@/lib/actions/workout-sessions";
 import { getSessionDetail, logWorkoutSet } from "@/lib/actions/workout-sets";
-import { eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { plannedStepSnapshot } from "@/lib/program-steps-db";
 import { createExercise, createProgram, createSession, createStepProgram, createUser } from "./factories";
@@ -145,6 +145,33 @@ describe("logWorkoutSet ownership", () => {
     if (!started.success) return;
     const r = await logWorkoutSet(setPayload(started.data.id, aliceExerciseId));
     expect(r.success).toBe(true);
+  });
+
+  it("logs a friend's custom exercise from the slot of a copied program deleted mid-workout", async () => {
+    asUser(aliceId);
+    await db.insert(friendships).values({ requesterId: aliceId, addresseeId: bobId, status: "accepted" });
+    expect((await shareProgram({ programId: aliceProgramId, friendUserId: bobId })).success).toBe(true);
+
+    asUser(bobId);
+    const [share] = await db.select().from(programShares).where(eq(programShares.programId, aliceProgramId));
+    const copied = await copySharedProgram({ shareId: share.id });
+    if (!copied.success) throw new Error(copied.error);
+    const started = await createWorkoutSession({ date: today, programId: copied.data.programId });
+    if (!started.success) throw new Error(started.error);
+    const [slot] = await db
+      .select({ id: programSets.id })
+      .from(programSets)
+      .innerJoin(programExercises, eq(programExercises.id, programSets.programExerciseId))
+      .where(and(eq(programExercises.programId, copied.data.programId), eq(programExercises.exerciseId, aliceExerciseId)))
+      .orderBy(asc(programSets.setNumber))
+      .limit(1);
+    // Soft-deleted from somewhere else (another device, the assistant) while the set waits in the queue.
+    await db.update(programs).set({ deletedAt: new Date() }).where(eq(programs.id, copied.data.programId));
+
+    const r = await logWorkoutSet(setPayload(started.data.id, aliceExerciseId, { programSetId: slot.id }));
+    expect(r.success).toBe(true);
+    const rows = await db.select().from(workoutSets).where(eq(workoutSets.sessionId, started.data.id));
+    expect(rows.map((x) => [x.exerciseId, x.programSetId])).toEqual([[aliceExerciseId, slot.id]]);
   });
 });
 

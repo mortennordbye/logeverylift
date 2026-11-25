@@ -93,6 +93,8 @@ import { z } from "zod";
  */
 type PlanSlot = {
   programExerciseId: number;
+  /** The slot's exercise. */
+  exerciseId: number;
   programSetId: number | null;
   /** "working" | "warmup", snapshotted onto the row so the log describes itself. */
   setType: string;
@@ -144,6 +146,7 @@ async function resolvePlanSlot(
       .select({
         programSetId: programSets.id,
         programExerciseId: programSets.programExerciseId,
+        exerciseId: programExercises.exerciseId,
         programId: programExercises.programId,
         setType: programSets.setType,
         stepKind: programSets.stepKind,
@@ -165,6 +168,7 @@ async function resolvePlanSlot(
       return {
         slot: {
           programExerciseId: row.programExerciseId,
+          exerciseId: row.exerciseId,
           programSetId: row.programSetId,
           setType: row.setType,
           prescribedWorkingSets: row.prescribedWorkingSets || null,
@@ -220,6 +224,7 @@ async function resolvePlanSlot(
   return {
     slot: {
       programExerciseId: row.programExerciseId,
+      exerciseId,
       programSetId: namedSetDeleted ? null : row.programSetId,
       // The left join misses when the plan has no set at that position, which
       // says nothing about whether the set logged there was a warm-up. Default
@@ -414,8 +419,14 @@ export async function logWorkoutSet(
       return { success: false, error: resolved.error };
     }
     const slot = resolved.slot;
-    // Only an exercise the user can see: a system one, their own, or one in a program they copied.
-    const exercise = await findVisibleExercise(exerciseId, auth.user.id);
+    // Only an exercise the user can see: a system one, their own, or one in a
+    // program they copied. A slot of the user's own program also counts when
+    // it holds this exercise, so a copied program deleted mid-workout still
+    // takes its sets (resolvePlanSlot reads deleted programs too).
+    const exercise =
+      slot?.exerciseId === exerciseId
+        ? (await db.select().from(exercises).where(eq(exercises.id, exerciseId)))[0]
+        : await findVisibleExercise(exerciseId, auth.user.id);
     if (!exercise) {
       console.error("[logWorkoutSet] exercise_not_visible", { sessionId, exerciseId });
       return { success: false, error: "Exercise not found" };
