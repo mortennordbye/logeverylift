@@ -7,6 +7,7 @@ import {
   getFriendsBadgeCount,
   getReactionsToMyWorkouts,
   markFriendsSeen,
+  removeFriend,
   searchUsers,
   sendFriendRequest,
   toggleReaction,
@@ -259,5 +260,30 @@ describe("sendFriendRequest", () => {
     }
     expect(results.filter(Boolean)).toHaveLength(20);
     expect(results.at(-1)).toBe(false);
+  });
+});
+
+describe("removeFriend", () => {
+  async function declinedByOther() {
+    const other = await createUser();
+    const [row] = await db
+      .insert(friendships)
+      .values({ requesterId: meId, addresseeId: other.id, status: "declined", updatedAt: new Date() })
+      .returning();
+    return { other, row };
+  }
+
+  it("keeps a declined request when its sender removes it, so the 30-day wait still holds", async () => {
+    const { other, row } = await declinedByOther();
+    expect((await removeFriend({ friendshipId: row.id })).success).toBe(false);
+    expect(await db.query.friendships.findFirst({ where: eq(friendships.id, row.id) })).toBeDefined();
+    expect((await sendFriendRequest({ addresseeId: other.id })).success).toBe(false);
+  });
+
+  it("lets the person who declined remove the declined request", async () => {
+    const { other, row } = await declinedByOther();
+    asUser(other.id);
+    expect((await removeFriend({ friendshipId: row.id })).success).toBe(true);
+    expect(await db.query.friendships.findFirst({ where: eq(friendships.id, row.id) })).toBeUndefined();
   });
 });

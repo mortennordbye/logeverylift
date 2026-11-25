@@ -278,6 +278,11 @@ export async function removeFriend(data: unknown): Promise<ActionResult<void>> {
     if (row.requesterId !== me && row.addresseeId !== me) {
       return { success: false, error: "Not authorised" };
     }
+    // The sender of a declined request keeps the row, so the 30-day wait in
+    // sendFriendRequest still applies. The person who declined may remove it.
+    if (row.status === "declined" && row.requesterId === me) {
+      return { success: false, error: "Not found" };
+    }
 
     await db.delete(friendships).where(eq(friendships.id, friendshipId));
 
