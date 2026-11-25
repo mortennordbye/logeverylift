@@ -5,6 +5,7 @@ import { users } from "@/db/schema/users";
 import { userWeightEntries } from "@/db/schema/weight-history";
 import { GOAL_VALUES } from "@/lib/utils/goals";
 import { requireSession } from "@/lib/utils/session";
+import { sameWeightKg } from "@/lib/utils/units";
 import type { ActionResult } from "@/types/workout";
 import { and, desc, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
@@ -45,7 +46,7 @@ export async function updateUserProfile(data: unknown): Promise<ActionResult<voi
 
     // Auto-log weight entry when weight changes
     const newWeight = parsed.data.weightKg;
-    if (newWeight != null && newWeight !== current?.weightKg) {
+    if (newWeight != null && !sameWeightKg(newWeight, current?.weightKg)) {
       await db.insert(userWeightEntries).values({
         id: crypto.randomUUID(),
         userId: session.user.id,
