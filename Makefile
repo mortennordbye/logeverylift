@@ -13,7 +13,9 @@ CACHE_FLAG := $(if $(CLEAN),--no-cache,)
 # (runner) stage shadows /app and the container cannot find its entrypoint, so
 # PROD=1 deliberately leaves it out.
 COMPOSE_FILES := -f docker-compose.yml $(if $(PROD),,-f docker-compose.dev.yml)
-COMPOSE := docker-compose $(COMPOSE_FILES)
+# Prefer the Compose v2 plugin (`docker compose`); fall back to the v1 binary.
+COMPOSE_BIN := $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo docker-compose)
+COMPOSE := $(COMPOSE_BIN) $(COMPOSE_FILES)
 RUN_ENV := NODE_ENV=$(if $(PROD),production,development)
 
 .DEFAULT_GOAL := help
