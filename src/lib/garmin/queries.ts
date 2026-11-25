@@ -12,13 +12,13 @@ import { sessionInsights } from "./analytics/session-insights";
 import type { CorrelationDay } from "./analytics/correlations";
 import { addDays, isoDate, mondayOf } from "./dates";
 import { garminToday } from "./today";
-import { raceForCycle, seasonTaperStart } from "@/lib/seasons";
+import { getSeasonDetail, raceForCycle, seasonTaperStart } from "@/lib/seasons";
 
 export { garminToday };
 import { TRACKS, type PmcPoint, type Track } from "./analytics/pmc";
 import { SPORTS, isIndoor, sportOf, type Sport } from "./analytics/sport";
 import type { LoadSeries } from "./charts/load";
-import { projectPmc, type Projection } from "./analytics/projection";
+import { projectPmc, type Projection, type ProjectionCycle } from "./analytics/projection";
 import { efPoints, thresholdHistory, type EfPoint, type TrendActivity } from "./analytics/trends";
 import { compareBricks, pacingGuide, taperStart, type BrickComparison, type FuelSession, type PacingGuide, type RunSummary } from "./analytics/race";
 import type { Efforts } from "./analytics/efforts";
@@ -1052,6 +1052,38 @@ export async function getVolumeData(userId: string, todayArg?: string): Promise<
   };
 }
 
+/**
+ * The season's phases after the active cycle, on their timeline start days,
+ * for the projection to run each one's curve. A phase with no program in its
+ * slots is left out, so the curve before it carries on over its days.
+ */
+async function laterPhases(userId: string, cycle: ActiveCycle): Promise<ProjectionCycle[]> {
+  if (cycle.seasonId == null) return [];
+  const timeline = (await getSeasonDetail(userId, cycle.seasonId))?.phases ?? [];
+  const at = timeline.findIndex((p) => p.id === cycle.id);
+  const after = at < 0 ? [] : timeline.slice(at + 1).filter((p) => p.state === "planned");
+  if (!after.length) return [];
+  const ids = after.map((p) => p.id);
+  const [rows, withProgram] = await Promise.all([
+    db
+      .select({ id: trainingCycles.id, goal: trainingCycles.goal, athleteLevel: trainingCycles.athleteLevel })
+      .from(trainingCycles)
+      .where(and(eq(trainingCycles.userId, userId), inArray(trainingCycles.id, ids), liveCycles)),
+    db
+      .selectDistinct({ id: trainingCycleSlots.trainingCycleId })
+      .from(trainingCycleSlots)
+      .innerJoin(programs, and(eq(programs.id, trainingCycleSlots.programId), livePrograms))
+      .where(inArray(trainingCycleSlots.trainingCycleId, ids)),
+  ]);
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  const withSlots = new Set(withProgram.map((r) => r.id));
+  return after.flatMap((p) => {
+    const r = byId.get(p.id);
+    if (!r || !withSlots.has(p.id)) return [];
+    return [{ startDate: p.start, durationWeeks: p.durationWeeks, durationDays: p.durationDays, goal: r.goal, athleteLevel: r.athleteLevel, phaseType: p.phaseType }];
+  });
+}
+
 /** The race and the fitness projection to it, from the Training tab's series. Null without an active cycle. */
 export async function getRaceProjection(userId: string, series: LoadSeries, todayArg?: string): Promise<{ race: RaceStatus; projection: Projection | null } | null> {
   const today = todayArg ?? (await garminToday(userId));
@@ -1070,6 +1102,7 @@ export async function getRaceProjection(userId: string, series: LoadSeries, toda
     atl: t.atl[last],
     last7: daily.slice(-7),
     cycle: { startDate: cycle.startDate, durationWeeks: cycle.durationWeeks, durationDays: cycle.durationDays, goal: cycle.goal, athleteLevel: cycle.athleteLevel, phaseType: cycle.phaseType },
+    later: await laterPhases(userId, cycle),
     peakCtl: Math.max(0, ...t.ctl.slice(-90)),
   });
   return { race, projection };

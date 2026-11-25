@@ -1,8 +1,10 @@
 /**
  * Fitness, fatigue and form run forward to race day (plan 2.13). Future daily
  * load is the mean daily load of the last 7 days, scaled week by week by the
- * cycle's periodized load multiplier against this week's. A band of ± 15 %
- * load shows how much the answer moves if you train a bit more or less.
+ * cycle's periodized load multiplier against this week's. In a season, each
+ * later phase runs its own curve from the day it starts (projectionCurve). A
+ * band of ± 15 % load shows how much the answer moves if you train a bit more
+ * or less.
  * Pure.
  */
 
@@ -37,6 +39,18 @@ export type RaceVerdict = "on_target" | "too_tired" | "too_fresh" | "fitness_dro
 const DAY_MS = 86_400_000;
 const daysBetween = (a: string, b: string) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / DAY_MS);
 
+/**
+ * The curve in force on a day: the last phase that has started by then. The
+ * active cycle comes first; `later` holds the season's later phases. A day
+ * past a phase's end, with no later phase started yet, keeps that phase's last
+ * week, as the single-cycle projection always did.
+ */
+export function projectionCurve(cycle: ProjectionCycle, later: ProjectionCycle[], date: string): ProjectionCycle {
+  let curve = cycle;
+  for (const p of later) if (p.startDate > cycle.startDate && p.startDate <= date && p.startDate >= curve.startDate) curve = p;
+  return curve;
+}
+
 function multiplier(cycle: ProjectionCycle, date: string): number {
   const week = Math.max(1, Math.floor(daysBetween(cycle.startDate, date) / 7) + 1);
   return cycleLoad(cycle, Math.min(week, cycle.durationWeeks), cycle.durationWeeks).multiplier;
@@ -67,6 +81,8 @@ export function projectPmc(input: {
   /** Total daily load of the last 7 days, today included. */
   last7: number[];
   cycle: ProjectionCycle;
+  /** The season's phases after the active cycle, each with its planned first day. */
+  later?: ProjectionCycle[];
   /** Highest fitness so far (history), to judge the drop. */
   peakCtl: number;
 }): Projection | null {
@@ -75,7 +91,8 @@ export function projectPmc(input: {
   const base = input.last7.reduce((s, v) => s + v, 0) / input.last7.length;
   const now = multiplier(input.cycle, input.today);
   const dates = Array.from({ length: days }, (_, i) => addDays(input.today, i + 1));
-  const loads = dates.map((d) => (base * multiplier(input.cycle, d)) / now);
+  const later = input.later ?? [];
+  const loads = dates.map((d) => (base * multiplier(projectionCurve(input.cycle, later, d), d)) / now);
   const mid = run(input.ctl, input.atl, loads);
   const low = run(input.ctl, input.atl, loads.map((l) => l * (1 - BAND)));
   const high = run(input.ctl, input.atl, loads.map((l) => l * (1 + BAND)));
