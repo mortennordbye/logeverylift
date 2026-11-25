@@ -1,4 +1,4 @@
-import { expect, type Locator, type Page, type Request, type Response } from "@playwright/test";
+import { expect, type Locator, type Page, type Request, type Response, type Route } from "@playwright/test";
 
 /**
  * Tap a control that saves through Server Actions, and wait for every write it
@@ -380,4 +380,89 @@ export async function freezeClock(page: Page): Promise<void> {
       if (!String(e).includes("Cannot fast-forward to the past") || ahead > 5_000) throw e;
     }
   }
+}
+
+/**
+ * The page clock for ride and run mode. The specs move the stored ride back
+ * and run the stopped page clock forward by the same amount; the server's
+ * clock does not move. So after each jump the phone's clock offset (server
+ * time minus page time, `applyView` in useRide) must drop by the jump, and
+ * only a Server Action reply can tell the page that. A reply measures the
+ * offset by the page time its request left and its answer came in. A
+ * request that leaves mid-jump (`runFor` fires the timers in it) and is
+ * answered after it measures the offset wrong by half the rest of the jump,
+ * and the page takes that when the old offset is further off still: the page
+ * then counts ahead, which can end a step or the ride early. A reply that
+ * lands mid-jump (`runFor` yields to the page between timers) is wrong too.
+ *
+ * So `jump(ms)` keeps every reply off the jump:
+ *
+ * - A heartbeat that leaves during the jump gets a 503, as from a server the
+ *   phone could not reach (the app ignores a heartbeat that does not get
+ *   through). Server Actions run one at a time, so held heartbeats (one per
+ *   10 s) would queue up and each answer late. Not an abort: WebKit reports
+ *   an aborted fetch as an uncaught page error.
+ * - Any other Server Action that leaves during the jump (a step save, a tap
+ *   sent after its burst) waits until the jump is over.
+ * - After the jump the page gets a `pageshow` (the app's own "back in front"
+ *   resync): its `getRide` leaves and is answered on the stopped clock, so
+ *   it measures the exact offset and reads the moved ride.
+ *
+ * Until that reply the page keeps the ride it read and the old offset, so it
+ * counts the jump itself, and its timers fire at their ride times.
+ * `settled()` waits until no Server Action is in flight: move the stored
+ * ride only then. Install it before the first page loads, and keep the page
+ * clock paused across `jump`.
+ */
+export function rideClock(page: Page, quietMs = 200) {
+  let lastActivity = Date.now();
+  const tracked = new Set<Request>();
+  const isAction = (r: Request) => r.method() === "POST" && Boolean(r.headers()["next-action"]);
+  page.on("request", (r) => {
+    // A page load drops the old page's requests, and on Playwright 1.64 one
+    // dropped that way can report neither finished nor failed.
+    if (r.isNavigationRequest() && r.frame() === page.mainFrame()) tracked.clear();
+    if (!isAction(r)) return;
+    tracked.add(r);
+    lastActivity = Date.now();
+  });
+  const done = (r: Request) => {
+    if (!tracked.delete(r)) return;
+    lastActivity = Date.now();
+  };
+  // Done at the response headers, as in `trackActions`.
+  page.on("response", (res) => done(res.request()));
+  page.on("requestfinished", done);
+  page.on("requestfailed", done);
+
+  const held: (() => void)[] = [];
+  // Routed only for the jump: routing every request slows page loads, and a
+  // tap on a page still loading can be lost.
+  const hold = async (route: Route) => {
+    const r = route.request();
+    if (isAction(r)) {
+      if ((r.postData() ?? "").includes('"kind":"heartbeat"')) return route.fulfill({ status: 503, contentType: "text/plain", body: "Not reached" });
+      await new Promise<void>((release) => held.push(release));
+    }
+    await route.fallback();
+  };
+
+  const settled = async () => {
+    await expect
+      .poll(() => tracked.size === 0 && Date.now() - lastActivity >= quietMs, { timeout: 20_000, intervals: [50] })
+      .toBe(true);
+  };
+  const jump = async (ms: number) => {
+    await page.route("**/*", hold);
+    try {
+      await page.clock.runFor(ms);
+    } finally {
+      await page.unroute("**/*", hold);
+    }
+    // Server Actions run in order: the held ones go first, then the resync.
+    await page.evaluate(() => window.dispatchEvent(new Event("pageshow")));
+    held.splice(0).forEach((release) => release());
+    await settled();
+  };
+  return { settled, jump };
 }

@@ -6,7 +6,7 @@ import { testDb } from "./fixtures/reset";
 import { insertStepProgram } from "./fixtures/step-program";
 import { ftpTestWorkout } from "../src/lib/utils/ftp-tests";
 import { expect, test } from "./fixtures/test";
-import { freezeClock, waitForLiveSession } from "./helpers";
+import { freezeClock, rideClock, waitForLiveSession } from "./helpers";
 
 /**
  * Ride mode (docs/plans/bike-ride-logger.md, steps 3 and 4): a ride runs
@@ -20,6 +20,8 @@ import { freezeClock, waitForLiveSession } from "./helpers";
  * be faked. So once the ride runs, the page clock is paused (no timer runs by
  * itself), and `advance` moves the stored ride back in time by as much as it
  * runs the page clock forward. Both then agree the ride is that much older.
+ * `rideClock` keeps every Server Action reply off that jump and then has the
+ * page read the moved ride on the stopped clock (e2e/helpers.ts).
  * Page changes need the clock to run (the page transition animates), so it
  * resumes before them.
  */
@@ -67,6 +69,9 @@ async function setup(parallelIndex: number, priority: "key" | "support" = "suppo
   return { userId, programId, peId: pe.id, setIds, plannedId: row.id };
 }
 
+/** This test's page clock (`rideClock`): `advance` jumps it with no reply on the jump. */
+let clock: ReturnType<typeof rideClock>;
+
 test.beforeEach(async ({ page }) => {
   // Headless browsers give no wake lock; the stub lets the app ask for one.
   await page.addInitScript(() => {
@@ -74,6 +79,7 @@ test.beforeEach(async ({ page }) => {
   });
   // The clock goes in before the first page, at the real time.
   await page.clock.install({ time: Date.now() });
+  clock = rideClock(page);
 });
 
 /** When the test tapped Start ride, and how far `advance` has moved the ride, per user. */
@@ -90,6 +96,8 @@ async function advance(page: Page, userId: string, seconds: number) {
   if (await page.evaluate(() => navigator.onLine)) {
     await expect.poll(() => page.evaluate(() => localStorage.getItem("rideEventQueue"))).toBeNull();
   }
+  // No reply in flight reads the ride while it moves.
+  await clock.settled();
   const db = testDb();
   const shift = sql`${seconds} * interval '1 second'`;
   const mine = db.select({ id: rides.id }).from(rides).where(eq(rides.userId, userId));
@@ -102,7 +110,7 @@ async function advance(page: Page, userId: string, seconds: number) {
     .set({ at: sql`${rideEvents.at} - ${shift}`, clientAt: sql`${rideEvents.clientAt} - ${shift}` })
     .where(sql`${rideEvents.rideId} in ${mine}`);
   shifted.set(userId, (shifted.get(userId) ?? 0) + seconds);
-  await page.clock.runFor(seconds * 1000);
+  await clock.jump(seconds * 1000);
 }
 
 /** Open the program's bike exercise, wait for its workout, and start the ride indoors. */
