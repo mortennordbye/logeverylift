@@ -143,15 +143,22 @@ export function NewSetView({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showRepsPicker, reps]);
 
-  useEffect(() => {
-    if (!showWeightPicker) return;
+  // Bring a weight's circle to the middle of the row: when the sheet opens, and
+  // when a typed value is committed on blur (as in SetEditView), so the circle
+  // a typed weight lands on is on screen.
+  const centerWeight = (value: number) =>
     requestAnimationFrame(() => {
       const el = weightScrollRef.current;
       if (!el) return;
-      const index = weightOptions.indexOf(weight);
+      const index = withCustomOption(WEIGHT_OPTIONS, value).indexOf(value);
       const itemWidth = 52; // w-11 (44px) + gap-2 (8px)
-      el.scrollLeft = Math.max(0, index * itemWidth - el.clientWidth / 2 + 22);
+      // The row's px-5 (20px) comes before the first circle.
+      el.scrollLeft = Math.max(0, 20 + index * itemWidth - el.clientWidth / 2 + 22);
     });
+
+  useEffect(() => {
+    if (!showWeightPicker) return;
+    centerWeight(weight);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showWeightPicker]);
 
@@ -634,6 +641,7 @@ export function NewSetView({
                   return (
                     <button
                       key={num}
+                      aria-pressed={selected}
                       onClick={() => { setWeight(num); setWeightStr(String(num)); }}
                       style={
                         selected
@@ -664,7 +672,7 @@ export function NewSetView({
                     const n = parseFloat(val);
                     if (!isNaN(n)) setWeight(Math.max(0, n));
                   }}
-                  onBlur={() => { const n = parseFloat(weightStr) || 0; setWeight(n); setWeightStr(String(n)); }}
+                  onBlur={() => { const n = parseFloat(weightStr) || 0; setWeight(n); setWeightStr(String(n)); centerWeight(n); }}
                   className="w-full rounded-xl bg-background border border-border px-4 py-3 text-center text-2xl font-bold outline-none focus:ring-2 ring-primary"
                 />
               </div>
