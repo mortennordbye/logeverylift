@@ -1132,6 +1132,7 @@ function SetEditForm({
                 return (
                   <button
                     key={num}
+                    aria-pressed={num === weight}
                     onClick={() => {
                       setWeight(num);
                       setWeightStr(String(num));
