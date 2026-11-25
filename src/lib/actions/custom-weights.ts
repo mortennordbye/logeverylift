@@ -2,6 +2,7 @@
 
 import { db } from "@/db";
 import { customWeightUsage } from "@/db/schema";
+import { findVisibleExercise } from "@/lib/custom-exercises";
 import { requireSession } from "@/lib/utils/session";
 import type { ActionResult } from "@/types/workout";
 import { z } from "zod";
@@ -28,6 +29,9 @@ export async function logCustomWeight(data: unknown): Promise<ActionResult<null>
   }
 
   try {
+    if (!(await findVisibleExercise(parsed.data.exerciseId, auth.user.id))) {
+      return { success: false, error: "Exercise not found" };
+    }
     await db.insert(customWeightUsage).values({
       userId: auth.user.id,
       exerciseId: parsed.data.exerciseId,
