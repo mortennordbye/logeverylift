@@ -187,16 +187,13 @@ describe("the interview over MCP", () => {
     await addCoachMemory({ userId: me, writer: "user" }, { kind: "decision", text: "Kept strength at 2x" });
     const call = tools(me);
     const before = (await call("get_athlete_profile")).data.interview;
-    expect(before.complete).toBe(false);
     expect(before.memoryToOffer.map((m: { id: number }) => m.id)).toEqual([entry.id]);
     expect(before.missingSteps).toEqual(["race", "experience", "availability", "strength", "thresholds"]);
 
     await call("manage_athlete_profile", { availableDays: [1, 2, 3, 4, 6, 7], hoursPerWeek: 8, reason: "Moved from coach memory" });
     const mem = mcpTools((s, u) => registerCoachMemoryTools(s, u, CLIENT), me);
     expect((await mem("manage_coach_memory", { operation: "deactivate", id: entry.id, reason: "Moved to the athlete profile", expectedVersion: 1 })).isError).toBe(false);
-    await call("manage_athlete_profile", { completeInterview: true, reason: "Interview done", expectedVersion: 1 });
     const after = (await call("get_athlete_profile")).data.interview;
-    expect(after.complete).toBe(true);
     expect(after.memoryToOffer).toEqual([]);
   });
 

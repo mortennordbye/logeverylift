@@ -88,12 +88,6 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** The endurance switch removal. Then: one design document covering the whole model and every reader, an independent battle test of it, owner decisions one at a time (first: what triggers small weight steps, with the set's planned reps as the leading option; then whether the mix means what the user does or what the app plans, whether "endurance only" means zero strength sessions, how existing users convert from prod counts, and whether the assistant and outside model read the mix), one mockup, then build and review.
 - **Touchpoints:** `src/components/features/account/sections.tsx`, `ProfileSteps.tsx`, `src/lib/utils/goals.ts`, `src/lib/utils/progression.ts`, `src/lib/utils/plan-templates.ts`, `src/lib/utils/strength-goal.ts`, `src/lib/utils/triathlon-plan.ts`, `src/lib/utils/training-limits.ts`, `src/lib/mcp/tools/profile.ts`, `src/lib/mcp/tools/athlete-profile.ts`, `src/lib/utils/ai-prompt.ts`, `src/lib/utils/ai-edit.ts`, `src/app/privacy/page.tsx`.
 
-### Drop the unused interview column
-- **What:** Remove `athlete_profiles.interview_completed_at` and the `completeInterview` field of the MCP `manage_athlete_profile` tool. The in-app interview is gone and no page reads the column.
-- **Why deferred:** `feat/account-profile` already adds two migrations; a third for a column nothing reads can wait.
-- **Unblocked by:** Nothing. One migration plus removing the field from `ProfileChange` and the MCP tool's schema.
-- **Touchpoints:** `src/db/schema/athlete-profile.ts`, `src/lib/athlete-profile.ts` (`saveAthleteProfile`), `src/lib/mcp/tools/athlete-profile.ts`, `src/lib/validators/athlete-profile.ts`.
-
 ### Home widgets: catalogue sizes the locked design left out
 - **What:** Sizes from the widget catalogue (`docs/home-widgets-audit.md`, section 4) not built with the redesign: Weekly volume M (top muscles vs target) and L (all muscle bars), Body weight L (90-day line), Training load S (form and band) and per-sport L, Race countdown M (race, date, days, phase).
 - **Why deferred:** The locked design (`docs/design/home-redesign/home-locked.html`) gives these widgets only the sizes that were built, and the redesign built to it.

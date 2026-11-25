@@ -80,7 +80,6 @@ export const athleteProfiles = pgTable(
     longestDayMinutes: integer("longest_day_minutes"),
     longDay: integer("long_day"),
     strengthGoal: text("strength_goal", { enum: STRENGTH_GOALS }),
-    interviewCompletedAt: timestamp("interview_completed_at"),
     // Never set: the profile is not deleted. Here so the revision layer can treat it like other objects.
     deletedAt: timestamp("deleted_at"),
     version: integer("version").notNull().default(1),

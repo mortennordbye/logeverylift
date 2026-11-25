@@ -371,7 +371,6 @@ async function main() {
       longestDayMinutes: 240,
       longDay: 7,
       strengthGoal: "keep_muscle",
-      completeInterview: true,
     });
 
     // Phase 1 starts on this week's Monday when that is at least three days
@@ -471,7 +470,6 @@ async function main() {
       longestDayMinutes: 180,
       longDay: 6,
       strengthGoal: "keep_muscle",
-      completeInterview: true,
     });
     const monday = mondayOf(today);
     const nextMonday = addDaysStr(monday, 7);

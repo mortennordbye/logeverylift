@@ -118,7 +118,7 @@ export const INTERVIEW_STEPS = [
   "5. Thresholds: for each kind, the current value or a field test (manage_thresholds). Offer the Garmin suggestion where one is listed, and say it is an estimate.",
   "6. Injuries and limits: current and past injuries, what to avoid (manage_injuries).",
   "7. Coach memory: for each entry in interview.memoryToOffer, read it back to the user. If it is an injury or availability, write the fact with the tools above, then deactivate the entry with manage_coach_memory (reason: Moved to the athlete profile). Keep life limits such as travel or equipment in memory.",
-  "8. Finish: manage_athlete_profile completeInterview true, and tell the user what you stored.",
+  "8. Finish: tell the user what you stored.",
 ];
 
 export function registerAthleteProfileTools(server: McpServer, userId: string, clientId?: string, opts: { endurance?: boolean } = {}) {
@@ -177,7 +177,6 @@ export function registerAthleteProfileTools(server: McpServer, userId: string, c
                 longestDayMinutes: profile.longestDayMinutes,
                 longDay: profile.longDay,
                 strengthGoal: profile.strengthGoal,
-                interviewCompletedAt: profile.interviewCompletedAt,
                 version: profile.version,
               }
             : null,
@@ -205,7 +204,6 @@ export function registerAthleteProfileTools(server: McpServer, userId: string, c
               }
             : null,
           interview: {
-            complete: profile?.interviewCompletedAt != null,
             missingSteps: missingSteps(profile, rows, race),
             memoryToOffer: memory.map((m) => ({ id: m.id, kind: m.kind, text: m.text, date: m.entryDate, version: m.version })),
           },
@@ -323,7 +321,7 @@ export function registerAthleteProfileTools(server: McpServer, userId: string, c
     "manage_athlete_profile",
     {
       description: [
-        "Set the athlete profile: any of enduranceLevel (novice, intermediate, advanced), availableDays (1 = Monday ... 7 = Sunday), hoursPerWeek (1-40), longestDayMinutes (30-720), longDay (1-7), strengthGoal (keep_muscle, stronger, minimal); completeInterview true when the intake interview is done. Send null to clear a field.",
+        "Set the athlete profile: any of enduranceLevel (novice, intermediate, advanced), availableDays (1 = Monday ... 7 = Sunday), hoursPerWeek (1-40), longestDayMinutes (30-720), longDay (1-7), strengthGoal (keep_muscle, stronger, minimal). Send null to clear a field.",
         `Requires reason, and expectedVersion once the profile exists (read it with get_athlete_profile). ${REVISION_RULES}`,
       ].join(" "),
       annotations: { destructiveHint: true, openWorldHint: false },
@@ -334,7 +332,6 @@ export function registerAthleteProfileTools(server: McpServer, userId: string, c
         longestDayMinutes: z.number().int().min(30).max(720).nullable().optional(),
         longDay: dayOfWeek.nullable().optional(),
         strengthGoal: z.enum(STRENGTH_GOALS).nullable().optional(),
-        completeInterview: z.boolean().optional(),
         reason: reasonArg,
         expectedVersion: expectedVersionArg.optional(),
       },

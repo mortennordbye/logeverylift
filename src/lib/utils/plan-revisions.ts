@@ -355,6 +355,7 @@ const ATHLETE_FIELDS: Record<string, string> = {
   longestDayMinutes: "Longest day",
   longDay: "Long day",
   strengthGoal: "Strength goal",
+  // Dropped in migration 0107; kept so older profile revisions still read.
   interviewCompletedAt: "Interview",
 };
 
