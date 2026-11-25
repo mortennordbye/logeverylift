@@ -453,6 +453,33 @@ export function AiSetupClient({ exercises, userProfile, prs, existingProgramName
     setView("preview");
   }
 
+  /** Opened from a check-in: the fixed picks, then the AI request on top, if any. */
+  function startRevision(rev: RevisionStart) {
+    restorePicks(rev.picks);
+    setRevisionOf(rev.revisionOf);
+    if (rev.request) {
+      setChips(rev.request.chips);
+      setEditText(rev.request.text);
+    }
+    const repickLabel = rev.repick === "daysPerWeek" ? "the days per week" : rev.repick === "equipment" ? "your equipment" : null;
+    setRevisionNote(
+      [
+        ...rev.changes,
+        repickLabel ? `Pick ${repickLabel} below, then build` : null,
+        rev.request && !repickLabel ? "Your request is filled in below. Tap Change my plan to apply it" : null,
+        rev.request && repickLabel ? "Your request will be filled in under the plan" : null,
+      ]
+        .filter(Boolean)
+        .join(". ") + ".",
+    );
+    if (repickLabel) {
+      setView("picks");
+      return;
+    }
+    setBuiltPlan(buildPlan(rev.picks));
+    setView("preview");
+  }
+
   useEffect(() => {
     isMounted.current = true;
     return () => { isMounted.current = false; };
@@ -466,6 +493,7 @@ export function AiSetupClient({ exercises, userProfile, prs, existingProgramName
       writeStorage(AI_PENDING_KEY, null);
       setAiGenerating(false);
       const pending = parseStored(pendingSchema, stored);
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- the finished edit lives in localStorage, readable only after mount
       if (pending) showEdit(pending);
     } else if (storedError) {
       writeStorage(AI_PENDING_ERROR_KEY, null);
@@ -505,33 +533,6 @@ export function AiSetupClient({ exercises, userProfile, prs, existingProgramName
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- showEdit/showEditError only set state
   }, [view]);
-
-  /** Opened from a check-in: the fixed picks, then the AI request on top, if any. */
-  function startRevision(rev: RevisionStart) {
-    restorePicks(rev.picks);
-    setRevisionOf(rev.revisionOf);
-    if (rev.request) {
-      setChips(rev.request.chips);
-      setEditText(rev.request.text);
-    }
-    const repickLabel = rev.repick === "daysPerWeek" ? "the days per week" : rev.repick === "equipment" ? "your equipment" : null;
-    setRevisionNote(
-      [
-        ...rev.changes,
-        repickLabel ? `Pick ${repickLabel} below, then build` : null,
-        rev.request && !repickLabel ? "Your request is filled in below. Tap Change my plan to apply it" : null,
-        rev.request && repickLabel ? "Your request will be filled in under the plan" : null,
-      ]
-        .filter(Boolean)
-        .join(". ") + ".",
-    );
-    if (repickLabel) {
-      setView("picks");
-      return;
-    }
-    setBuiltPlan(buildPlan(rev.picks));
-    setView("preview");
-  }
 
   function handleDaysChange(days: TemplateParams["daysPerWeek"]) {
     setDaysPerWeek(days);

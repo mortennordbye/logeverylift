@@ -7,7 +7,7 @@ import { BottomSheet } from "@/components/ui/BottomSheet";
 import { ArrowDownUp, Check, ChevronRightIcon, Download, PlusIcon, Upload } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 
 type Props = {
   programs: Program[];
@@ -17,14 +17,16 @@ export function ProgramListClient({ programs: initial }: Props) {
   const router = useRouter();
   const [isEditing, setIsEditing] = useState(false);
   const [programs, setPrograms] = useState(initial);
+  // Server refresh replaces the list (adjusted during render, not in an effect).
+  const [prevInitial, setPrevInitial] = useState(initial);
+  if (initial !== prevInitial) {
+    setPrevInitial(initial);
+    setPrograms(initial);
+  }
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [showBulkConfirm, setShowBulkConfirm] = useState(false);
   const [bulkDeleteError, setBulkDeleteError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setPrograms(initial);
-  }, [initial]);
 
   const [renamingId, setRenamingId] = useState<number | null>(null);
   const [renamingValue, setRenamingValue] = useState("");

@@ -32,6 +32,14 @@ export function GymMapClient({ pins, myGymId }: { pins: GymPin[]; myGymId: numbe
   // tapped earlier must not fill the sheet of the one tapped since.
   const openGymId = useRef<number | null>(null);
 
+  async function openGym(pin: GymPin) {
+    openGymId.current = pin.id;
+    setSelected(pin);
+    setMembers(null);
+    const result = await callAction(getGymMembers({ gymId: pin.id }));
+    if (openGymId.current === pin.id) setMembers(result.success ? result.data : []);
+  }
+
   // MapLibre needs WebGL and the window, so it loads in the browser only.
   useEffect(() => {
     let map: import("maplibre-gl").Map | null = null;
@@ -86,14 +94,6 @@ export function GymMapClient({ pins, myGymId }: { pins: GymPin[]; myGymId: numbe
       map?.remove();
     };
   }, [pins, myGymId]);
-
-  async function openGym(pin: GymPin) {
-    openGymId.current = pin.id;
-    setSelected(pin);
-    setMembers(null);
-    const result = await callAction(getGymMembers({ gymId: pin.id }));
-    if (openGymId.current === pin.id) setMembers(result.success ? result.data : []);
-  }
 
   async function handleAdd(userId: string) {
     setBusyId(userId);
