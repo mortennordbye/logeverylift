@@ -236,7 +236,7 @@ export function remainingAfterOverride(broken: BrokenLimit[], override: readonly
 
 /** The line a user sees on a revision where the assistant went past a limit. */
 export function overrideLine(overridden: Pick<BrokenLimit, "message">[], reason: string): string {
-  return `Went past a training limit · ${overridden.map((o) => o.message).join(" ")} · Assistant's reason · ${reason}`;
+  return `Went past a training limit · ${overridden.map((o) => o.message).join(" ")} · The assistant's reason was ${reason}`;
 }
 
 // ── What a revision stores ──────────────────────────────────────────────────
