@@ -109,11 +109,15 @@ export default function RootLayout({
                     Static routes resolve the pathname at build time and are
                     unaffected; param routes stream this part in. The fallback
                     is a bare background rather than null so the shell paints
-                    the right colour instead of flashing white. */}
+                    the right colour instead of flashing white.
+
+                    BottomNav shares the page's boundary so the tab bar is
+                    never live while the page is not hydrated. In separate
+                    boundaries a tab tapped in that gap navigated, and React
+                    then hydrated the old page's HTML with the new page
+                    (#418). e2e/tab-before-hydration.spec.ts */}
                 <Suspense fallback={<div className="h-[100dvh] bg-background" />}>
                   <PageTransition>{children}</PageTransition>
-                </Suspense>
-                <Suspense fallback={null}>
                   <BottomNav />
                 </Suspense>
                 <Suspense fallback={null}>
